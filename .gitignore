@@ -87,3 +87,5 @@ rcf/
 /src/MoneroMarketCap.Worker/appsettings.json
 /src/MoneroMarketCap.Worker/appsettings.Development.json
 /src/MoneroMarketCap/appsettings.Development.json
+/src/MoneroMarketCap.Web/appsettings.Development.json
+/src/MoneroMarketCap.Web/appsettings.json
