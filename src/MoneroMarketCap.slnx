@@ -6,5 +6,5 @@
   <Project Path="MoneroMarketCap.Data/MoneroMarketCap.Data.csproj" />
   <Project Path="MoneroMarketCap.Services/MoneroMarketCap.Services.csproj" Id="877666f5-1a88-498e-8c59-c9380a59262d" />
   <Project Path="MoneroMarketCap.Worker/MoneroMarketCap.Worker.csproj" />
-  <Project Path="MoneroMarketCap/MoneroMarketCap.csproj" />
+  <Project Path="MoneroMarketCap.Web/MoneroMarketCap.Web.csproj" />
 </Solution>
