@@ -1,0 +1,80 @@
+﻿@page
+@model MoneroMarketCap.Pages.Admin.UsersModel
+@using MoneroMarketCap.Data.Constants
+@using MoneroMarketCap.Data.Models
+@{
+    ViewData["Title"] = "Admin — Users";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Manage Users</h2>
+    <a asp-page="/Admin/Index" class="btn btn-secondary btn-sm">← Back</a>
+</div>
+
+<table class="table market-table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Username</th>
+            <th>Roles</th>
+            <th>Created</th>
+            <th>Grant Role</th>
+            <th>Revoke Role</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var user in Model.Users)
+        {
+            <tr>
+                <td class="rank-cell">@user.Id</td>
+                <td><strong>@user.Username</strong></td>
+                <td>
+                    @foreach (var ur in user.UserRoles)
+                    {
+                        var badgeClass = ur.Role.Name switch
+                        {
+                            RoleNames.Admin => "bg-danger",
+                            RoleNames.Moderator => "bg-warning text-dark",
+                            _ => "bg-secondary"
+                        };
+                        <span class="badge @badgeClass me-1">@ur.Role.Name</span>
+                    }
+                    @if (!user.UserRoles.Any())
+                    {
+                        <span class="text-muted" style="font-size:0.85rem">No roles</span>
+                    }
+                </td>
+                <td style="font-size:0.85rem;color:var(--xmr-text-muted)">
+                    @user.CreatedAt.ToShortDateString()
+                </td>
+                <td>
+                    <form method="post" asp-page-handler="Grant" class="d-flex gap-1">
+                        <input type="hidden" name="TargetUserId" value="@user.Id" />
+                        <select name="RoleName" class="form-select form-select-sm" style="width:auto">
+                            @foreach (var role in Model.AllRoles)
+                            {
+                                <option value="@role.Name">@role.Name</option>
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-success btn-sm">Grant</button>
+                    </form>
+                </td>
+                <td>
+                    @if (user.UserRoles.Any())
+                    {
+                        <form method="post" asp-page-handler="Revoke" class="d-flex gap-1">
+                            <input type="hidden" name="TargetUserId" value="@user.Id" />
+                            <select name="RoleName" class="form-select form-select-sm" style="width:auto">
+                                @foreach (var ur in user.UserRoles)
+                                {
+                                    <option value="@ur.Role.Name">@ur.Role.Name</option>
+                                }
+                            </select>
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Revoke</button>
+                        </form>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

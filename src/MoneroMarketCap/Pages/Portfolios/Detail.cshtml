@@ -1,0 +1,90 @@
+﻿@page "{id:int}"
+@model MoneroMarketCap.Pages.Portfolios.DetailModel
+@using MoneroMarketCap.Data.Models
+@{
+    ViewData["Title"] = Model.Portfolio?.Name ?? "Portfolio";
+}
+
+@if (Model.Portfolio == null)
+{
+    <p>Portfolio not found.</p>
+    return;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>@Model.Portfolio.Name</h2>
+    <span class="fs-5">Total Value: <strong>@Model.Portfolio.TotalValueUsd.ToString("C")</strong></span>
+</div>
+
+<a asp-page="/Portfolios/Index" class="btn btn-secondary btn-sm mb-3">← Back to Portfolios</a>
+
+@if (!Model.Portfolio.PortfolioCoins.Any())
+{
+    <p class="text-muted">No coins yet. Add a transaction below.</p>
+}
+else
+{
+    <table class="table table-striped mb-4">
+        <thead>
+            <tr>
+                <th>Coin</th>
+                <th>Amount Held</th>
+                <th>Current Price</th>
+                <th>Value (USD)</th>
+                <th>Cost Basis</th>
+                <th>Unrealized P&L</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var pc in Model.Portfolio.PortfolioCoins)
+            {
+                <tr>
+                    <td><strong>@pc.Coin.Symbol</strong> — @pc.Coin.Name</td>
+                    <td>@pc.TotalAmount.ToString("N8")</td>
+                    <td>@pc.Coin.PriceUsd.ToString("C")</td>
+                    <td>@pc.TotalValueUsd.ToString("C")</td>
+                    <td>@pc.TotalCostBasis.ToString("C")</td>
+                    <td class="@(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
+                        @pc.UnrealizedPnl.ToString("C")
+                    </td>
+                    <td>
+                        <a asp-page="/Portfolios/Transactions"
+                           asp-route-portfolioCoinId="@pc.Id"
+                           class="btn btn-outline-secondary btn-sm">History</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h5>Add Transaction</h5>
+<form method="post" asp-page-handler="AddTransaction" asp-route-id="@Model.Portfolio.Id" class="row g-3">
+    <div class="col-md-3">
+        <label class="form-label">Coin</label>
+        <select asp-for="CoinId" asp-items="Model.CoinOptions" class="form-select"></select>
+    </div>
+    <div class="col-md-2">
+        <label class="form-label">Type</label>
+        <select asp-for="TransactionType" class="form-select">
+            <option value="Buy">Buy</option>
+            <option value="Sell">Sell</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <label class="form-label">Amount</label>
+        <input asp-for="Amount" type="number" step="0.00000001" class="form-control" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label">Price at Time (USD)</label>
+        <input asp-for="PriceUsdAtTime" type="number" step="0.01" class="form-control" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label">Notes</label>
+        <input asp-for="Notes" class="form-control" />
+    </div>
+    <div class="col-md-1 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100">Add</button>
+    </div>
+</form>

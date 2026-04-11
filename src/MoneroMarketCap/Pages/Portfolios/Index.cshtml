@@ -1,0 +1,45 @@
+﻿@page
+@model MoneroMarketCap.Pages.Portfolios.IndexModel
+@{
+    ViewData["Title"] = "My Portfolios";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>My Portfolios</h2>
+    <span class="fs-5">Total Net Value: <strong>@Model.TotalNetValue.ToString("C")</strong></span>
+</div>
+
+@if (!Model.Portfolios.Any())
+{
+    <p class="text-muted">No portfolios yet. Create one below.</p>
+}
+else
+{
+    <div class="row mb-4">
+        @foreach (var p in Model.Portfolios)
+        {
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">@p.Name</h5>
+                        <p class="card-text">
+                            Value: <strong>@p.TotalValueUsd.ToString("C")</strong><br />
+                            Coins: @p.PortfolioCoins.Count
+                        </p>
+                        <a asp-page="/Portfolios/Detail" asp-route-id="@p.Id" class="btn btn-primary btn-sm">View</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<h5>Create New Portfolio</h5>
+<form method="post" asp-page-handler="Create" class="row g-2">
+    <div class="col-auto">
+        <input asp-for="PortfolioName" class="form-control" placeholder="Portfolio name" />
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-success">Create</button>
+    </div>
+</form>

@@ -1,0 +1,367 @@
+﻿@page
+@model MoneroMarketCap.Pages.IndexModel
+@{
+    ViewData["Title"] = "Market Cap — Valued in Monero";
+}
+
+<!-- Ad space -->
+<div class="ad-banner mb-3">
+    <span class="ad-label">Advertisement</span>
+</div>
+
+@if (Model.Monero != null)
+{
+    var xmr = Model.Monero;
+    <div class="xmr-stat-bar mb-3">
+        <div class="xmr-stat">
+            <span class="stat-label">XMR Price</span>
+            <span class="stat-value" id="xmr-price">@xmr.PriceUsd.ToString("C")</span>
+            <span id="xmr-change-24h" class="stat-change @(xmr.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
+                @(xmr.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent24h).ToString("N2")% 24h
+            </span>
+        </div>
+        <div class="xmr-stat">
+            <span class="stat-label">Market Cap</span>
+            <span class="stat-value" id="xmr-mcap">@FormatLarge(xmr.MarketCapUsd)</span>
+            <span id="xmr-rank" class="stat-change" style="color:var(--xmr-text-muted)">Rank #@xmr.MarketCapRank</span>
+        </div>
+        <div class="xmr-stat">
+            <span class="stat-label">Price Change</span>
+            <div class="price-changes">
+                <span class="change-row">
+                    <span class="change-label">1h</span>
+                    <span id="xmr-1h" class="@(xmr.PriceChangePercent1h >= 0 ? "text-success" : "text-danger")">
+                        @(xmr.PriceChangePercent1h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent1h).ToString("N2")%
+                    </span>
+                </span>
+                <span class="change-row">
+                    <span class="change-label">24h</span>
+                    <span id="xmr-24h" class="@(xmr.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
+                        @(xmr.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent24h).ToString("N2")%
+                    </span>
+                </span>
+                <span class="change-row">
+                    <span class="change-label">7d</span>
+                    <span id="xmr-7d" class="@(xmr.PriceChangePercent7d >= 0 ? "text-success" : "text-danger")">
+                        @(xmr.PriceChangePercent7d >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent7d).ToString("N2")%
+                    </span>
+                </span>
+                <span class="change-row">
+                    <span class="change-label">30d</span>
+                    <span id="xmr-30d" class="@(xmr.PriceChangePercent30d >= 0 ? "text-success" : "text-danger")">
+                        @(xmr.PriceChangePercent30d >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent30d).ToString("N2")%
+                    </span>
+                </span>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="table-meta">
+    <span>
+        <span style="color:var(--xmr-text-muted)">Data updated:</span>
+        <span id="last-updated-bar">@Model.Coins.Max(c => c.UpdatedAt).ToString("HH:mm:ss") UTC</span>
+    </span>
+    <span>
+        <span style="color:var(--xmr-text-muted)">Next update in:</span>
+        <span id="countdown-bar">60</span>s
+    </span>
+</div>
+
+@if (!Model.Coins.Any())
+{
+    <div class="empty-state">
+        <p>No coin data yet.</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table market-table" style="font-size:0.82rem">
+            <thead>
+                <tr>
+                    <th style="width:2rem">#</th>
+                    <th>Coin</th>
+                    <th class="text-end">Price (USD)</th>
+                    <th class="text-end">Price (XMR)</th>
+                    <th class="text-end">24h %</th>
+                    <th class="text-end">Market Cap</th>
+                    <th class="text-end">vs XMR</th>
+                    <th class="text-end">Supply</th>
+                    <th class="text-end">1 XMR buys</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    int rank = 1;
+                }
+                @foreach (var coin in Model.Coins.OrderByDescending(c => c.MarketCapUsd))
+                {
+                    var priceInXmr = Model.Monero != null && Model.Monero.PriceUsd > 0
+                                        ? coin.PriceUsd / Model.Monero.PriceUsd : 0;
+                    var mcapRatio = Model.Monero != null && Model.Monero.MarketCapUsd > 0
+                                        ? coin.MarketCapUsd / Model.Monero.MarketCapUsd : 0;
+                    var coinsPerXmr = coin.PriceUsd > 0 && Model.Monero != null
+                                        ? Model.Monero.PriceUsd / coin.PriceUsd : 0;
+                    bool isXmr = coin.Symbol.ToUpper() == "XMR";
+
+                    <tr class="@(isXmr ? "xmr-row" : "")" data-symbol="@coin.Symbol">
+                        <td class="rank-cell cell-rank">@rank</td>
+                        <td>
+                            <div class="coin-name-cell">
+                                @if (!string.IsNullOrEmpty(coin.ImageUrl))
+                                {
+                                    <img src="@coin.ImageUrl" width="20" height="20"
+                                         style="border-radius:50%;flex-shrink:0" />
+                                }
+                                <span class="coin-symbol">@coin.Symbol</span>
+                                <span class="coin-name d-none d-lg-inline">@coin.Name</span>
+                                @if (isXmr)
+                                {
+                                    <span class="xmr-badge">base</span>
+                                }
+                            </div>
+                        </td>
+                        <td class="text-end mono cell-price">@coin.PriceUsd.ToString("C")</td>
+                        <td class="text-end mono xmr-val cell-xmr-price">
+                            @if (isXmr)
+                            {
+                                <span>1 XMR</span>
+                            }
+                            else if (priceInXmr >= 1)
+                            {
+
+                                @($"{priceInXmr:N4} XMR")
+                            }
+                            else
+                            {
+
+                                @($"{priceInXmr:N8} XMR")
+                            }
+                        </td>
+                        <td class="text-end mono cell-change @(coin.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
+                            @(coin.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent24h).ToString("N2")%
+                        </td>
+                        <td class="text-end mono cell-mcap">@FormatLarge(coin.MarketCapUsd)</td>
+                        <td class="text-end cell-ratio" style="white-space:nowrap">
+                            @if (isXmr)
+                            {
+                                <span class="ratio-base">base</span>
+                            }
+                            else if (mcapRatio >= 1)
+                            {
+
+                                <span class="ratio-larger">@mcapRatio.ToString("N1")×</span>
+                            }
+                            else
+                            {
+
+                                <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1"))%</span>
+                            }
+                        </td>
+                        <td class="text-end mono cell-supply">@FormatUnits(coin.CirculatingSupply)</td>
+                        <td class="text-end mono xmr-val cell-buys" style="white-space:nowrap">
+                            @if (!isXmr)
+                            {
+                                @(coinsPerXmr >= 1
+                                    ? $"{coinsPerXmr:N2} {coin.Symbol}"
+                                    : $"{coinsPerXmr:N8} {coin.Symbol}")
+                            }
+                            else
+                            {
+
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                    </tr>
+                    rank++;
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@functions {
+    string FormatLarge(decimal value) => value switch
+    {
+        >= 1_000_000_000_000m => $"${value / 1_000_000_000_000m:N2}T",
+        >= 1_000_000_000m => $"${value / 1_000_000_000m:N2}B",
+        >= 1_000_000m => $"${value / 1_000_000m:N2}M",
+        >= 1_000m => $"${value / 1_000m:N2}K",
+        _ => $"${value:N2}"
+    };
+
+    string FormatUnits(decimal value) => value switch
+    {
+        >= 1_000_000_000m => $"{value / 1_000_000_000m:N2}B",
+        >= 1_000_000m => $"{value / 1_000_000m:N2}M",
+        >= 1_000m => $"{value / 1_000m:N2}K",
+        _ => $"{value:N0}"
+    };
+}
+
+@section Scripts {
+    <script>
+        function formatLarge(v) {
+            if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
+            if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
+            if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+            if (v >= 1e3) return '$' + (v / 1e3).toFixed(2) + 'K';
+            return '$' + v.toFixed(2);
+        }
+
+        function formatUnits(v) {
+            if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+            if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+            if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+            return Math.round(v).toLocaleString();
+        }
+
+        function formatPrice(v) {
+            if (v >= 1) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (v >= 0.01) return '$' + v.toFixed(4);
+            if (v >= 0.0001) return '$' + v.toFixed(6);
+            return '$' + v.toFixed(8);
+        }
+
+        function formatXmrPrice(price, xmrPrice) {
+            if (!xmrPrice) return '—';
+            const r = price / xmrPrice;
+            return r >= 1 ? r.toFixed(4) + ' XMR' : r.toFixed(8) + ' XMR';
+        }
+
+        function formatCoinsPerXmr(price, xmrPrice, symbol) {
+            if (!price) return '—';
+            const r = xmrPrice / price;
+            return r >= 1 ? r.toFixed(2) + ' ' + symbol : r.toFixed(8) + ' ' + symbol;
+        }
+
+        function formatRatio(mcap, xmrMcap) {
+            const r = mcap / xmrMcap;
+            if (r >= 1) return { text: r.toFixed(1) + '×', cls: 'ratio-larger' };
+            return { text: (r * 100).toFixed(1) + '%', cls: 'ratio-smaller' };
+        }
+
+        async function refreshPrices() {
+            try {
+                const res = await fetch('/api/Prices');
+                if (!res.ok) return;
+                const coins = await res.json();
+
+                const xmr = coins.find(c => c.symbol === 'XMR');
+                if (!xmr) return;
+
+                const xmrChangeHelper = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const up = val >= 0;
+                    el.textContent = (up ? '▲ ' : '▼ ') + Math.abs(val).toFixed(2) + '%';
+                    el.className = up ? 'text-success' : 'text-danger';
+                };
+
+                xmrChangeHelper('xmr-1h', xmr.priceChangePercent1h);
+                xmrChangeHelper('xmr-24h', xmr.priceChangePercent24h);
+                xmrChangeHelper('xmr-7d', xmr.priceChangePercent7d);
+                xmrChangeHelper('xmr-30d', xmr.priceChangePercent30d);
+
+                // Update XMR stat bar
+                const priceEl = document.getElementById('xmr-price');
+                if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);
+
+                const mcapEl = document.getElementById('xmr-mcap');
+                if (mcapEl) mcapEl.textContent = formatLarge(xmr.marketCapUsd);
+
+                const rankEl = document.getElementById('xmr-rank');
+                if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
+
+                const updatedEl = document.getElementById('last-updated');
+                if (updatedEl) updatedEl.textContent = xmr.updatedAt + ' UTC';
+
+                const changeEl = document.getElementById('xmr-change');
+                if (changeEl) {
+                    const up = xmr.priceChangePercent24h >= 0;
+                    changeEl.textContent = (up ? '▲ ' : '▼ ') + Math.abs(xmr.priceChangePercent24h).toFixed(2) + '% 24h';
+                    changeEl.className = 'stat-change ' + (up ? 'text-success' : 'text-danger');
+                }
+
+                // Update table rows
+                const sorted = [...coins].sort((a, b) => b.marketCapUsd - a.marketCapUsd);
+                sorted.forEach((coin, idx) => {
+                    const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
+                    if (!row) return;
+
+                    const isXmr = coin.symbol === 'XMR';
+
+                    const rankCell = row.querySelector('.cell-rank');
+                    if (rankCell) rankCell.textContent = idx + 1;
+
+                    const priceCell = row.querySelector('.cell-price');
+                    if (priceCell) priceCell.textContent = formatPrice(coin.priceUsd);
+
+                    const xmrPriceCell = row.querySelector('.cell-xmr-price');
+                    if (xmrPriceCell) {
+                        xmrPriceCell.textContent = isXmr ? '1 XMR' : formatXmrPrice(coin.priceUsd, xmr.priceUsd);
+                    }
+
+                    const changeCell = row.querySelector('.cell-change');
+                    if (changeCell) {
+                        const up = coin.priceChangePercent24h >= 0;
+                        changeCell.textContent = (up ? '▲ ' : '▼ ') + Math.abs(coin.priceChangePercent24h).toFixed(2) + '%';
+                        changeCell.className = 'text-end mono cell-change ' + (up ? 'text-success' : 'text-danger');
+                    }
+
+                    const mcapCell = row.querySelector('.cell-mcap');
+                    if (mcapCell) mcapCell.textContent = formatLarge(coin.marketCapUsd);
+
+                    const ratioCell = row.querySelector('.cell-ratio');
+                    if (ratioCell && !isXmr) {
+                        const r = formatRatio(coin.marketCapUsd, xmr.marketCapUsd);
+                        ratioCell.innerHTML = '<span class="' + r.cls + '">' + r.text + '</span>';
+                    }
+
+                    const supplyCell = row.querySelector('.cell-supply');
+                    if (supplyCell) supplyCell.textContent = formatUnits(coin.circulatingSupply);
+
+                    const buysCell = row.querySelector('.cell-buys');
+                    if (buysCell) {
+                        buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
+                    }
+
+                    
+                    // Reorder rows by market cap
+                    const tbody = document.querySelector('.market-table tbody');
+                    if (tbody) {
+                        sorted.forEach((coin, idx) => {
+                            const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
+                            if (row) tbody.appendChild(row);
+                        });
+                    }
+                });
+
+            } catch (e) {
+                console.error('Price refresh failed:', e);
+            }
+        }
+
+        let seconds = 60;
+        const countdown = document.getElementById('countdown');
+        const countdownBar = document.getElementById('countdown-bar');
+        const lastUpdatedBar = document.getElementById('last-updated-bar');
+
+        setInterval(() => {
+            seconds--;
+            if (countdown) countdown.textContent = seconds;
+            if (countdownBar) countdownBar.textContent = seconds;
+            if (seconds <= 0) {
+                seconds = 60;
+                refreshPrices().then(() => {
+                    const now = new Date();
+                    const timeStr = now.toUTCString().split(' ')[4] + ' UTC';
+                    if (lastUpdatedBar) lastUpdatedBar.textContent = timeStr;
+                    const updatedEl = document.getElementById('last-updated');
+                    if (updatedEl) updatedEl.textContent = timeStr;
+                });
+            }
+        }, 1000);
+    </script>
+}

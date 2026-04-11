@@ -1,0 +1,88 @@
+﻿@page
+@model MoneroMarketCap.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "Admin — Coins";
+}
+
+@if (TempData["Status"] != null)
+{
+    <div class="alert alert-success">@TempData["Status"]</div>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Manage Coins</h2>
+    <div class="d-flex gap-2">
+        <form method="post" asp-page-handler="RefreshAll">
+            <button class="btn btn-outline-secondary btn-sm">↻ Refresh All Prices</button>
+        </form>
+        <a asp-page="/Admin/AddCoin" class="btn btn-primary btn-sm">+ Add Coin</a>
+        <a asp-page="/Admin/Users" class="btn btn-outline-secondary btn-sm">Manage Users</a>
+    </div>
+</div>
+
+@if (!Model.Coins.Any())
+{
+    <p class="text-muted">No coins yet. Click <strong>+ Add Coin</strong> to get started.</p>
+}
+else
+{
+    <table class="table market-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Coin</th>
+                <th>CoinGecko ID</th>
+                <th class="text-end">Price (USD)</th>
+                <th class="text-end">Market Cap</th>
+                <th class="text-end">24h %</th>
+                <th class="text-end">Updated</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @{
+                int i = 1;
+            }
+            @foreach (var coin in Model.Coins.OrderByDescending(c => c.MarketCapUsd))
+            {
+                <tr class="@(!coin.IsActive ? "opacity-50" : "")">
+                    <td class="rank-cell">@i</td>
+                    <td>
+                        <div class="coin-name-cell">
+                            @if (!string.IsNullOrEmpty(coin.ImageUrl))
+                            {
+                                <img src="@coin.ImageUrl" width="22" height="22"
+                                     style="border-radius:50%;" />
+                            }
+                            <span class="coin-symbol">@coin.Symbol</span>
+                            <span class="coin-name">@coin.Name</span>
+                        </div>
+                    </td>
+                    <td><code style="font-size:0.78rem">@coin.CoinGeckoId</code></td>
+                    <td class="text-end mono">@coin.PriceUsd.ToString("C")</td>
+                    <td class="text-end mono">@coin.MarketCapUsd.ToString("N0")</td>
+                    <td class="text-end mono @(coin.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
+                        @(coin.PriceChangePercent24h >= 0 ? "+" : "")@coin.PriceChangePercent24h.ToString("N2")%
+                    </td>
+                    <td class="text-end" style="font-size:0.8rem;color:var(--xmr-text-muted)">
+                        @coin.UpdatedAt.ToString("g")
+                    </td>
+                    <td>
+                        <form method="post" asp-page-handler="ToggleActive">
+                            <input type="hidden" name="id" value="@coin.Id" />
+                            <button class="btn btn-sm @(coin.IsActive ? "btn-outline-danger" : "btn-outline-success")">
+                                @(coin.IsActive ? "Deactivate" : "Activate")
+                            </button>
+                        </form>
+                    </td>
+                    <td>
+                        <a asp-page="/Admin/EditCoin" asp-route-id="@coin.Id"
+                           class="btn btn-outline-secondary btn-sm">Edit</a>
+                    </td>
+                </tr>
+                i++;
+            }
+        </tbody>
+    </table>
+}

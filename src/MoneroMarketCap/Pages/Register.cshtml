@@ -1,0 +1,20 @@
+﻿@page
+@model RegisterModel
+
+<h2>Create Account</h2>
+
+@if (Model.GeneratedUsername != null)
+{
+    <div style="border:1px solid green; padding:1rem; margin:1rem 0;">
+        <strong>Save these credentials — they won't be shown again!</strong><br />
+        Username: <code>@Model.GeneratedUsername</code><br />
+        Password: <code>@Model.GeneratedPassword</code>
+    </div>
+    <a href="/Login">Go to Login</a>
+}
+else
+{
+    <form method="post">
+        <button type="submit">Generate My Account</button>
+    </form>
+}

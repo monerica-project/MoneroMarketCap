@@ -1,0 +1,610 @@
+:root {
+    --xmr-orange: #FF6600;
+    --xmr-orange-dark: #cc5200;
+    --xmr-orange-light: #ff8833;
+    --xmr-black: #0d0d0d;
+    --xmr-surface: #1a1a1a;
+    --xmr-surface-2: #242424;
+    --xmr-border: #2e2e2e;
+    --xmr-text: #f0f0f0;
+    --xmr-text-muted: #888888;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+}
+
+/* CSS Grid sticky footer — most reliable approach */
+body {
+    background-color: var(--xmr-black);
+    color: var(--xmr-text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    grid-template-columns: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+/* Navbar */
+.navbar {
+    background-color: var(--xmr-surface) !important;
+    border-bottom: 1px solid var(--xmr-border) !important;
+}
+
+.navbar-brand {
+    color: var(--xmr-orange) !important;
+    font-weight: 700;
+    font-size: 1.3rem;
+    letter-spacing: 0.02em;
+}
+
+    .navbar-brand:hover {
+        color: var(--xmr-orange-light) !important;
+    }
+
+.nav-link {
+    color: var(--xmr-text) !important;
+    transition: color 0.15s;
+}
+
+    .nav-link:hover {
+        color: var(--xmr-orange) !important;
+    }
+
+    .nav-link.fw-bold {
+        color: var(--xmr-orange) !important;
+    }
+
+.navbar-toggler {
+    border-color: var(--xmr-border);
+}
+
+.navbar-toggler-icon {
+    filter: invert(1);
+}
+
+/* Footer */
+.footer {
+    background-color: var(--xmr-surface);
+    border-top: 1px solid var(--xmr-border);
+    color: var(--xmr-text-muted);
+    padding: 1rem 0;
+}
+
+    .footer a {
+        color: var(--xmr-orange);
+        text-decoration: none;
+    }
+
+        .footer a:hover {
+            color: var(--xmr-orange-light);
+        }
+
+/* Cards */
+.card {
+    background-color: var(--xmr-surface);
+    border: 1px solid var(--xmr-border);
+    color: var(--xmr-text);
+}
+
+.card-title {
+    color: var(--xmr-orange);
+    font-weight: 600;
+}
+
+/* Tables */
+.table {
+    color: var(--xmr-text);
+    border-color: var(--xmr-border);
+    --bs-table-bg: transparent;
+    --bs-table-striped-bg: rgba(255, 102, 0, 0.04);
+    --bs-table-hover-bg: rgba(255, 102, 0, 0.09);
+    --bs-table-color: var(--xmr-text);
+    --bs-table-striped-color: var(--xmr-text);
+    --bs-table-hover-color: var(--xmr-text);
+    --bs-table-border-color: var(--xmr-border);
+    margin-bottom: 0;
+}
+
+    .table thead th {
+        background-color: var(--xmr-surface-2);
+        color: var(--xmr-orange);
+        border-color: var(--xmr-border);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+        padding: 0.5rem 0.6rem;
+    }
+
+    .table tbody td {
+        padding: 0.5rem 0.6rem;
+        vertical-align: middle;
+    }
+
+    .table tbody tr {
+        border-color: var(--xmr-border);
+    }
+
+    .table > :not(caption) > * > * {
+        background-color: transparent;
+        color: var(--xmr-text);
+    }
+
+.table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: rgba(255, 102, 0, 0.04) !important;
+    color: var(--xmr-text) !important;
+}
+
+.table tbody tr:hover > * {
+    background-color: rgba(255, 102, 0, 0.09) !important;
+    color: var(--xmr-text) !important;
+}
+
+/*
+ * Fix: Don't use overflow-x: auto on the wrapper.
+ * Instead allow the page to scroll horizontally on small screens.
+ * This prevents overflow-y from being implicitly set to auto,
+ * which would clip table rows and cause them to render below the footer.
+ */
+.table-responsive {
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 992px) {
+    .table-responsive {
+        overflow-x: scroll;
+    }
+}
+
+/* Market table sticky header */
+.market-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--xmr-surface-2);
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--xmr-orange);
+    border-color: var(--xmr-orange);
+    color: #000;
+    font-weight: 600;
+}
+
+    .btn-primary:hover,
+    .btn-primary:focus {
+        background-color: var(--xmr-orange-dark);
+        border-color: var(--xmr-orange-dark);
+        color: #000;
+    }
+
+.btn-success {
+    background-color: #2a9d4e;
+    border-color: #2a9d4e;
+    font-weight: 600;
+}
+
+    .btn-success:hover {
+        background-color: #228a41;
+        border-color: #228a41;
+    }
+
+.btn-secondary {
+    background-color: var(--xmr-surface-2);
+    border-color: var(--xmr-border);
+    color: var(--xmr-text);
+}
+
+    .btn-secondary:hover {
+        background-color: var(--xmr-border);
+        color: var(--xmr-text);
+    }
+
+.btn-outline-secondary {
+    border-color: var(--xmr-border);
+    color: var(--xmr-text-muted);
+}
+
+    .btn-outline-secondary:hover {
+        background-color: var(--xmr-surface-2);
+        color: var(--xmr-text);
+        border-color: var(--xmr-border);
+    }
+
+.btn-outline-danger {
+    border-color: #c0392b;
+    color: #ff5c5c;
+}
+
+    .btn-outline-danger:hover {
+        background-color: rgba(192, 57, 43, 0.15);
+        color: #ff5c5c;
+        border-color: #c0392b;
+    }
+
+.btn-outline-success {
+    border-color: #2a9d4e;
+    color: #3ddc7a;
+}
+
+    .btn-outline-success:hover {
+        background-color: rgba(42, 157, 78, 0.15);
+        color: #3ddc7a;
+        border-color: #2a9d4e;
+    }
+
+/* Forms */
+.form-control,
+.form-select {
+    background-color: var(--xmr-surface-2);
+    border: 1px solid var(--xmr-border);
+    color: var(--xmr-text);
+}
+
+    .form-control:focus,
+    .form-select:focus {
+        background-color: var(--xmr-surface-2);
+        border-color: var(--xmr-orange);
+        color: var(--xmr-text);
+        box-shadow: 0 0 0 0.2rem rgba(255, 102, 0, 0.2);
+    }
+
+    .form-control::placeholder {
+        color: var(--xmr-text-muted);
+    }
+
+.form-label {
+    color: var(--xmr-text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.form-check-input {
+    background-color: var(--xmr-surface-2);
+    border-color: var(--xmr-border);
+}
+
+    .form-check-input:checked {
+        background-color: var(--xmr-orange);
+        border-color: var(--xmr-orange);
+    }
+
+.form-check-label {
+    color: var(--xmr-text);
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--xmr-text);
+}
+
+h2 {
+    border-bottom: 1px solid var(--xmr-border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+/* Badges */
+.badge.bg-success {
+    background-color: #2a9d4e !important;
+}
+
+.badge.bg-danger {
+    background-color: #c0392b !important;
+}
+
+.badge.bg-secondary {
+    background-color: var(--xmr-surface-2) !important;
+    color: var(--xmr-text-muted) !important;
+    border: 1px solid var(--xmr-border);
+}
+
+/* Links */
+a {
+    color: var(--xmr-orange);
+}
+
+    a:hover {
+        color: var(--xmr-orange-light);
+    }
+
+/* Text helpers */
+.text-muted {
+    color: var(--xmr-text-muted) !important;
+}
+
+.text-success {
+    color: #3ddc7a !important;
+}
+
+.text-danger {
+    color: #ff5c5c !important;
+}
+
+/* Validation */
+.field-validation-error {
+    color: #ff5c5c;
+    font-size: 0.85rem;
+}
+
+.input-validation-error {
+    border-color: #c0392b !important;
+    box-shadow: 0 0 0 0.2rem rgba(192, 57, 43, 0.2) !important;
+}
+
+/* Alerts */
+.alert-success {
+    background-color: rgba(42, 157, 78, 0.15);
+    border-color: #2a9d4e;
+    color: #3ddc7a;
+}
+
+.alert-warning {
+    background-color: rgba(255, 102, 0, 0.15);
+    border-color: var(--xmr-orange);
+    color: var(--xmr-orange-light);
+}
+
+.alert-danger {
+    background-color: rgba(192, 57, 43, 0.15);
+    border-color: #c0392b;
+    color: #ff5c5c;
+}
+
+/* Page backgrounds */
+.container,
+main {
+    background-color: transparent;
+}
+
+/* Code */
+code {
+    color: var(--xmr-orange-light);
+    background-color: var(--xmr-surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.85em;
+}
+
+/* Register/Login credential box */
+div[style*="border:1px solid green"] {
+    background-color: rgba(42, 157, 78, 0.1) !important;
+    border-color: #2a9d4e !important;
+    border-radius: 6px;
+    font-family: monospace;
+}
+
+/* ── Homepage stat bar ── */
+.xmr-stat-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border: 1px solid var(--xmr-border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    width: 100%;
+}
+
+.xmr-stat {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 1rem;
+    border-right: 1px solid var(--xmr-border);
+    border-bottom: 1px solid var(--xmr-border);
+    flex: 1 1 140px;
+    min-width: 120px;
+}
+
+    .xmr-stat:last-child {
+        border-right: none;
+    }
+
+.stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--xmr-text-muted);
+    margin-bottom: 0.2rem;
+}
+
+.stat-value {
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: monospace;
+    color: var(--xmr-orange);
+}
+
+.stat-change {
+    font-size: 0.75rem;
+    font-family: monospace;
+    margin-top: 0.1rem;
+}
+
+/* ── Market table ── */
+.rank-cell {
+    color: var(--xmr-text-muted);
+    font-size: 0.8rem;
+    width: 2rem;
+}
+
+.coin-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 80px;
+}
+
+.coin-symbol {
+    font-weight: 700;
+    color: var(--xmr-text);
+    white-space: nowrap;
+}
+
+.coin-name {
+    color: var(--xmr-text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 130px;
+}
+
+.xmr-badge {
+    background: rgba(255,102,0,0.15);
+    color: var(--xmr-orange);
+    font-size: 0.62rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+.mono {
+    font-family: monospace;
+    font-size: 0.82rem;
+}
+
+.xmr-val {
+    color: var(--xmr-orange-light);
+}
+
+.xmr-row {
+    background: rgba(255,102,0,0.04) !important;
+}
+
+    .xmr-row:hover > * {
+        background: rgba(255,102,0,0.1) !important;
+    }
+
+.ratio-larger {
+    color: #ff5c5c;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.ratio-smaller {
+    color: #3ddc7a;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.ratio-base {
+    color: var(--xmr-orange);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 4rem 0;
+    color: var(--xmr-text-muted);
+}
+
+.page-subtitle {
+    color: var(--xmr-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+}
+
+.opacity-50 {
+    opacity: 0.5;
+}
+
+/* ── Mobile ── */
+@media (max-width: 576px) {
+    .xmr-stat {
+        flex: 1 1 45%;
+        padding: 0.6rem 0.75rem;
+    }
+
+        .xmr-stat:nth-child(even) {
+            border-right: none;
+        }
+
+    .stat-value {
+        font-size: 0.9rem;
+    }
+
+    .market-table {
+        font-size: 0.75rem;
+    }
+
+    .coin-name {
+        display: none;
+    }
+
+    h2 {
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .navbar-collapse.show,
+    .navbar-collapse.collapsing {
+        padding: 0.5rem 0;
+        border-top: 1px solid var(--xmr-border);
+    }
+}
+
+
+.table-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    font-family: monospace;
+    color: var(--xmr-text);
+    padding: 0.4rem 0;
+    border-top: 1px solid var(--xmr-border);
+    border-bottom: 1px solid var(--xmr-border);
+    margin-bottom: 0.5rem;
+}
+
+/* Ad banner */
+.ad-banner {
+    width: 100%;
+    min-height: 90px;
+    background: var(--xmr-surface);
+    border: 1px dashed var(--xmr-border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.ad-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--xmr-border);
+    position: absolute;
+    top: 4px;
+    left: 8px;
+}
+
+/* Stat bar updated cell */
+.xmr-stat-updated {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 1rem;
+    border-right: 1px solid var(--xmr-border);
+    min-width: 140px;
+    margin-left: auto;
+}

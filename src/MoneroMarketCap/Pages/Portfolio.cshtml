@@ -1,0 +1,33 @@
+﻿@page
+@model PortfolioModel
+
+<h2>My Portfolio</h2>
+<p>Logged in as: <strong>@User.Identity!.Name</strong></p>
+
+<table class="table">
+    <tr><th>Coin</th><th>Amount</th><th>Value (USD)</th><th>Added</th></tr>
+    @foreach (var entry in Model.Entries)
+    {
+        <tr>
+            
+        </tr>
+    }
+</table>
+
+<h4>Add to Portfolio</h4>
+<form method="post">
+    <div class="mb-2">
+        <label>Coin</label>
+        <select asp-for="CoinId" class="form-select">
+            @foreach (var coin in Model.AllCoins)
+            {
+                <option value="@coin.Id">@coin.Symbol - @coin.Name</option>
+            }
+        </select>
+    </div>
+    <div class="mb-2">
+        <label>Amount</label>
+        <input asp-for="Amount" type="number" step="0.00000001" class="form-control" />
+    </div>
+    <button type="submit" class="btn btn-primary">Add</button>
+</form>

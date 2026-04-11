@@ -1,0 +1,50 @@
+﻿@page
+@model MoneroMarketCap.Pages.Portfolios.TransactionsModel
+@using MoneroMarketCap.Data.Models
+@{
+    ViewData["Title"] = "Transaction History";
+}
+
+@if (Model.PortfolioCoin == null)
+{
+    <p>Not found.</p>
+    return;
+}
+
+<h2>@Model.PortfolioCoin.Coin.Symbol Transaction History</h2>
+<p>Portfolio: <strong>@Model.PortfolioCoin.Portfolio.Name</strong></p>
+
+<div class="mb-3">
+    <a asp-page="/Portfolios/Detail" asp-route-id="@Model.PortfolioCoin.PortfolioId"
+       class="btn btn-secondary btn-sm">← Back to Portfolio</a>
+</div>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Price at Time</th>
+            <th>Total USD</th>
+            <th>Date</th>
+            <th>Notes</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var t in Model.Transactions)
+        {
+            <tr>
+                <td>
+                    <span class="badge @(t.Type == TransactionType.Buy ? "bg-success" : "bg-danger")">
+                        @t.Type
+                    </span>
+                </td>
+                <td>@t.Amount.ToString("N8")</td>
+                <td>@t.PriceUsdAtTime.ToString("C")</td>
+                <td>@t.TotalUsd.ToString("C")</td>
+                <td>@t.TransactedAt.ToString("g")</td>
+                <td>@t.Notes</td>
+            </tr>
+        }
+    </tbody>
+</table>

@@ -1,0 +1,40 @@
+﻿@page
+@model MoneroMarketCap.Pages.Coins.IndexModel
+@{
+    ViewData["Title"] = "Coins";
+}
+
+<h2>Coins</h2>
+
+@if (!Model.AllCoins.Any())
+{
+    <p class="text-muted">No coins in the database yet.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Name</th>
+                <th>Price (USD)</th>
+                <th>Market Cap</th>
+                <th>Circulating Supply</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var coin in Model.AllCoins)
+            {
+                <tr>
+                    <td><strong>@coin.Symbol</strong></td>
+                    <td>@coin.Name</td>
+                    <td>@coin.PriceUsd.ToString("C")</td>
+                    <td>@coin.MarketCapUsd.ToString("N0")</td>
+                    <td>@coin.CirculatingSupply.ToString("N0")</td>
+                    <td>@coin.UpdatedAt.ToShortDateString()</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
