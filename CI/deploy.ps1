@@ -1,0 +1,351 @@
+﻿# deploy.ps1
+# Run from the CI folder: .\deploy.ps1
+#
+# Flags:
+#   -SkipBuild    skip dotnet publish steps
+#   -WebOnly      only deploy the web app
+#   -WorkerOnly   only deploy the worker
+#   -SSL          install Let's Encrypt SSL after deploy
+
+param(
+    [switch]$SkipBuild,
+    [switch]$WebOnly,
+    [switch]$WorkerOnly,
+    [switch]$SSL
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+# ── Load config ───────────────────────────────────────────────────────────────
+$configPath = Join-Path $PSScriptRoot "deploy-config.ps1"
+if (-not (Test-Path $configPath)) {
+    Write-Error "deploy-config.ps1 not found next to deploy.ps1"
+    exit 1
+}
+. $configPath
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
+function Write-Ok($msg)   { Write-Host "    OK: $msg" -ForegroundColor Green }
+
+function SSH($cmd) {
+    & $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" $cmd
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "SSH command failed: $cmd"
+        exit 1
+    }
+}
+
+function SSH-Ignore($cmd) {
+    & $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" $cmd
+}
+
+function SCP($local, $remote) {
+    & $PSCP -pw $SSH_PASSWORD -r -batch $local "${SSH_USER}@${SSH_HOST}:${remote}"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "SCP failed: $local -> $remote"
+        exit 1
+    }
+}
+
+function Save-UnixFile([string]$path, [string]$content) {
+    $clean = $content -replace "`r`n", "`n" -replace "`r", "`n"
+    [System.IO.File]::WriteAllText($path, $clean, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Run-RemoteScript([string]$localPath, [string]$remotePath) {
+    SCP $localPath $remotePath
+    SSH "chmod +x $remotePath && bash $remotePath"
+}
+
+# ── Step 1: Build ─────────────────────────────────────────────────────────────
+if (-not $SkipBuild) {
+    if (-not $WorkerOnly) {
+        Write-Step "Building web app"
+        $webOut = Join-Path $PSScriptRoot "..\publish\web"
+        if (Test-Path $webOut) { Remove-Item $webOut -Recurse -Force }
+        dotnet publish $WEB_PROJECT -c Release -r linux-x64 --self-contained false -o $webOut
+        if ($LASTEXITCODE -ne 0) { Write-Error "Web build failed"; exit 1 }
+        Write-Ok "Web app built"
+    }
+
+    if (-not $WebOnly) {
+        Write-Step "Building worker"
+        $workerOut = Join-Path $PSScriptRoot "..\publish\worker"
+        if (Test-Path $workerOut) { Remove-Item $workerOut -Recurse -Force }
+        dotnet publish $WORKER_PROJECT -c Release -r linux-x64 --self-contained false -o $workerOut
+        if ($LASTEXITCODE -ne 0) { Write-Error "Worker build failed"; exit 1 }
+        Write-Ok "Worker built"
+    }
+}
+
+# ── Step 2: Bootstrap server (idempotent) ────────────────────────────────────
+Write-Step "Bootstrapping server"
+
+SSH "apt-get update -q"
+SSH "command -v dotnet > /dev/null 2>&1 || (wget -q https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O /tmp/ms.deb && dpkg -i /tmp/ms.deb && apt-get update -q && apt-get install -y aspnetcore-runtime-10.0)"
+SSH "command -v psql > /dev/null 2>&1 || (apt-get install -y postgresql postgresql-contrib && systemctl enable postgresql && systemctl start postgresql)"
+SSH-Ignore "systemctl start postgresql 2>/dev/null || true"
+SSH "mkdir -p $DEPLOY_PATH $WORKER_PATH"
+SSH-Ignore "ufw allow $APP_PORT/tcp 2>/dev/null || true"
+
+Write-Ok "Server dependencies ready"
+
+# ── Step 3: PostgreSQL ────────────────────────────────────────────────────────
+Write-Step "Setting up PostgreSQL"
+
+$pgScript = "#!/bin/bash`n" +
+    "sudo -u postgres psql -c `"CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';`" 2>/dev/null || true`n" +
+    "sudo -u postgres psql -c `"CREATE DATABASE $DB_NAME OWNER $DB_USER;`" 2>/dev/null || true`n" +
+    "sudo -u postgres psql -c `"GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;`" 2>/dev/null || true`n" +
+    "sudo -u postgres psql -d $DB_NAME -c `"GRANT ALL ON SCHEMA public TO $DB_USER;`" 2>/dev/null || true`n" +
+    "sudo -u postgres psql -d $DB_NAME -c `"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;`" 2>/dev/null || true`n" +
+    "echo `"DB setup complete`"`n"
+
+$pgScriptFile = Join-Path $env:TEMP "pg-setup.sh"
+Save-UnixFile $pgScriptFile $pgScript
+Run-RemoteScript $pgScriptFile "/tmp/pg-setup.sh"
+
+Write-Ok "Database ready"
+
+# ── Step 4: Write appsettings.json ────────────────────────────────────────────
+Write-Step "Writing config"
+
+$connString = "Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD"
+
+$webCfgContent = "{`n  `"ConnectionStrings`": {`n    `"DefaultConnection`": `"$connString`"`n  },`n  `"CoinGecko`": {`n    `"ApiKey`": `"$COINGECKO_API_KEY`",`n    `"RefreshIntervalMinutes`": $COINGECKO_REFRESH_MINUTES`n  },`n  `"Admin`": {`n    `"Username`": `"$ADMIN_USERNAME`",`n    `"Password`": `"$ADMIN_PASSWORD`"`n  }`n}`n"
+
+$workerCfgContent = "{`n  `"ConnectionStrings`": {`n    `"DefaultConnection`": `"$connString`"`n  },`n  `"CoinGecko`": {`n    `"ApiKey`": `"$COINGECKO_API_KEY`",`n    `"TopCoinsOnStartup`": 100,`n    `"RefreshIntervalMinutes`": $COINGECKO_REFRESH_MINUTES`n  }`n}`n"
+
+$webCfgFile    = Join-Path $env:TEMP "web-appsettings.json"
+$workerCfgFile = Join-Path $env:TEMP "worker-appsettings.json"
+Save-UnixFile $webCfgFile    $webCfgContent
+Save-UnixFile $workerCfgFile $workerCfgContent
+
+Write-Ok "Config ready"
+
+# ── Step 5: Deploy web app ────────────────────────────────────────────────────
+if (-not $WorkerOnly) {
+    Write-Step "Deploying web app"
+
+    SSH-Ignore "systemctl stop $APP_NAME 2>/dev/null || true"
+
+    $webOut = Join-Path $PSScriptRoot "..\publish\web"
+    $webTar = Join-Path $env:TEMP "web.tar.gz"
+    Push-Location $webOut
+    & tar -czf $webTar .
+    Pop-Location
+
+    SCP $webTar "/tmp/web.tar.gz"
+    SSH "mkdir -p $DEPLOY_PATH && tar -xzf /tmp/web.tar.gz -C $DEPLOY_PATH && rm /tmp/web.tar.gz"
+    SCP $webCfgFile "$DEPLOY_PATH/appsettings.json"
+    SSH "chown -R www-data:www-data $DEPLOY_PATH && chmod -R 755 $DEPLOY_PATH"
+
+    $svcContent = "[Unit]`nDescription=MoneroMarketCap Web ($DOMAIN)`nAfter=network.target postgresql.service`n`n[Service]`nWorkingDirectory=$DEPLOY_PATH`nExecStart=/usr/bin/dotnet $DEPLOY_PATH/MoneroMarketCap.Web.dll`nRestart=always`nRestartSec=10`nUser=www-data`nEnvironment=ASPNETCORE_ENVIRONMENT=Production`nEnvironment=ASPNETCORE_URLS=http://0.0.0.0:" + $APP_PORT + "`nEnvironment=DOTNET_PRINT_TELEMETRY_MESSAGE=false`n`n[Install]`nWantedBy=multi-user.target`n"
+    $svcFile = Join-Path $env:TEMP "$APP_NAME.service"
+    Save-UnixFile $svcFile $svcContent
+    SCP $svcFile "/etc/systemd/system/$APP_NAME.service"
+    SSH "systemctl daemon-reload && systemctl enable $APP_NAME && systemctl restart $APP_NAME"
+
+    Write-Ok "Web app deployed on port $APP_PORT"
+}
+
+# ── Step 6: Deploy worker ─────────────────────────────────────────────────────
+if (-not $WebOnly) {
+    Write-Step "Deploying worker"
+
+    SSH-Ignore "systemctl stop $WORKER_NAME 2>/dev/null || true"
+
+    $workerOut = Join-Path $PSScriptRoot "..\publish\worker"
+    $workerTar = Join-Path $env:TEMP "worker.tar.gz"
+    Push-Location $workerOut
+    & tar -czf $workerTar .
+    Pop-Location
+
+    SCP $workerTar "/tmp/worker.tar.gz"
+    SSH "mkdir -p $WORKER_PATH && tar -xzf /tmp/worker.tar.gz -C $WORKER_PATH && rm /tmp/worker.tar.gz"
+    SCP $workerCfgFile "$WORKER_PATH/appsettings.json"
+    SSH "chown -R www-data:www-data $WORKER_PATH && chmod -R 755 $WORKER_PATH"
+
+    $workerSvcContent = "[Unit]`nDescription=MoneroMarketCap Worker ($DOMAIN)`nAfter=network.target postgresql.service`n`n[Service]`nWorkingDirectory=$WORKER_PATH`nExecStart=/usr/bin/dotnet $WORKER_PATH/MoneroMarketCap.Worker.dll`nRestart=always`nRestartSec=10`nUser=www-data`nEnvironment=ASPNETCORE_ENVIRONMENT=Production`nEnvironment=DOTNET_ENVIRONMENT=Production`nEnvironment=DOTNET_PRINT_TELEMETRY_MESSAGE=false`n`n[Install]`nWantedBy=multi-user.target`n"
+    $workerSvcFile = Join-Path $env:TEMP "$WORKER_NAME.service"
+    Save-UnixFile $workerSvcFile $workerSvcContent
+    SCP $workerSvcFile "/etc/systemd/system/$WORKER_NAME.service"
+    SSH "systemctl daemon-reload && systemctl enable $WORKER_NAME && systemctl restart $WORKER_NAME"
+
+    Write-Ok "Worker deployed"
+}
+
+# ── Step 7: Configure Nginx ───────────────────────────────────────────────────
+Write-Step "Configuring Nginx"
+
+# Check if SSL cert exists on server — if so use HTTPS config, otherwise HTTP
+$certExists = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no").Trim()
+
+if ($certExists -eq "yes") {
+    # Copy certs into container (resolve symlinks with cp -L)
+    SSH "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem /tmp/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem /tmp/privkey.pem"
+    SSH "docker exec nginx mkdir -p /etc/letsencrypt/live/$DOMAIN"
+    SSH "docker cp /tmp/fullchain.pem nginx:/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    SSH "docker cp /tmp/privkey.pem nginx:/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+
+    # Write HTTPS nginx config via file (no heredoc quoting issues)
+    $nginxSslConf  = "server {`n"
+    $nginxSslConf += "    listen 80;`n"
+    $nginxSslConf += "    server_name $DOMAIN www.$DOMAIN;`n"
+    $nginxSslConf += "    return 301 https://`$host`$request_uri;`n"
+    $nginxSslConf += "}`n"
+    $nginxSslConf += "`n"
+    $nginxSslConf += "server {`n"
+    $nginxSslConf += "    listen 443 ssl;`n"
+    $nginxSslConf += "    server_name $DOMAIN www.$DOMAIN;`n"
+    $nginxSslConf += "    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;`n"
+    $nginxSslConf += "    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;`n"
+    $nginxSslConf += "    ssl_protocols TLSv1.2 TLSv1.3;`n"
+    $nginxSslConf += "    ssl_ciphers HIGH:!aNULL:!MD5;`n"
+    $nginxSslConf += "`n"
+    $nginxSslConf += "    location / {`n"
+    $nginxSslConf += "        proxy_pass         http://172.17.0.1:$APP_PORT;`n"
+    $nginxSslConf += "        proxy_http_version 1.1;`n"
+    $nginxSslConf += "        proxy_set_header   Upgrade `$http_upgrade;`n"
+    $nginxSslConf += "        proxy_set_header   Connection keep-alive;`n"
+    $nginxSslConf += "        proxy_set_header   Host `$host;`n"
+    $nginxSslConf += "        proxy_set_header   X-Real-IP `$remote_addr;`n"
+    $nginxSslConf += "        proxy_set_header   X-Forwarded-For `$proxy_add_x_forwarded_for;`n"
+    $nginxSslConf += "        proxy_set_header   X-Forwarded-Proto `$scheme;`n"
+    $nginxSslConf += "        proxy_cache_bypass `$http_upgrade;`n"
+    $nginxSslConf += "    }`n"
+    $nginxSslConf += "}`n"
+
+    $nginxConfFile = Join-Path $env:TEMP "$APP_NAME.nginx.conf"
+    Save-UnixFile $nginxConfFile $nginxSslConf
+    SCP $nginxConfFile "/tmp/$APP_NAME.conf"
+    SSH "docker cp /tmp/$APP_NAME.conf nginx:/etc/nginx/conf.d/$APP_NAME.conf"
+    SSH "docker exec nginx nginx -s reload"
+    Write-Ok "Nginx configured for $DOMAIN (HTTPS)"
+} else {
+    # No cert yet — write plain HTTP config
+    $nginxConf  = "server {`n"
+    $nginxConf += "    listen 80;`n"
+    $nginxConf += "    server_name $DOMAIN www.$DOMAIN;`n"
+    $nginxConf += "`n"
+    $nginxConf += "    location / {`n"
+    $nginxConf += "        proxy_pass         http://172.17.0.1:$APP_PORT;`n"
+    $nginxConf += "        proxy_http_version 1.1;`n"
+    $nginxConf += "        proxy_set_header   Upgrade `$http_upgrade;`n"
+    $nginxConf += "        proxy_set_header   Connection keep-alive;`n"
+    $nginxConf += "        proxy_set_header   Host `$host;`n"
+    $nginxConf += "        proxy_set_header   X-Real-IP `$remote_addr;`n"
+    $nginxConf += "        proxy_set_header   X-Forwarded-For `$proxy_add_x_forwarded_for;`n"
+    $nginxConf += "        proxy_set_header   X-Forwarded-Proto `$scheme;`n"
+    $nginxConf += "        proxy_cache_bypass `$http_upgrade;`n"
+    $nginxConf += "    }`n"
+    $nginxConf += "}`n"
+
+    $nginxConfFile = Join-Path $env:TEMP "$APP_NAME.nginx.conf"
+    Save-UnixFile $nginxConfFile $nginxConf
+    SCP $nginxConfFile "/tmp/$APP_NAME.conf"
+    SSH "docker cp /tmp/$APP_NAME.conf nginx:/etc/nginx/conf.d/$APP_NAME.conf"
+    SSH "docker exec nginx nginx -s reload"
+    Write-Ok "Nginx configured for $DOMAIN (HTTP only — run with -SSL to enable HTTPS)"
+}
+
+# ── Step 8: Run EF migrations ─────────────────────────────────────────────────
+Write-Step "Running database migrations"
+
+$migrateScript = "#!/bin/bash`n" +
+    "export ConnectionStrings__DefaultConnection='Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD'`n" +
+    "cd $DEPLOY_PATH`n" +
+    "dotnet MoneroMarketCap.Web.dll --migrate-only`n" +
+    "echo `"Migration exit: `$?`"`n"
+
+$migrateScriptFile = Join-Path $env:TEMP "migrate.sh"
+Save-UnixFile $migrateScriptFile $migrateScript
+Run-RemoteScript $migrateScriptFile "/tmp/migrate.sh"
+
+Write-Ok "Migrations complete"
+
+# ── Step 9: SSL (get cert — only needed once) ─────────────────────────────────
+if ($SSL) {
+    Write-Step "Getting SSL certificate"
+
+    SSH "apt-get install -y certbot"
+
+    # Stop docker nginx to free port 80, get cert, restart
+    $sslScript  = "#!/bin/bash`n"
+    $sslScript += "set -e`n"
+    $sslScript += "echo 'Stopping docker nginx...'`n"
+    $sslScript += "docker stop nginx`n"
+    $sslScript += "sleep 2`n"
+    $sslScript += "echo 'Getting cert...'`n"
+    $sslScript += "certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN`n"
+    $sslScript += "echo 'Starting docker nginx...'`n"
+    $sslScript += "docker start nginx`n"
+    $sslScript += "sleep 2`n"
+    $sslScript += "echo 'Done'`n"
+
+    $sslScriptFile = Join-Path $env:TEMP "ssl-setup.sh"
+    Save-UnixFile $sslScriptFile $sslScript
+    Run-RemoteScript $sslScriptFile "/tmp/ssl-setup.sh"
+
+    Write-Ok "Certificate obtained — re-running nginx config step with SSL..."
+
+    # Now re-run the nginx config with the cert that now exists
+    SSH "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem /tmp/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem /tmp/privkey.pem"
+    SSH "docker exec nginx mkdir -p /etc/letsencrypt/live/$DOMAIN"
+    SSH "docker cp /tmp/fullchain.pem nginx:/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    SSH "docker cp /tmp/privkey.pem nginx:/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+
+    $nginxSslConf  = "server {`n"
+    $nginxSslConf += "    listen 80;`n"
+    $nginxSslConf += "    server_name $DOMAIN www.$DOMAIN;`n"
+    $nginxSslConf += "    return 301 https://`$host`$request_uri;`n"
+    $nginxSslConf += "}`n"
+    $nginxSslConf += "`n"
+    $nginxSslConf += "server {`n"
+    $nginxSslConf += "    listen 443 ssl;`n"
+    $nginxSslConf += "    server_name $DOMAIN www.$DOMAIN;`n"
+    $nginxSslConf += "    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;`n"
+    $nginxSslConf += "    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;`n"
+    $nginxSslConf += "    ssl_protocols TLSv1.2 TLSv1.3;`n"
+    $nginxSslConf += "    ssl_ciphers HIGH:!aNULL:!MD5;`n"
+    $nginxSslConf += "`n"
+    $nginxSslConf += "    location / {`n"
+    $nginxSslConf += "        proxy_pass         http://172.17.0.1:$APP_PORT;`n"
+    $nginxSslConf += "        proxy_http_version 1.1;`n"
+    $nginxSslConf += "        proxy_set_header   Upgrade `$http_upgrade;`n"
+    $nginxSslConf += "        proxy_set_header   Connection keep-alive;`n"
+    $nginxSslConf += "        proxy_set_header   Host `$host;`n"
+    $nginxSslConf += "        proxy_set_header   X-Real-IP `$remote_addr;`n"
+    $nginxSslConf += "        proxy_set_header   X-Forwarded-For `$proxy_add_x_forwarded_for;`n"
+    $nginxSslConf += "        proxy_set_header   X-Forwarded-Proto `$scheme;`n"
+    $nginxSslConf += "        proxy_cache_bypass `$http_upgrade;`n"
+    $nginxSslConf += "    }`n"
+    $nginxSslConf += "}`n"
+
+    $nginxSslFile = Join-Path $env:TEMP "$APP_NAME.ssl.nginx.conf"
+    Save-UnixFile $nginxSslFile $nginxSslConf
+    SCP $nginxSslFile "/tmp/$APP_NAME.conf"
+    SSH "docker cp /tmp/$APP_NAME.conf nginx:/etc/nginx/conf.d/$APP_NAME.conf"
+    SSH "docker exec nginx nginx -s reload"
+
+    Write-Ok "SSL installed for $DOMAIN"
+}
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+Write-Host ""
+Write-Host "============================================" -ForegroundColor Green
+Write-Host " Deployment complete!" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
+Write-Host " Site:   http://$DOMAIN" -ForegroundColor White
+if ($SSL) {
+    Write-Host " HTTPS:  https://$DOMAIN" -ForegroundColor White
+}
+Write-Host ""
+Write-Host " Useful commands:" -ForegroundColor Gray
+Write-Host "   Web status:    plink -ssh -pw PASSWORD root@$SSH_HOST systemctl status $APP_NAME" -ForegroundColor Gray
+Write-Host "   Worker status: plink -ssh -pw PASSWORD root@$SSH_HOST systemctl status $WORKER_NAME" -ForegroundColor Gray
+Write-Host "   Web logs:      plink -ssh -pw PASSWORD root@$SSH_HOST journalctl -u $APP_NAME -f" -ForegroundColor Gray
+Write-Host "   Worker logs:   plink -ssh -pw PASSWORD root@$SSH_HOST journalctl -u $WORKER_NAME -f" -ForegroundColor Gray
+Write-Host ""
