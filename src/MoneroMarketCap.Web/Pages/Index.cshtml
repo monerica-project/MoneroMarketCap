@@ -64,7 +64,11 @@
 <div class="table-meta">
     <span>
         <span style="color:var(--xmr-text-muted)">Data updated:</span>
-        <span id="last-updated-bar">@(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("HH:mm:ss") + " UTC" : "pending...")</span>
+        <span id="last-updated-bar"
+              title="@(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "")"
+              style="cursor:default">
+            @(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("HH:mm:ss") + " UTC" : "pending...")
+        </span>
     </span>
     <span>
         <span style="color:var(--xmr-text-muted)">Next update in:</span>
@@ -417,7 +421,10 @@ else
                 refreshPrices().then(() => {
                     const now = new Date();
                     const timeStr = now.toUTCString().split(' ')[4] + ' UTC';
-                    if (lastUpdatedBar) lastUpdatedBar.textContent = timeStr;
+                    if (lastUpdatedBar) {
+                        lastUpdatedBar.textContent = timeStr;
+                        lastUpdatedBar.title = now.toUTCString();
+                    }
                 });
             }
         }, 1000);

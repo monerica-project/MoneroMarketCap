@@ -5,18 +5,19 @@
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
 }
 
+<meta name="format-detection" content="telephone=no" />
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>My Portfolios</h2>
-    <span class="fs-5">
-        Total Net Value:
-        <strong>$@Model.TotalNetValue.ToString("N2", usd)</strong>
+    <div class="text-end">
+        <div class="fs-5">Total Net Value: <strong>$@Model.TotalNetValue.ToString("N2", usd)</strong></div>
         @if (Model.XmrPrice > 0)
         {
-            <span style="color:var(--xmr-text-muted);font-size:0.85rem">
-                / @((Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)) XMR
-            </span>
+            <div style="color:var(--xmr-text-muted);font-size:0.85rem;white-space:nowrap">
+                @((Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)) XMR
+            </div>
         }
-    </span>
+    </div>
 </div>
 
 @if (!Model.Portfolios.Any())
@@ -32,15 +33,16 @@ else
                 <div class="card" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
                     <div class="card-body">
                         <h5 class="card-title">@p.Name</h5>
-                        <p class="card-text">
+                        <p class="card-text mb-1">
                             Value: <strong>$@p.TotalValueUsd.ToString("N2", usd)</strong>
-                            @if (Model.XmrPrice > 0)
-                            {
-                                <span style="color:var(--xmr-text-muted);font-size:0.82rem">
-                                    / @((p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)) XMR
-                                </span>
-                            }
-                            <br />
+                        </p>
+                        @if (Model.XmrPrice > 0)
+                        {
+                            <p class="card-text mb-1" style="color:var(--xmr-text-muted);font-size:0.82rem;white-space:nowrap">
+                                @((p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)) XMR
+                            </p>
+                        }
+                        <p class="card-text mb-2" style="font-size:0.85rem">
                             Coins: @p.PortfolioCoins.Count
                         </p>
                         <a asp-page="/Portfolios/Detail" asp-route-id="@p.Id" class="btn btn-primary btn-sm">View</a>

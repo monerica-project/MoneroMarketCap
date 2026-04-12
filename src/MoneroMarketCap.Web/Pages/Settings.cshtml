@@ -1,0 +1,39 @@
+@page
+@model MoneroMarketCap.Pages.SettingsModel
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<h2>Settings</h2>
+
+@if (Model.Success)
+{
+    <div class="alert alert-success">Password changed successfully.</div>
+}
+
+@if (Model.Error != null)
+{
+    <div class="alert alert-danger">@Model.Error</div>
+}
+
+<div class="card mt-3" style="max-width:480px;background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card-header">Change Password</div>
+    <div class="card-body">
+        <form method="post">
+            @Html.AntiForgeryToken()
+            <div class="mb-3">
+                <label class="form-label">Current Password</label>
+                <input asp-for="CurrentPassword" type="password" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">New Password</label>
+                <input asp-for="NewPassword" type="password" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Confirm New Password</label>
+                <input asp-for="ConfirmPassword" type="password" class="form-control" />
+            </div>
+            <button type="submit" class="btn btn-primary">Change Password</button>
+        </form>
+    </div>
+</div>

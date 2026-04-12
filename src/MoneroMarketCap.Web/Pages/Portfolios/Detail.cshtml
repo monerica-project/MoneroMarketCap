@@ -7,6 +7,8 @@
     decimal xmrVal(decimal v) => Model.XmrPrice > 0 ? v / Model.XmrPrice : 0;
 }
 
+<meta name="format-detection" content="telephone=no" />
+
 @if (Model.Portfolio == null)
 {
     <p>Portfolio not found.</p>
@@ -15,21 +17,19 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>@Model.Portfolio.Name</h2>
-    <span class="fs-5">
-        Total Value:
-        <strong>$@Model.Portfolio.TotalValueUsd.ToString("N2", usd)</strong>
+    <div class="text-end">
+        <div class="fs-5">Total Value: <strong>$@Model.Portfolio.TotalValueUsd.ToString("N2", usd)</strong></div>
         @if (Model.XmrPrice > 0)
         {
-            <span style="color:var(--xmr-text-muted);font-size:0.85rem">
-                / @xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd) XMR
-            </span>
+            <div style="color:var(--xmr-text-muted);font-size:0.85rem;white-space:nowrap">
+                @xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd) XMR
+            </div>
         }
-    </span>
+    </div>
 </div>
 
-<div class="d-flex gap-2 mb-3">
-    <a asp-page="/Portfolios/Index" class="btn btn-secondary btn-sm">← Back to Portfolios</a>
-
+<div class="d-flex gap-2 mb-4">
+    <a asp-page="/Portfolios/Index" class="btn btn-secondary btn-sm">← Back</a>
     <form method="post"
           asp-page-handler="DeletePortfolio"
           asp-route-id="@Model.Portfolio.Id"
@@ -45,89 +45,96 @@
 }
 else
 {
-    foreach (var pc in Model.Portfolio.PortfolioCoins)
-    {
-        <div class="card mb-3" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><strong>@pc.Coin.Symbol</strong> — @pc.Coin.Name</span>
-                <span>
-                    Value: <strong>$@pc.TotalValueUsd.ToString("N2", usd)</strong>
+    <div class="table-responsive mb-4">
+        <table class="table market-table" style="font-size:0.82rem">
+            <thead>
+                <tr>
+                    <th>Coin</th>
+                    <th class="text-end">Amount</th>
+                    <th class="text-end">Price</th>
+                    <th class="text-end">Value (USD)</th>
                     @if (Model.XmrPrice > 0)
                     {
-                        <span style="color:var(--xmr-text-muted);font-size:0.82rem">
-                            / @xmrVal(pc.TotalValueUsd).ToString("N4", usd) XMR
-                        </span>
+                        <th class="text-end">Value (XMR)</th>
                     }
-                    &nbsp;|&nbsp;
-                    P&amp;L:
-                    <strong class="@(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
-                        $@pc.UnrealizedPnl.ToString("N2", usd)
+                    <th class="text-end">Basis</th>
+                    <th class="text-end">P&amp;L</th>
+                    @if (Model.XmrPrice > 0)
+                    {
+                        <th class="text-end">P&amp;L (XMR)</th>
+                    }
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var pc in Model.Portfolio.PortfolioCoins.OrderBy(p => p.Coin.Symbol))
+                {
+                    <tr>
+                        <td>
+                            <div class="coin-name-cell">
+                                @if (!string.IsNullOrEmpty(pc.Coin.ImageUrl))
+                                {
+                                    <img src="@pc.Coin.ImageUrl" width="18" height="18" style="border-radius:50%;flex-shrink:0" />
+                                }
+                                <span class="coin-symbol">@pc.Coin.Symbol</span>
+                                <span class="coin-name d-none d-lg-inline">@pc.Coin.Name</span>
+                            </div>
+                        </td>
+                        <td class="text-end mono">@pc.TotalAmount.ToString("N8", usd)</td>
+                        <td class="text-end mono">$@pc.Coin.PriceUsd.ToString("N2", usd)</td>
+                        <td class="text-end mono">$@pc.TotalValueUsd.ToString("N2", usd)</td>
                         @if (Model.XmrPrice > 0)
                         {
-                            <span style="font-size:0.82rem">
-                                / @xmrVal(pc.UnrealizedPnl).ToString("N4", usd) XMR
-                            </span>
+                            <td class="text-end mono xmr-val">@xmrVal(pc.TotalValueUsd).ToString("N4", usd) XMR</td>
                         }
-                    </strong>
-                </span>
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-sm mb-0" style="font-size:0.82rem">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th class="text-end">Amount</th>
-                            <th class="text-end">Price (USD)</th>
-                            <th class="text-end">Total</th>
-                            <th>Notes</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var tx in pc.Transactions.OrderByDescending(t => t.TransactedAt))
+                        <td class="text-end mono">$@pc.TotalCostBasis.ToString("N2", usd)</td>
+                        <td class="text-end mono @(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
+                            $@pc.UnrealizedPnl.ToString("N2", usd)
+                        </td>
+                        @if (Model.XmrPrice > 0)
                         {
-                            <tr>
-                                <td>@tx.TransactedAt.ToString("yyyy-MM-dd")</td>
-                                <td>
-                                    <span class="@(tx.Type == TransactionType.Buy ? "text-success" : "text-danger")">
-                                        @tx.Type
-                                    </span>
-                                </td>
-                                <td class="text-end mono">@tx.Amount.ToString("N12", usd)</td>
-                                <td class="text-end mono">$@tx.PriceUsdAtTime.ToString("N8", usd)</td>
-                                <td class="text-end mono">$@tx.TotalUsd.ToString("N2", usd)</td>
-                                <td>@tx.Notes</td>
-                                <td class="text-end">
-                                    <form method="post"
-                                          asp-page-handler="DeleteTransaction"
-                                          asp-route-id="@Model.Portfolio.Id"
-                                          asp-route-transactionId="@tx.Id"
-                                          onsubmit="return confirm('Delete this transaction?')"
-                                          style="display:inline">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">✕</button>
-                                    </form>
-                                </td>
-                            </tr>
+                            <td class="text-end mono @(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger") xmr-val">
+                                @xmrVal(pc.UnrealizedPnl).ToString("N4", usd) XMR
+                            </td>
                         }
-                    </tbody>
-                    <tfoot>
-                        <tr style="border-top:1px solid var(--xmr-border)">
-                            <td colspan="2"><small class="text-muted">Total held</small></td>
-                            <td class="text-end mono"><small>@pc.TotalAmount.ToString("N12", usd)</small></td>
-                            <td class="text-end mono"><small>Current: $@pc.Coin.PriceUsd.ToString("N8", usd)</small></td>
-                            <td class="text-end mono"><small>Basis: $@pc.TotalCostBasis.ToString("N2", usd)</small></td>
-                            <td colspan="2"></td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-    }
+                        <td class="text-end">
+                            <a asp-page="/Portfolios/Transactions"
+                               asp-route-portfolioCoinId="@pc.Id"
+                               class="btn btn-outline-secondary btn-sm">History</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                @{
+                    var totalPnl = Model.Portfolio.PortfolioCoins.Sum(p => p.UnrealizedPnl);
+                    var totalBasis = Model.Portfolio.PortfolioCoins.Sum(p => p.TotalCostBasis);
+                }
+                <tr style="border-top:2px solid var(--xmr-border);font-weight:600">
+                    <td colspan="3">Total</td>
+                    <td class="text-end mono">$@Model.Portfolio.TotalValueUsd.ToString("N2", usd)</td>
+                    @if (Model.XmrPrice > 0)
+                    {
+                        <td class="text-end mono xmr-val">@xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd) XMR</td>
+                    }
+                    <td class="text-end mono">$@totalBasis.ToString("N2", usd)</td>
+                    <td class="text-end mono @(totalPnl >= 0 ? "text-success" : "text-danger")">
+                        $@totalPnl.ToString("N2", usd)
+                    </td>
+                    @if (Model.XmrPrice > 0)
+                    {
+                        <td class="text-end mono @(totalPnl >= 0 ? "text-success" : "text-danger") xmr-val">
+                            @xmrVal(totalPnl).ToString("N4", usd) XMR
+                        </td>
+                    }
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
 }
 
-<div class="card mt-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+<div class="card mt-2" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
     <div class="card-header">Add Transaction</div>
     <div class="card-body">
         <form method="post" asp-page-handler="AddTransaction" asp-route-id="@Model.Portfolio.Id" class="row g-3">
