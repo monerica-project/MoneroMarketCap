@@ -32,6 +32,46 @@ public class PortfolioRepository : IPortfolioRepository
         return portfolios.Sum(p => p.TotalValueUsd);
     }
 
+    public async Task DeletePortfolioAsync(int portfolioId)
+    {
+        var portfolio = await _db.Portfolios
+            .Include(p => p.PortfolioCoins)
+                .ThenInclude(pc => pc.Transactions)
+            .FirstOrDefaultAsync(p => p.Id == portfolioId);
+
+        if (portfolio == null) return;
+        _db.Portfolios.Remove(portfolio);
+        await _db.SaveChangesAsync();
+    }
+
+    // PortfolioRepository
+    public async Task DeleteTransactionAsync(int transactionId)
+    {
+        var tx = await _db.CoinTransactions
+            .Include(t => t.PortfolioCoin)
+            .FirstOrDefaultAsync(t => t.Id == transactionId);
+
+        if (tx == null) return;
+
+        _db.CoinTransactions.Remove(tx);
+
+        // Recalculate rolled-up totals on the parent PortfolioCoin
+        var pc = tx.PortfolioCoin;
+        var remaining = await _db.CoinTransactions
+            .Where(t => t.PortfolioCoinId == pc.Id && t.Id != transactionId)
+            .ToListAsync();
+
+        pc.TotalAmount = remaining.Sum(t => t.Type == TransactionType.Buy ? t.Amount : -t.Amount);
+        pc.TotalCostBasis = remaining.Where(t => t.Type == TransactionType.Buy).Sum(t => t.TotalUsd);
+
+        if (pc.TotalAmount <= 0)
+        {
+            _db.PortfolioCoins.Remove(pc);
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
     public async Task<IReadOnlyList<Portfolio>> GetAllAsync() =>
         await _db.Portfolios.ToListAsync();
 

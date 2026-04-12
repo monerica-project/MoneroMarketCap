@@ -35,8 +35,15 @@ public class LoginModel : PageModel
         foreach (var ur in user.UserRoles)
             claims.Add(new Claim(ClaimTypes.Role, ur.Role.Name));
 
+ 
+
         await HttpContext.SignInAsync("CookieAuth",
-            new ClaimsPrincipal(new ClaimsIdentity(claims, "CookieAuth")));
+    new ClaimsPrincipal(new ClaimsIdentity(claims, "CookieAuth")),
+    new AuthenticationProperties
+    {
+        IsPersistent = true,
+        ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+    });
 
         return Redirect("/Portfolios/Index");
     }

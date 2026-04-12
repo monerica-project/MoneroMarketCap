@@ -3,6 +3,8 @@
 @using MoneroMarketCap.Data.Models
 @{
     ViewData["Title"] = Model.Portfolio?.Name ?? "Portfolio";
+    var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    decimal xmrVal(decimal v) => Model.XmrPrice > 0 ? v / Model.XmrPrice : 0;
 }
 
 @if (Model.Portfolio == null)
@@ -13,10 +15,29 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>@Model.Portfolio.Name</h2>
-    <span class="fs-5">Total Value: <strong>@Model.Portfolio.TotalValueUsd.ToString("C")</strong></span>
+    <span class="fs-5">
+        Total Value:
+        <strong>$@Model.Portfolio.TotalValueUsd.ToString("N2", usd)</strong>
+        @if (Model.XmrPrice > 0)
+        {
+            <span style="color:var(--xmr-text-muted);font-size:0.85rem">
+                / @xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd) XMR
+            </span>
+        }
+    </span>
 </div>
 
-<a asp-page="/Portfolios/Index" class="btn btn-secondary btn-sm mb-3">← Back to Portfolios</a>
+<div class="d-flex gap-2 mb-3">
+    <a asp-page="/Portfolios/Index" class="btn btn-secondary btn-sm">← Back to Portfolios</a>
+
+    <form method="post"
+          asp-page-handler="DeletePortfolio"
+          asp-route-id="@Model.Portfolio.Id"
+          onsubmit="return confirm('Delete portfolio \'@Model.Portfolio.Name\'? This cannot be undone.')">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-danger btn-sm">🗑 Delete Portfolio</button>
+    </form>
+</div>
 
 @if (!Model.Portfolio.PortfolioCoins.Any())
 {
@@ -24,67 +45,137 @@
 }
 else
 {
-    <table class="table table-striped mb-4">
-        <thead>
-            <tr>
-                <th>Coin</th>
-                <th>Amount Held</th>
-                <th>Current Price</th>
-                <th>Value (USD)</th>
-                <th>Cost Basis</th>
-                <th>Unrealized P&L</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var pc in Model.Portfolio.PortfolioCoins)
-            {
-                <tr>
-                    <td><strong>@pc.Coin.Symbol</strong> — @pc.Coin.Name</td>
-                    <td>@pc.TotalAmount.ToString("N8")</td>
-                    <td>@pc.Coin.PriceUsd.ToString("C")</td>
-                    <td>@pc.TotalValueUsd.ToString("C")</td>
-                    <td>@pc.TotalCostBasis.ToString("C")</td>
-                    <td class="@(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
-                        @pc.UnrealizedPnl.ToString("C")
-                    </td>
-                    <td>
-                        <a asp-page="/Portfolios/Transactions"
-                           asp-route-portfolioCoinId="@pc.Id"
-                           class="btn btn-outline-secondary btn-sm">History</a>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    foreach (var pc in Model.Portfolio.PortfolioCoins)
+    {
+        <div class="card mb-3" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><strong>@pc.Coin.Symbol</strong> — @pc.Coin.Name</span>
+                <span>
+                    Value: <strong>$@pc.TotalValueUsd.ToString("N2", usd)</strong>
+                    @if (Model.XmrPrice > 0)
+                    {
+                        <span style="color:var(--xmr-text-muted);font-size:0.82rem">
+                            / @xmrVal(pc.TotalValueUsd).ToString("N4", usd) XMR
+                        </span>
+                    }
+                    &nbsp;|&nbsp;
+                    P&amp;L:
+                    <strong class="@(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
+                        $@pc.UnrealizedPnl.ToString("N2", usd)
+                        @if (Model.XmrPrice > 0)
+                        {
+                            <span style="font-size:0.82rem">
+                                / @xmrVal(pc.UnrealizedPnl).ToString("N4", usd) XMR
+                            </span>
+                        }
+                    </strong>
+                </span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" style="font-size:0.82rem">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th class="text-end">Amount</th>
+                            <th class="text-end">Price (USD)</th>
+                            <th class="text-end">Total</th>
+                            <th>Notes</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var tx in pc.Transactions.OrderByDescending(t => t.TransactedAt))
+                        {
+                            <tr>
+                                <td>@tx.TransactedAt.ToString("yyyy-MM-dd")</td>
+                                <td>
+                                    <span class="@(tx.Type == TransactionType.Buy ? "text-success" : "text-danger")">
+                                        @tx.Type
+                                    </span>
+                                </td>
+                                <td class="text-end mono">@tx.Amount.ToString("N12", usd)</td>
+                                <td class="text-end mono">$@tx.PriceUsdAtTime.ToString("N8", usd)</td>
+                                <td class="text-end mono">$@tx.TotalUsd.ToString("N2", usd)</td>
+                                <td>@tx.Notes</td>
+                                <td class="text-end">
+                                    <form method="post"
+                                          asp-page-handler="DeleteTransaction"
+                                          asp-route-id="@Model.Portfolio.Id"
+                                          asp-route-transactionId="@tx.Id"
+                                          onsubmit="return confirm('Delete this transaction?')"
+                                          style="display:inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">✕</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr style="border-top:1px solid var(--xmr-border)">
+                            <td colspan="2"><small class="text-muted">Total held</small></td>
+                            <td class="text-end mono"><small>@pc.TotalAmount.ToString("N12", usd)</small></td>
+                            <td class="text-end mono"><small>Current: $@pc.Coin.PriceUsd.ToString("N8", usd)</small></td>
+                            <td class="text-end mono"><small>Basis: $@pc.TotalCostBasis.ToString("N2", usd)</small></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
 }
 
-<h5>Add Transaction</h5>
-<form method="post" asp-page-handler="AddTransaction" asp-route-id="@Model.Portfolio.Id" class="row g-3">
-    <div class="col-md-3">
-        <label class="form-label">Coin</label>
-        <select asp-for="CoinId" asp-items="Model.CoinOptions" class="form-select"></select>
+<div class="card mt-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card-header">Add Transaction</div>
+    <div class="card-body">
+        <form method="post" asp-page-handler="AddTransaction" asp-route-id="@Model.Portfolio.Id" class="row g-3">
+            @Html.AntiForgeryToken()
+            <div class="col-md-3">
+                <label class="form-label">Coin</label>
+                <select asp-for="CoinId" asp-items="Model.CoinOptions" class="form-select" id="coin-select"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Type</label>
+                <select asp-for="TransactionType" class="form-select">
+                    <option value="Buy">Buy</option>
+                    <option value="Sell">Sell</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Amount</label>
+                <input asp-for="Amount" type="number" step="0.000000000001" min="0" class="form-control" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Price at Time (USD)</label>
+                <input asp-for="PriceUsdAtTime" type="number" step="0.000000000001" min="0" class="form-control" id="price-input" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Notes</label>
+                <input asp-for="Notes" class="form-control" />
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Add</button>
+            </div>
+        </form>
     </div>
-    <div class="col-md-2">
-        <label class="form-label">Type</label>
-        <select asp-for="TransactionType" class="form-select">
-            <option value="Buy">Buy</option>
-            <option value="Sell">Sell</option>
-        </select>
-    </div>
-    <div class="col-md-2">
-        <label class="form-label">Amount</label>
-        <input asp-for="Amount" type="number" step="0.00000001" class="form-control" />
-    </div>
-    <div class="col-md-2">
-        <label class="form-label">Price at Time (USD)</label>
-        <input asp-for="PriceUsdAtTime" type="number" step="0.01" class="form-control" />
-    </div>
-    <div class="col-md-2">
-        <label class="form-label">Notes</label>
-        <input asp-for="Notes" class="form-control" />
-    </div>
-    <div class="col-md-1 d-flex align-items-end">
-        <button type="submit" class="btn btn-primary w-100">Add</button>
-    </div>
-</form>
+</div>
+
+@section Scripts {
+    <script>
+        const prices = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CoinPrices));
+        const coinSelect = document.getElementById('coin-select');
+        const priceInput = document.getElementById('price-input');
+
+        function updatePrice() {
+            const id = parseInt(coinSelect.value);
+            if (prices[id] !== undefined) {
+                priceInput.value = prices[id];
+            }
+        }
+
+        coinSelect.addEventListener('change', updatePrice);
+        updatePrice();
+    </script>
+}

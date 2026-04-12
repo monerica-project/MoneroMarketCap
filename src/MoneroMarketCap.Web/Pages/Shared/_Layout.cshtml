@@ -50,12 +50,12 @@
                         }
                         else
                         {
-                           @*  <li class="nav-item">
+                            <li class="nav-item">
                                 <a class="nav-link" asp-page="/Login">Login</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-page="/Register">Register</a>
-                            </li> *@
+                            </li>
                         }
                     </ul>
                 </div>
@@ -72,6 +72,8 @@
     <footer class="footer">
         <div class="container">
             &copy; @DateTime.UtcNow.Year - MoneroMarketCap
+            &nbsp;|&nbsp;
+            <a asp-page="/Contact" style="color:var(--xmr-text-muted);font-size:0.85rem">Contact</a>
         </div>
     </footer>
 

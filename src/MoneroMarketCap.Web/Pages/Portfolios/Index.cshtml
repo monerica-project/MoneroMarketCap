@@ -2,11 +2,21 @@
 @model MoneroMarketCap.Pages.Portfolios.IndexModel
 @{
     ViewData["Title"] = "My Portfolios";
+    var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>My Portfolios</h2>
-    <span class="fs-5">Total Net Value: <strong>@Model.TotalNetValue.ToString("C")</strong></span>
+    <span class="fs-5">
+        Total Net Value:
+        <strong>$@Model.TotalNetValue.ToString("N2", usd)</strong>
+        @if (Model.XmrPrice > 0)
+        {
+            <span style="color:var(--xmr-text-muted);font-size:0.85rem">
+                / @((Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)) XMR
+            </span>
+        }
+    </span>
 </div>
 
 @if (!Model.Portfolios.Any())
@@ -19,11 +29,18 @@ else
         @foreach (var p in Model.Portfolios)
         {
             <div class="col-md-4 mb-3">
-                <div class="card">
+                <div class="card" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
                     <div class="card-body">
                         <h5 class="card-title">@p.Name</h5>
                         <p class="card-text">
-                            Value: <strong>@p.TotalValueUsd.ToString("C")</strong><br />
+                            Value: <strong>$@p.TotalValueUsd.ToString("N2", usd)</strong>
+                            @if (Model.XmrPrice > 0)
+                            {
+                                <span style="color:var(--xmr-text-muted);font-size:0.82rem">
+                                    / @((p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)) XMR
+                                </span>
+                            }
+                            <br />
                             Coins: @p.PortfolioCoins.Count
                         </p>
                         <a asp-page="/Portfolios/Detail" asp-route-id="@p.Id" class="btn btn-primary btn-sm">View</a>

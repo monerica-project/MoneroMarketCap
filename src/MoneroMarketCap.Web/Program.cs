@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Constants;
@@ -35,6 +36,16 @@ builder.Services.AddAuthentication("CookieAuth")
         options.LoginPath = "/Login";
         options.LogoutPath = "/Logout";
     });
+
+var keysPath = builder.Environment.IsDevelopment()
+    ? Path.Combine(builder.Environment.ContentRootPath, "dataprotection-keys")
+    : "/var/www/moneromarketcap/dataprotection-keys";
+
+Directory.CreateDirectory(keysPath);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
+    .SetApplicationName("MoneroMarketCap");
 
 var app = builder.Build();
 

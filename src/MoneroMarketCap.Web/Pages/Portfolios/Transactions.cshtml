@@ -3,6 +3,7 @@
 @using MoneroMarketCap.Data.Models
 @{
     ViewData["Title"] = "Transaction History";
+    var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
 }
 
 @if (Model.PortfolioCoin == null)
@@ -39,10 +40,10 @@
                         @t.Type
                     </span>
                 </td>
-                <td>@t.Amount.ToString("N8")</td>
-                <td>@t.PriceUsdAtTime.ToString("C")</td>
-                <td>@t.TotalUsd.ToString("C")</td>
-                <td>@t.TransactedAt.ToString("g")</td>
+                <td class="mono">@t.Amount.ToString("N12", usd)</td>
+                <td class="mono">$@t.PriceUsdAtTime.ToString("N8", usd)</td>
+                <td class="mono">$@t.TotalUsd.ToString("N2", usd)</td>
+                <td>@t.TransactedAt.ToString("yyyy-MM-dd HH:mm")</td>
                 <td>@t.Notes</td>
             </tr>
         }

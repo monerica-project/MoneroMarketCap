@@ -9,4 +9,6 @@ public interface IPortfolioRepository : IRepository<Portfolio>
     Task<IReadOnlyList<Portfolio>> GetByUserIdAsync(int userId);
     Task<decimal> GetUserTotalValueUsdAsync(int userId);
     Task AddTransactionAsync(int portfolioId, int coinId, TransactionType type, decimal amount, decimal priceUsdAtTime, string? notes = null);
+    Task DeleteTransactionAsync(int transactionId);
+    Task DeletePortfolioAsync(int portfolioId);
 }
