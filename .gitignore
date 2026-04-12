@@ -93,3 +93,4 @@ rcf/
 /CI/deploy-config.ps1
 /publish
  
+/CI/backup-postgres.ps1
