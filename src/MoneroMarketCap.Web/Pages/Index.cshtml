@@ -15,7 +15,7 @@
     <div class="xmr-stat-bar mb-3">
         <div class="xmr-stat">
             <span class="stat-label">XMR Price</span>
-            <span class="stat-value" id="xmr-price">@xmr.PriceUsd.ToString("C")</span>
+            <span class="stat-value" id="xmr-price">@FormatUsd(xmr.PriceUsd)</span>
             <span id="xmr-change-24h" class="stat-change @(xmr.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                 @(xmr.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent24h).ToString("N2")% 24h
             </span>
@@ -122,7 +122,7 @@ else
                                 }
                             </div>
                         </td>
-                        <td class="text-end mono cell-price">@coin.PriceUsd.ToString("C")</td>
+                        <td class="text-end mono cell-price">@FormatUsd(coin.PriceUsd)</td>
                         <td class="text-end mono xmr-val cell-xmr-price">
                             @if (isXmr)
                             {
@@ -182,21 +182,31 @@ else
 }
 
 @functions {
+    static readonly System.Globalization.CultureInfo _usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+
+    string FormatUsd(decimal value)
+    {
+        if (value >= 1) return "$" + value.ToString("N2", _usd);
+        if (value >= 0.01m) return "$" + value.ToString("N4", _usd);
+        if (value >= 0.0001m) return "$" + value.ToString("N6", _usd);
+        return "$" + value.ToString("N8", _usd);
+    }
+
     string FormatLarge(decimal value) => value switch
     {
-        >= 1_000_000_000_000m => $"${value / 1_000_000_000_000m:N2}T",
-        >= 1_000_000_000m => $"${value / 1_000_000_000m:N2}B",
-        >= 1_000_000m => $"${value / 1_000_000m:N2}M",
-        >= 1_000m => $"${value / 1_000m:N2}K",
-        _ => $"${value:N2}"
+        >= 1_000_000_000_000m => "$" + (value / 1_000_000_000_000m).ToString("N2", _usd) + "T",
+        >= 1_000_000_000m => "$" + (value / 1_000_000_000m).ToString("N2", _usd) + "B",
+        >= 1_000_000m => "$" + (value / 1_000_000m).ToString("N2", _usd) + "M",
+        >= 1_000m => "$" + (value / 1_000m).ToString("N2", _usd) + "K",
+        _ => "$" + value.ToString("N2", _usd)
     };
 
     string FormatUnits(decimal value) => value switch
     {
-        >= 1_000_000_000m => $"{value / 1_000_000_000m:N2}B",
-        >= 1_000_000m => $"{value / 1_000_000m:N2}M",
-        >= 1_000m => $"{value / 1_000m:N2}K",
-        _ => $"{value:N0}"
+        >= 1_000_000_000m => (value / 1_000_000_000m).ToString("N2", _usd) + "B",
+        >= 1_000_000m => (value / 1_000_000m).ToString("N2", _usd) + "M",
+        >= 1_000m => (value / 1_000m).ToString("N2", _usd) + "K",
+        _ => value.ToString("N0", _usd)
     };
 }
 
@@ -264,7 +274,6 @@ else
                 xmrChangeHelper('xmr-7d', xmr.priceChangePercent7d);
                 xmrChangeHelper('xmr-30d', xmr.priceChangePercent30d);
 
-                // Update XMR stat bar
                 const priceEl = document.getElementById('xmr-price');
                 if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);
 
@@ -274,9 +283,6 @@ else
                 const rankEl = document.getElementById('xmr-rank');
                 if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
 
-                const updatedEl = document.getElementById('last-updated');
-                if (updatedEl) updatedEl.textContent = xmr.updatedAt + ' UTC';
-
                 const changeEl = document.getElementById('xmr-change');
                 if (changeEl) {
                     const up = xmr.priceChangePercent24h >= 0;
@@ -284,8 +290,8 @@ else
                     changeEl.className = 'stat-change ' + (up ? 'text-success' : 'text-danger');
                 }
 
-                // Update table rows
                 const sorted = [...coins].sort((a, b) => b.marketCapUsd - a.marketCapUsd);
+
                 sorted.forEach((coin, idx) => {
                     const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
                     if (!row) return;
@@ -299,9 +305,7 @@ else
                     if (priceCell) priceCell.textContent = formatPrice(coin.priceUsd);
 
                     const xmrPriceCell = row.querySelector('.cell-xmr-price');
-                    if (xmrPriceCell) {
-                        xmrPriceCell.textContent = isXmr ? '1 XMR' : formatXmrPrice(coin.priceUsd, xmr.priceUsd);
-                    }
+                    if (xmrPriceCell) xmrPriceCell.textContent = isXmr ? '1 XMR' : formatXmrPrice(coin.priceUsd, xmr.priceUsd);
 
                     const changeCell = row.querySelector('.cell-change');
                     if (changeCell) {
@@ -323,20 +327,17 @@ else
                     if (supplyCell) supplyCell.textContent = formatUnits(coin.circulatingSupply);
 
                     const buysCell = row.querySelector('.cell-buys');
-                    if (buysCell) {
-                        buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
-                    }
-
-                    
-                    // Reorder rows by market cap
-                    const tbody = document.querySelector('.market-table tbody');
-                    if (tbody) {
-                        sorted.forEach((coin, idx) => {
-                            const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
-                            if (row) tbody.appendChild(row);
-                        });
-                    }
+                    if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
                 });
+
+                // Reorder rows by market cap
+                const tbody = document.querySelector('.market-table tbody');
+                if (tbody) {
+                    sorted.forEach(coin => {
+                        const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
+                        if (row) tbody.appendChild(row);
+                    });
+                }
 
             } catch (e) {
                 console.error('Price refresh failed:', e);
@@ -344,13 +345,11 @@ else
         }
 
         let seconds = 60;
-        const countdown = document.getElementById('countdown');
         const countdownBar = document.getElementById('countdown-bar');
         const lastUpdatedBar = document.getElementById('last-updated-bar');
 
         setInterval(() => {
             seconds--;
-            if (countdown) countdown.textContent = seconds;
             if (countdownBar) countdownBar.textContent = seconds;
             if (seconds <= 0) {
                 seconds = 60;
@@ -358,8 +357,6 @@ else
                     const now = new Date();
                     const timeStr = now.toUTCString().split(' ')[4] + ' UTC';
                     if (lastUpdatedBar) lastUpdatedBar.textContent = timeStr;
-                    const updatedEl = document.getElementById('last-updated');
-                    if (updatedEl) updatedEl.textContent = timeStr;
                 });
             }
         }, 1000);

@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/solution items/">
+    <File Path="../.gitignore" />
+    <File Path="../CI/deploy.ps1" />
     <File Path="StyleCop.Analyzers.ruleset" />
     <File Path="stylecop.json" />
   </Folder>
