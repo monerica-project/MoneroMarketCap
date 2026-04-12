@@ -10,7 +10,24 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>();
+builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        ConnectTimeout = TimeSpan.FromSeconds(15),
+        EnableMultipleHttp2Connections = false,
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var socket = new System.Net.Sockets.Socket(
+                System.Net.Sockets.AddressFamily.InterNetwork,
+                System.Net.Sockets.SocketType.Stream,
+                System.Net.Sockets.ProtocolType.Tcp);
+            socket.NoDelay = true;
+            await socket.ConnectAsync(context.DnsEndPoint.Host, context.DnsEndPoint.Port, cancellationToken);
+            return new System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+        }
+    });
+
 builder.Services.AddScoped<ICoinRepository, CoinRepository>();
 
 builder.Services.AddHostedService<CoinSyncWorker>();

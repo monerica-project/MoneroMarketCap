@@ -12,7 +12,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("MoneroMarketCap.Data")));
 
-// Add services to the container.
 builder.Services.AddRazorPages();
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -30,7 +29,6 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>();
 builder.Services.AddHostedService<CoinPriceUpdateService>();
 
-
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>
     {
@@ -40,6 +38,17 @@ builder.Services.AddAuthentication("CookieAuth")
 
 var app = builder.Build();
 
+// ── Migrate-only mode: run before any seeding ─────────────────────────────────
+if (args.Contains("--migrate-only"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+    Console.WriteLine("Migrations complete.");
+    return;
+}
+
+// ── Seed roles and admin user ─────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -64,32 +73,20 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-
-// Configure the HTTP request pipeline.
+// ── HTTP pipeline ─────────────────────────────────────────────────────────────
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-
 app.UseRouting();
 app.UseAuthentication();
-
 app.UseAuthorization();
 
 app.MapStaticAssets();
 app.MapRazorPages()
    .WithStaticAssets();
-
-if (args.Contains("--migrate-only"))
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-    return;
-}
 
 app.Run();
