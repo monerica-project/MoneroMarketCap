@@ -89,7 +89,7 @@ rcf/
 /src/MoneroMarketCap/appsettings.Development.json
 /src/MoneroMarketCap.Web/appsettings.Development.json
 /src/MoneroMarketCap.Web/appsettings.json
-/CI/deploy.ps1
+ 
 /CI/deploy-config.ps1
 /publish
-/CI/deploy-config.ps1
+ 
