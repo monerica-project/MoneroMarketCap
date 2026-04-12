@@ -92,3 +92,4 @@ rcf/
 /CI/deploy.ps1
 /CI/deploy-config.ps1
 /publish
+/CI/deploy-config.ps1
