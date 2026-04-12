@@ -114,7 +114,7 @@ Write-Step "Writing config"
 
 $connString = "Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD"
 
-$webCfgContent = "{`n  `"ConnectionStrings`": {`n    `"DefaultConnection`": `"$connString`"`n  },`n  `"CoinGecko`": {`n    `"ApiKey`": `"$COINGECKO_API_KEY`",`n    `"RefreshIntervalMinutes`": $COINGECKO_REFRESH_MINUTES`n  },`n  `"Admin`": {`n    `"Username`": `"$ADMIN_USERNAME`",`n    `"Password`": `"$ADMIN_PASSWORD`"`n  }`n}`n"
+$webCfgContent = "{`n  `"ConnectionStrings`": {`n    `"DefaultConnection`": `"$connString`"`n  },`n  `"CoinGecko`": {`n    `"ApiKey`": `"$COINGECKO_API_KEY`",`n    `"RefreshIntervalMinutes`": $COINGECKO_REFRESH_MINUTES`n  },`n  `"Admin`": {`n    `"Username`": `"$ADMIN_USERNAME`",`n    `"Password`": `"$ADMIN_PASSWORD`"`n  },`n  `"Sponsors`": {`n    `"SourceUrl`": `"$SPONSOR_URL`",`n    `"CacheTtlMinutes`": $SPONSOR_CACHE_TTL,`n    `"RotateIntervalSeconds`": $SPONSOR_ROTATE_SECONDS`n  }`n}`n"
 
 $workerCfgContent = "{`n  `"ConnectionStrings`": {`n    `"DefaultConnection`": `"$connString`"`n  },`n  `"CoinGecko`": {`n    `"ApiKey`": `"$COINGECKO_API_KEY`",`n    `"TopCoinsOnStartup`": 100,`n    `"RefreshIntervalMinutes`": $COINGECKO_REFRESH_MINUTES`n  }`n}`n"
 
