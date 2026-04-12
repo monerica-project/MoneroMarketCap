@@ -2,11 +2,15 @@
 @model MoneroMarketCap.Pages.IndexModel
 @{
     ViewData["Title"] = "Market Cap — Valued in Monero";
+    var rotateInterval = (Model.SponsorRotateIntervalSeconds > 0 ? Model.SponsorRotateIntervalSeconds : 30) * 1000;
 }
 
-<!-- Ad space -->
-<div class="ad-banner mb-3">
-    <span class="ad-label">Advertisement</span>
+<!-- Sponsor banner -->
+<div class="sponsor-banner mb-3" id="sponsor-banner">
+    <span class="sponsor-label">Sponsored by <a href="https://monerica.com" target="_blank" rel="noopener" style="color:var(--xmr-orange);text-decoration:none">Monerica</a></span>
+    <div class="sponsor-track" id="sponsor-track">
+        <div class="sponsor-loading" id="sponsor-loading">Loading sponsors...</div>
+    </div>
 </div>
 
 @if (Model.Monero != null)
@@ -212,6 +216,72 @@ else
 
 @section Scripts {
     <script>
+        // ── Sponsor rotator ───────────────────────────────────────────────────────────
+        const ROTATE_MS = @rotateInterval;
+        const SPONSORS_PER_PAGE = 3;
+
+        const typeOrder = { 'MainSponsor': 0, 'CategorySponsor': 1, 'SubcategorySponsor': 2 };
+
+        let sponsors = [];
+        let sponsorPage = 0;
+        let sponsorTimer = null;
+
+        function sponsorTypeBadge(type) {
+            if (type === 'MainSponsor') return '<span class="sp-badge sp-main">Main</span>';
+            if (type === 'CategorySponsor') return '<span class="sp-badge sp-cat">Category</span>';
+            if (type === 'SubcategorySponsor') return '<span class="sp-badge sp-sub">Partner</span>';
+            return '';
+        }
+
+        function renderSponsors() {
+            const track = document.getElementById('sponsor-track');
+            if (!track || sponsors.length === 0) return;
+
+            const start = sponsorPage * SPONSORS_PER_PAGE;
+            const slice = sponsors.slice(start, start + SPONSORS_PER_PAGE);
+
+            track.style.opacity = '0';
+            setTimeout(() => {
+                track.innerHTML = slice.map(s => `
+                    <a class="sponsor-card" href="${s.link}" target="_blank" rel="noopener sponsored">
+                        ${sponsorTypeBadge(s.sponsorshipType)}
+                        <span class="sp-name">${s.name}</span>
+                        <span class="sp-desc">${s.description ? s.description.substring(0, 80) + (s.description.length > 80 ? '…' : '') : ''}</span>
+                    </a>
+                `).join('');
+                track.style.opacity = '1';
+            }, 200);
+
+            sponsorPage = (start + SPONSORS_PER_PAGE >= sponsors.length) ? 0 : sponsorPage + 1;
+        }
+
+        async function loadSponsors() {
+            try {
+                const res = await fetch('/api/sponsors');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // Sort: MainSponsor > CategorySponsor > SubcategorySponsor, then by expiration desc within each tier
+                sponsors = data.sort((a, b) => {
+                    const tDiff = (typeOrder[a.sponsorshipType] ?? 9) - (typeOrder[b.sponsorshipType] ?? 9);
+                    if (tDiff !== 0) return tDiff;
+                    return new Date(b.expirationDate) - new Date(a.expirationDate);
+                });
+
+                document.getElementById('sponsor-loading')?.remove();
+                renderSponsors();
+
+                if (sponsorTimer) clearInterval(sponsorTimer);
+                sponsorTimer = setInterval(renderSponsors, ROTATE_MS);
+            } catch (e) {
+                const loading = document.getElementById('sponsor-loading');
+                if (loading) loading.style.display = 'none';
+            }
+        }
+
+        loadSponsors();
+
+        // ── Price refresh ─────────────────────────────────────────────────────────────
         function formatLarge(v) {
             if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
             if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
@@ -283,19 +353,11 @@ else
                 const rankEl = document.getElementById('xmr-rank');
                 if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
 
-                const changeEl = document.getElementById('xmr-change');
-                if (changeEl) {
-                    const up = xmr.priceChangePercent24h >= 0;
-                    changeEl.textContent = (up ? '▲ ' : '▼ ') + Math.abs(xmr.priceChangePercent24h).toFixed(2) + '% 24h';
-                    changeEl.className = 'stat-change ' + (up ? 'text-success' : 'text-danger');
-                }
-
                 const sorted = [...coins].sort((a, b) => b.marketCapUsd - a.marketCapUsd);
 
                 sorted.forEach((coin, idx) => {
                     const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
                     if (!row) return;
-
                     const isXmr = coin.symbol === 'XMR';
 
                     const rankCell = row.querySelector('.cell-rank');
@@ -330,7 +392,6 @@ else
                     if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
                 });
 
-                // Reorder rows by market cap
                 const tbody = document.querySelector('.market-table tbody');
                 if (tbody) {
                     sorted.forEach(coin => {

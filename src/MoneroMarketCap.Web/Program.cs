@@ -73,6 +73,39 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// ── Sponsor proxy (/api/sponsors) ────────────────────────────────────────────
+var _sponsorCache = string.Empty;
+var _sponsorCachedAt = DateTime.MinValue;
+var _sponsorCacheTtl = TimeSpan.FromMinutes(
+    builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
+var _sponsorLock = new SemaphoreSlim(1, 1);
+
+app.MapGet("/api/sponsors", async (IHttpClientFactory httpFactory, CancellationToken ct) =>
+{
+    if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
+        return Results.Content(_sponsorCache, "application/json");
+
+    await _sponsorLock.WaitAsync(ct);
+    try
+    {
+        if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
+            return Results.Content(_sponsorCache, "application/json");
+
+        var url = app.Configuration["Sponsors:SourceUrl"];
+        var client = httpFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(10);
+        var json = await client.GetStringAsync(url, ct);
+        _sponsorCache = json;
+        _sponsorCachedAt = DateTime.UtcNow;
+        return Results.Content(json, "application/json");
+    }
+    catch
+    {
+        return Results.Content(string.IsNullOrEmpty(_sponsorCache) ? "[]" : _sponsorCache, "application/json");
+    }
+    finally { _sponsorLock.Release(); }
+});
+
 // ── HTTP pipeline ─────────────────────────────────────────────────────────────
 if (!app.Environment.IsDevelopment())
 {
