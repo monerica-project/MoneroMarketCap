@@ -20,8 +20,9 @@ public class CoinGeckoService : ICoinGeckoService
     {
         _http = http;
         _http.BaseAddress = new Uri("https://api.coingecko.com/api/v3/");
+        _http.Timeout = TimeSpan.FromSeconds(120);
         _http.DefaultRequestHeaders.Add("Accept", "application/json");
-        _http.Timeout = TimeSpan.FromSeconds(30);
+        _http.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
 
         var apiKey = config["CoinGecko:ApiKey"];
         if (!string.IsNullOrEmpty(apiKey))

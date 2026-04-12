@@ -60,7 +60,7 @@
 <div class="table-meta">
     <span>
         <span style="color:var(--xmr-text-muted)">Data updated:</span>
-        <span id="last-updated-bar">@Model.Coins.Max(c => c.UpdatedAt).ToString("HH:mm:ss") UTC</span>
+        <span id="last-updated-bar">@(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("HH:mm:ss") + " UTC" : "pending...")</span>
     </span>
     <span>
         <span style="color:var(--xmr-text-muted)">Next update in:</span>
