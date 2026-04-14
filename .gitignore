@@ -94,3 +94,4 @@ rcf/
 /publish
  
 /CI/backup-postgres.ps1
+/CI/backup-postgres-config.ps1
