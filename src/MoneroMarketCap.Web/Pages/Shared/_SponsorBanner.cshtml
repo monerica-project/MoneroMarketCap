@@ -12,7 +12,7 @@
 </div>
 
 <script>
-    (function () {
+    (function() {
         const ROTATE_MS = @rotateInterval;
         const SPONSORS_PER_PAGE = 3;
         const typeOrder = { 'MainSponsor': 0, 'CategorySponsor': 1, 'SubcategorySponsor': 2 };
@@ -28,6 +28,13 @@
             return '';
         }
 
+        function truncateWords(text, maxChars) {
+            if (!text || text.length <= maxChars) return text || '';
+            const cut = text.substring(0, maxChars);
+            const lastSpace = cut.lastIndexOf(' ');
+            return (lastSpace > 0 ? cut.substring(0, lastSpace) : cut) + '…';
+        }
+
         function renderSponsors() {
             const track = document.getElementById('sponsor-track');
             if (!track || sponsors.length === 0) return;
@@ -36,12 +43,12 @@
             track.style.opacity = '0';
             setTimeout(() => {
                 track.innerHTML = slice.map(s => `
-                    <a class="sponsor-card" href="${s.link}" target="_blank" rel="noopener sponsored">
-                        ${sponsorTypeBadge(s.sponsorshipType)}
-                        <span class="sp-name">${s.name}</span>
-                        <span class="sp-desc">${s.description ? s.description.substring(0, 80) + (s.description.length > 80 ? '…' : '') : ''}</span>
-                    </a>
-                `).join('');
+                        <a class="sponsor-card" href="${s.link}" target="_blank" rel="noopener sponsored">
+                            ${sponsorTypeBadge(s.sponsorshipType)}
+                            <span class="sp-name">${s.name}</span>
+                            <span class="sp-desc">${truncateWords(s.description, 120)}</span>
+                        </a>
+                    `).join('');
                 track.style.opacity = '1';
             }, 200);
             sponsorPage = (start + SPONSORS_PER_PAGE >= sponsors.length) ? 0 : sponsorPage + 1;
