@@ -74,6 +74,22 @@
         </span>
     </div>
     <div class="xmr-stat">
+        <span class="stat-label">1yr</span>
+        <span class="stat-value @(Model.PriceChange1yr.HasValue ? (Model.PriceChange1yr >= 0 ? "text-success" : "text-danger") : "")">
+            @if (Model.PriceChange1yr.HasValue)
+            {
+                var c = Model.PriceChange1yr.Value;
+                @(c >= 0 ? "▲" : "▼")
+                @Math.Abs(c).ToString("N2", usd)
+                @:%
+            }
+            else
+            {
+                <span style="color:var(--xmr-text-muted)">—</span>
+            }
+        </span>
+    </div>
+    <div class="xmr-stat">
         <span class="stat-label">Market Cap</span>
         <span class="stat-value">
             @if (coin.MarketCapUsd >= 1_000_000_000_000m)
