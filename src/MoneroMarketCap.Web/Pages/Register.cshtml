@@ -15,6 +15,13 @@
 else
 {
     <form method="post">
+        @Html.AntiForgeryToken()
+        <p>@Model.CaptchaQuestion</p>
+        <input type="number" name="CaptchaAnswer" required />
+        @if (!string.IsNullOrEmpty(Model.CaptchaError))
+        {
+            <p style="color:red;">@Model.CaptchaError</p>
+        }
         <button type="submit">Generate My Account</button>
     </form>
 }

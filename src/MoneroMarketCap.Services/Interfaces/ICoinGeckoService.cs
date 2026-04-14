@@ -8,4 +8,6 @@ public interface ICoinGeckoService
     Task<CoinGeckoMarketData?> GetMarketDataAsync(string coinGeckoId);
     Task<Dictionary<string, CoinGeckoMarketData>> GetMarketDataBatchAsync(IEnumerable<string> coinGeckoIds);
     Task<List<CoinGeckoMarketData>> GetTopCoinsAsync(int count = 500);
+
+    Task<string?> GetMarketChartAsync(string coinGeckoId, int days = 365);
 }

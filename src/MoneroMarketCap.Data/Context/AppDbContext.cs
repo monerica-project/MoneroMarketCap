@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<Portfolio> Portfolios { get; set; }
     public DbSet<PortfolioCoin> PortfolioCoins { get; set; }
     public DbSet<CoinTransaction> CoinTransactions { get; set; }
+    public DbSet<CoinPriceHistory> CoinPriceHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

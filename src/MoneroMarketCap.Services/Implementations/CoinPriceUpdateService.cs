@@ -1,9 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MoneroMarketCap.Data;
+using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Services.Interfaces;
 
 namespace MoneroMarketCap.Services.Implementations;
@@ -45,18 +46,16 @@ public class CoinPriceUpdateService : BackgroundService
             .ToListAsync();
 
         if (!coins.Any())
-        {
             return;
-        }
 
         var data = await geckoService.GetMarketDataBatchAsync(coins.Select(c => c.CoinGeckoId));
+
+        var today = DateTime.UtcNow.Date;
 
         foreach (var coin in coins)
         {
             if (!data.TryGetValue(coin.CoinGeckoId, out var m))
-            {
                 continue;
-            }
 
             coin.PriceUsd = m.CurrentPrice ?? 0;
             coin.MarketCapUsd = m.MarketCap ?? 0;
@@ -72,9 +71,28 @@ public class CoinPriceUpdateService : BackgroundService
             coin.PriceChangePercent30d = m.PriceChangePercentage30d ?? coin.PriceChangePercent30d;
             coin.UpdatedAt = DateTime.UtcNow;
 
+            // Record one daily history entry per coin per day
+            var alreadyRecorded = await db.CoinPriceHistories
+                .AnyAsync(h => h.CoinId == coin.Id
+                            && h.Interval == "1d"
+                            && h.RecordedAt.Date == today);
+
+            if (!alreadyRecorded)
+            {
+                db.CoinPriceHistories.Add(new CoinPriceHistory
+                {
+                    CoinId = coin.Id,
+                    PriceUsd = coin.PriceUsd,
+                    MarketCapUsd = coin.MarketCapUsd,
+                    CirculatingSupply = coin.CirculatingSupply,
+                    Interval = "1d",
+                    RecordedAt = today
+                });
+            }
         }
 
         await db.SaveChangesAsync();
+
         this.logger.LogInformation(
             "Updated prices for {Count} coins at {Time} (interval: {Interval}min)",
             coins.Count, DateTime.UtcNow, this.interval.TotalMinutes);

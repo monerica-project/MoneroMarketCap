@@ -1,17 +1,11 @@
-﻿@page
+@page
 @model MoneroMarketCap.Pages.IndexModel
 @{
     ViewData["Title"] = "Market Cap — Valued in Monero";
-    var rotateInterval = (Model.SponsorRotateIntervalSeconds > 0 ? Model.SponsorRotateIntervalSeconds : 30) * 1000;
+    ViewBag.SponsorRotateIntervalSeconds = Model.SponsorRotateIntervalSeconds;
 }
 
-<!-- Sponsor banner -->
-<div class="sponsor-banner mb-3" id="sponsor-banner">
-    <span class="sponsor-label">Sponsored by <a href="https://monerica.com" target="_blank" rel="noopener" style="color:var(--xmr-orange);text-decoration:none">Monerica</a></span>
-    <div class="sponsor-track" id="sponsor-track">
-        <div class="sponsor-loading" id="sponsor-loading">Loading sponsors...</div>
-    </div>
-</div>
+<partial name="_SponsorBanner" />
 
 @if (Model.Monero != null)
 {
@@ -100,17 +94,15 @@ else
                 </tr>
             </thead>
             <tbody>
-                @{
-                    int rank = 1;
-                }
+                @{ int rank = 1; }
                 @foreach (var coin in Model.Coins.OrderByDescending(c => c.MarketCapUsd))
                 {
                     var priceInXmr = Model.Monero != null && Model.Monero.PriceUsd > 0
-                                        ? coin.PriceUsd / Model.Monero.PriceUsd : 0;
+                        ? coin.PriceUsd / Model.Monero.PriceUsd : 0;
                     var mcapRatio = Model.Monero != null && Model.Monero.MarketCapUsd > 0
-                                        ? coin.MarketCapUsd / Model.Monero.MarketCapUsd : 0;
+                        ? coin.MarketCapUsd / Model.Monero.MarketCapUsd : 0;
                     var coinsPerXmr = coin.PriceUsd > 0 && Model.Monero != null
-                                        ? Model.Monero.PriceUsd / coin.PriceUsd : 0;
+                        ? Model.Monero.PriceUsd / coin.PriceUsd : 0;
                     bool isXmr = coin.Symbol.ToUpper() == "XMR";
 
                     <tr class="@(isXmr ? "xmr-row" : "")" data-symbol="@coin.Symbol">
@@ -119,11 +111,12 @@ else
                             <div class="coin-name-cell">
                                 @if (!string.IsNullOrEmpty(coin.ImageUrl))
                                 {
-                                    <img src="@coin.ImageUrl" width="20" height="20"
-                                         style="border-radius:50%;flex-shrink:0" />
+                                    <a href="/coins/@coin.Symbol">
+                                        <img src="@coin.ImageUrl" width="20" height="20" style="border-radius:50%;flex-shrink:0" />
+                                    </a>
                                 }
-                                <span class="coin-symbol">@coin.Symbol</span>
-                                <span class="coin-name d-none d-lg-inline">@coin.Name</span>
+                                <a href="/coins/@coin.Symbol" class="coin-symbol" style="color:inherit;text-decoration:none">@coin.Symbol</a>
+                                <a href="/coins/@coin.Symbol" class="coin-name d-none d-lg-inline" style="color:var(--xmr-text-muted);text-decoration:none">@coin.Name</a>
                                 @if (isXmr)
                                 {
                                     <span class="xmr-badge">base</span>
@@ -133,19 +126,11 @@ else
                         <td class="text-end mono cell-price">@FormatUsd(coin.PriceUsd)</td>
                         <td class="text-end mono xmr-val cell-xmr-price">
                             @if (isXmr)
-                            {
-                                <span>1 XMR</span>
-                            }
+                            { <span>1 XMR</span> }
                             else if (priceInXmr >= 1)
-                            {
-
-                                @($"{priceInXmr:N4} XMR")
-                            }
+                            { @($"{priceInXmr:N4} XMR") }
                             else
-                            {
-
-                                @($"{priceInXmr:N8} XMR")
-                            }
+                            { @($"{priceInXmr:N8} XMR") }
                         </td>
                         <td class="text-end mono cell-change @(coin.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                             @(coin.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent24h).ToString("N2")%
@@ -153,19 +138,11 @@ else
                         <td class="text-end mono cell-mcap">@FormatLarge(coin.MarketCapUsd)</td>
                         <td class="text-end cell-ratio" style="white-space:nowrap">
                             @if (isXmr)
-                            {
-                                <span class="ratio-base">base</span>
-                            }
+                            { <span class="ratio-base">base</span> }
                             else if (mcapRatio >= 1)
-                            {
-
-                                <span class="ratio-larger">@mcapRatio.ToString("N1")×</span>
-                            }
+                            { <span class="ratio-larger">@mcapRatio.ToString("N1")×</span> }
                             else
-                            {
-
-                                <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1"))%</span>
-                            }
+                            { <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1"))%</span> }
                         </td>
                         <td class="text-end mono cell-supply">@FormatUnits(coin.CirculatingSupply)</td>
                         <td class="text-end mono xmr-val cell-buys" style="white-space:nowrap">
@@ -176,10 +153,7 @@ else
                                     : $"{coinsPerXmr:N8} {coin.Symbol}")
                             }
                             else
-                            {
-
-                                <span class="text-muted">—</span>
-                            }
+                            { <span class="text-muted">—</span> }
                         </td>
                     </tr>
                     rank++;
@@ -220,72 +194,6 @@ else
 
 @section Scripts {
     <script>
-        // ── Sponsor rotator ───────────────────────────────────────────────────────────
-        const ROTATE_MS = @rotateInterval;
-        const SPONSORS_PER_PAGE = 3;
-
-        const typeOrder = { 'MainSponsor': 0, 'CategorySponsor': 1, 'SubcategorySponsor': 2 };
-
-        let sponsors = [];
-        let sponsorPage = 0;
-        let sponsorTimer = null;
-
-        function sponsorTypeBadge(type) {
-            if (type === 'MainSponsor') return '<span class="sp-badge sp-main">Main</span>';
-            if (type === 'CategorySponsor') return '<span class="sp-badge sp-cat">Category</span>';
-            if (type === 'SubcategorySponsor') return '<span class="sp-badge sp-sub">Subcategory</span>';
-            return '';
-        }
-
-        function renderSponsors() {
-            const track = document.getElementById('sponsor-track');
-            if (!track || sponsors.length === 0) return;
-
-            const start = sponsorPage * SPONSORS_PER_PAGE;
-            const slice = sponsors.slice(start, start + SPONSORS_PER_PAGE);
-
-            track.style.opacity = '0';
-            setTimeout(() => {
-                track.innerHTML = slice.map(s => `
-                    <a class="sponsor-card" href="${s.link}" target="_blank" rel="noopener sponsored">
-                        ${sponsorTypeBadge(s.sponsorshipType)}
-                        <span class="sp-name">${s.name}</span>
-                        <span class="sp-desc">${s.description ? s.description.substring(0, 80) + (s.description.length > 80 ? '…' : '') : ''}</span>
-                    </a>
-                `).join('');
-                track.style.opacity = '1';
-            }, 200);
-
-            sponsorPage = (start + SPONSORS_PER_PAGE >= sponsors.length) ? 0 : sponsorPage + 1;
-        }
-
-        async function loadSponsors() {
-            try {
-                const res = await fetch('/api/sponsors');
-                if (!res.ok) return;
-                const data = await res.json();
-
-                // Sort: MainSponsor > CategorySponsor > SubcategorySponsor, then by expiration desc within each tier
-                sponsors = data.sort((a, b) => {
-                    const tDiff = (typeOrder[a.sponsorshipType] ?? 9) - (typeOrder[b.sponsorshipType] ?? 9);
-                    if (tDiff !== 0) return tDiff;
-                    return new Date(b.expirationDate) - new Date(a.expirationDate);
-                });
-
-                document.getElementById('sponsor-loading')?.remove();
-                renderSponsors();
-
-                if (sponsorTimer) clearInterval(sponsorTimer);
-                sponsorTimer = setInterval(renderSponsors, ROTATE_MS);
-            } catch (e) {
-                const loading = document.getElementById('sponsor-loading');
-                if (loading) loading.style.display = 'none';
-            }
-        }
-
-        loadSponsors();
-
-        // ── Price refresh ─────────────────────────────────────────────────────────────
         function formatLarge(v) {
             if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
             if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
@@ -293,33 +201,28 @@ else
             if (v >= 1e3) return '$' + (v / 1e3).toFixed(2) + 'K';
             return '$' + v.toFixed(2);
         }
-
         function formatUnits(v) {
             if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
             if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
             if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
             return Math.round(v).toLocaleString();
         }
-
         function formatPrice(v) {
             if (v >= 1) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             if (v >= 0.01) return '$' + v.toFixed(4);
             if (v >= 0.0001) return '$' + v.toFixed(6);
             return '$' + v.toFixed(8);
         }
-
         function formatXmrPrice(price, xmrPrice) {
             if (!xmrPrice) return '—';
             const r = price / xmrPrice;
             return r >= 1 ? r.toFixed(4) + ' XMR' : r.toFixed(8) + ' XMR';
         }
-
         function formatCoinsPerXmr(price, xmrPrice, symbol) {
             if (!price) return '—';
             const r = xmrPrice / price;
             return r >= 1 ? r.toFixed(2) + ' ' + symbol : r.toFixed(8) + ' ' + symbol;
         }
-
         function formatRatio(mcap, xmrMcap) {
             const r = mcap / xmrMcap;
             if (r >= 1) return { text: r.toFixed(1) + '×', cls: 'ratio-larger' };
@@ -331,7 +234,6 @@ else
                 const res = await fetch('/api/Prices');
                 if (!res.ok) return;
                 const coins = await res.json();
-
                 const xmr = coins.find(c => c.symbol === 'XMR');
                 if (!xmr) return;
 
@@ -342,7 +244,6 @@ else
                     el.textContent = (up ? '▲ ' : '▼ ') + Math.abs(val).toFixed(2) + '%';
                     el.className = up ? 'text-success' : 'text-danger';
                 };
-
                 xmrChangeHelper('xmr-1h', xmr.priceChangePercent1h);
                 xmrChangeHelper('xmr-24h', xmr.priceChangePercent24h);
                 xmrChangeHelper('xmr-7d', xmr.priceChangePercent7d);
@@ -350,48 +251,37 @@ else
 
                 const priceEl = document.getElementById('xmr-price');
                 if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);
-
                 const mcapEl = document.getElementById('xmr-mcap');
                 if (mcapEl) mcapEl.textContent = formatLarge(xmr.marketCapUsd);
-
                 const rankEl = document.getElementById('xmr-rank');
                 if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
 
                 const sorted = [...coins].sort((a, b) => b.marketCapUsd - a.marketCapUsd);
-
                 sorted.forEach((coin, idx) => {
                     const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
                     if (!row) return;
                     const isXmr = coin.symbol === 'XMR';
-
                     const rankCell = row.querySelector('.cell-rank');
                     if (rankCell) rankCell.textContent = idx + 1;
-
                     const priceCell = row.querySelector('.cell-price');
                     if (priceCell) priceCell.textContent = formatPrice(coin.priceUsd);
-
                     const xmrPriceCell = row.querySelector('.cell-xmr-price');
                     if (xmrPriceCell) xmrPriceCell.textContent = isXmr ? '1 XMR' : formatXmrPrice(coin.priceUsd, xmr.priceUsd);
-
                     const changeCell = row.querySelector('.cell-change');
                     if (changeCell) {
                         const up = coin.priceChangePercent24h >= 0;
                         changeCell.textContent = (up ? '▲ ' : '▼ ') + Math.abs(coin.priceChangePercent24h).toFixed(2) + '%';
                         changeCell.className = 'text-end mono cell-change ' + (up ? 'text-success' : 'text-danger');
                     }
-
                     const mcapCell = row.querySelector('.cell-mcap');
                     if (mcapCell) mcapCell.textContent = formatLarge(coin.marketCapUsd);
-
                     const ratioCell = row.querySelector('.cell-ratio');
                     if (ratioCell && !isXmr) {
                         const r = formatRatio(coin.marketCapUsd, xmr.marketCapUsd);
                         ratioCell.innerHTML = '<span class="' + r.cls + '">' + r.text + '</span>';
                     }
-
                     const supplyCell = row.querySelector('.cell-supply');
                     if (supplyCell) supplyCell.textContent = formatUnits(coin.circulatingSupply);
-
                     const buysCell = row.querySelector('.cell-buys');
                     if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
                 });
@@ -403,7 +293,6 @@ else
                         if (row) tbody.appendChild(row);
                     });
                 }
-
             } catch (e) {
                 console.error('Price refresh failed:', e);
             }
@@ -412,7 +301,6 @@ else
         let seconds = 60;
         const countdownBar = document.getElementById('countdown-bar');
         const lastUpdatedBar = document.getElementById('last-updated-bar');
-
         setInterval(() => {
             seconds--;
             if (countdownBar) countdownBar.textContent = seconds;

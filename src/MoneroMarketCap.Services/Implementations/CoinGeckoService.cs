@@ -31,6 +31,32 @@ public class CoinGeckoService : ICoinGeckoService
         _logger = logger;
     }
 
+    public async Task<string?> GetMarketChartAsync(string coinGeckoId, int days = 365)
+    {
+        try
+        {
+            var url = $"coins/{coinGeckoId}/market_chart?vs_currency=usd&days={days}&interval=daily";
+            _logger.LogInformation("Fetching chart: {Url}", _http.BaseAddress + url);
+
+            var res = await _http.GetAsync(url);
+
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync();
+                _logger.LogError("Chart fetch failed {Status}: {Body}", (int)res.StatusCode, body);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+            return doc.RootElement.GetProperty("prices").GetRawText();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GetMarketChartAsync exception for {Id}", coinGeckoId);
+            return null;
+        }
+    }
+
     public async Task<List<CoinGeckoSearchResult>> SearchCoinsAsync(string query)
     {
         try
@@ -112,7 +138,6 @@ public class CoinGeckoService : ICoinGeckoService
                 if (batch == null || !batch.Any()) break;
                 results.AddRange(batch);
 
-                // Respect free tier rate limit — 30 calls/min
                 if (page < pages)
                     await Task.Delay(TimeSpan.FromSeconds(3));
             }
