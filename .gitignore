@@ -95,3 +95,5 @@ rcf/
  
 /CI/backup-postgres.ps1
 /CI/backup-postgres-config.ps1
+/CI/backup-config.ps1
+/CI/_backup-postgres-config.ps1
