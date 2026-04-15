@@ -228,6 +228,19 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (path != null && path != path.ToLowerInvariant())
+    {
+        var lower = path.ToLowerInvariant();
+        var query = context.Request.QueryString;
+        context.Response.Redirect(lower + query, permanent: true);
+        return;
+    }
+    await next();
+});
+
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAuthentication();
