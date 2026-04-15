@@ -15,10 +15,10 @@ public class DetailModel : PageModel
     public Coin? Coin { get; set; }
     public Coin? Monero { get; set; }
 
-    // % change in USD price over the past year
     public decimal? PriceChange1yr { get; set; }
 
-    // % change of coin/XMR ratio over the past year
+    public decimal? VsXmrChange7d { get; set; }
+    public decimal? VsXmrChange30d { get; set; }
     public decimal? VsXmrChange1yr { get; set; }
 
     public DetailModel(ICoinRepository coins, AppDbContext db)
@@ -35,34 +35,72 @@ public class DetailModel : PageModel
 
         if (Coin == null) return NotFound();
 
-        var oneYearAgo = DateTime.UtcNow.Date.AddDays(-365);
+        var oneYearAgo  = DateTime.UtcNow.Date.AddDays(-365);
+        var thirtyDaysAgo = DateTime.UtcNow.Date.AddDays(-30);
+        var sevenDaysAgo  = DateTime.UtcNow.Date.AddDays(-7);
 
         // 1yr USD price change
-        var coinHistory = await _db.CoinPriceHistories
+        var coinHistory1yr = await _db.CoinPriceHistories
             .Where(h => h.CoinId == Coin.Id && h.Interval == "1d" && h.RecordedAt >= oneYearAgo)
             .OrderBy(h => h.RecordedAt)
             .FirstOrDefaultAsync();
 
-        if (coinHistory != null && coinHistory.PriceUsd > 0 && Coin.PriceUsd > 0)
-        {
-            PriceChange1yr = ((Coin.PriceUsd - coinHistory.PriceUsd) / coinHistory.PriceUsd) * 100;
-        }
+        if (coinHistory1yr != null && coinHistory1yr.PriceUsd > 0 && Coin.PriceUsd > 0)
+            PriceChange1yr = ((Coin.PriceUsd - coinHistory1yr.PriceUsd) / coinHistory1yr.PriceUsd) * 100;
 
-        // vs XMR 1yr ratio change
+        // vs XMR comparisons
         if (Monero != null && Coin.Symbol.ToUpper() != "XMR")
         {
-            var xmrHistory = await _db.CoinPriceHistories
+            var xmrHistory1yr = await _db.CoinPriceHistories
                 .Where(h => h.Coin.Symbol == "XMR" && h.Interval == "1d" && h.RecordedAt >= oneYearAgo)
                 .OrderBy(h => h.RecordedAt)
                 .FirstOrDefaultAsync();
 
-            if (coinHistory != null && xmrHistory != null
-                && coinHistory.PriceUsd > 0 && xmrHistory.PriceUsd > 0
+            var xmrHistory30d = await _db.CoinPriceHistories
+                .Where(h => h.Coin.Symbol == "XMR" && h.Interval == "1d" && h.RecordedAt >= thirtyDaysAgo)
+                .OrderBy(h => h.RecordedAt)
+                .FirstOrDefaultAsync();
+
+            var xmrHistory7d = await _db.CoinPriceHistories
+                .Where(h => h.Coin.Symbol == "XMR" && h.Interval == "1d" && h.RecordedAt >= sevenDaysAgo)
+                .OrderBy(h => h.RecordedAt)
+                .FirstOrDefaultAsync();
+
+            var coinHistory30d = await _db.CoinPriceHistories
+                .Where(h => h.CoinId == Coin.Id && h.Interval == "1d" && h.RecordedAt >= thirtyDaysAgo)
+                .OrderBy(h => h.RecordedAt)
+                .FirstOrDefaultAsync();
+
+            var coinHistory7d = await _db.CoinPriceHistories
+                .Where(h => h.CoinId == Coin.Id && h.Interval == "1d" && h.RecordedAt >= sevenDaysAgo)
+                .OrderBy(h => h.RecordedAt)
+                .FirstOrDefaultAsync();
+
+            if (coinHistory1yr != null && xmrHistory1yr != null
+                && coinHistory1yr.PriceUsd > 0 && xmrHistory1yr.PriceUsd > 0
                 && Monero.PriceUsd > 0 && Coin.PriceUsd > 0)
             {
-                var ratioThen = coinHistory.PriceUsd / xmrHistory.PriceUsd;
-                var ratioNow = Coin.PriceUsd / Monero.PriceUsd;
+                var ratioThen = coinHistory1yr.PriceUsd / xmrHistory1yr.PriceUsd;
+                var ratioNow  = Coin.PriceUsd / Monero.PriceUsd;
                 VsXmrChange1yr = ((ratioNow - ratioThen) / ratioThen) * 100;
+            }
+
+            if (coinHistory30d != null && xmrHistory30d != null
+                && coinHistory30d.PriceUsd > 0 && xmrHistory30d.PriceUsd > 0
+                && Monero.PriceUsd > 0 && Coin.PriceUsd > 0)
+            {
+                var ratioThen = coinHistory30d.PriceUsd / xmrHistory30d.PriceUsd;
+                var ratioNow  = Coin.PriceUsd / Monero.PriceUsd;
+                VsXmrChange30d = ((ratioNow - ratioThen) / ratioThen) * 100;
+            }
+
+            if (coinHistory7d != null && xmrHistory7d != null
+                && coinHistory7d.PriceUsd > 0 && xmrHistory7d.PriceUsd > 0
+                && Monero.PriceUsd > 0 && Coin.PriceUsd > 0)
+            {
+                var ratioThen = coinHistory7d.PriceUsd / xmrHistory7d.PriceUsd;
+                var ratioNow  = Coin.PriceUsd / Monero.PriceUsd;
+                VsXmrChange7d = ((ratioNow - ratioThen) / ratioThen) * 100;
             }
         }
 
