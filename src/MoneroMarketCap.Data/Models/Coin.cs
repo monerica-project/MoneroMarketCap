@@ -38,6 +38,7 @@ public class Coin : AuditableEntity
     public decimal PriceChangePercent1h { get; set; }
     public decimal PriceChangePercent7d { get; set; }
     public decimal PriceChangePercent30d { get; set; }
+    public decimal PriceChangePercent1y { get; set; }
 
     public ICollection<CoinPriceHistory> PriceHistory { get; set; } = new List<CoinPriceHistory>();
 }

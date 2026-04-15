@@ -69,6 +69,7 @@ public class CoinPriceUpdateService : BackgroundService
             coin.PriceChangePercent1h = m.PriceChangePercentage1h ?? coin.PriceChangePercent1h;
             coin.PriceChangePercent7d = m.PriceChangePercentage7d ?? coin.PriceChangePercent7d;
             coin.PriceChangePercent30d = m.PriceChangePercentage30d ?? coin.PriceChangePercent30d;
+            coin.PriceChangePercent1y = m.PriceChangePercentage1y ?? coin.PriceChangePercent1y;
             coin.UpdatedAt = DateTime.UtcNow;
 
             // Record one daily history entry per coin per day

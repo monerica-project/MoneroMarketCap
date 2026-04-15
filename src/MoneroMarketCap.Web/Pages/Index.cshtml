@@ -10,22 +10,22 @@
 @if (Model.Monero != null)
 {
     var xmr = Model.Monero;
-    <div class="xmr-stat-bar mb-3">
-        <div class="xmr-stat">
+    <div class="xmr-stat-bar mb-4" style="display:flex;gap:1.5rem;flex-wrap:wrap">
+        <div class="xmr-stat" style="flex:1;min-width:160px;padding:1rem 1.25rem">
             <span class="stat-label">XMR Price</span>
             <span class="stat-value" id="xmr-price">@FormatUsd(xmr.PriceUsd)</span>
             <span id="xmr-change-24h" class="stat-change @(xmr.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                 @(xmr.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent24h).ToString("N2")% 24h
             </span>
         </div>
-        <div class="xmr-stat">
+        <div class="xmr-stat" style="flex:1;min-width:160px;padding:1rem 1.25rem">
             <span class="stat-label">Market Cap</span>
             <span class="stat-value" id="xmr-mcap">@FormatLarge(xmr.MarketCapUsd)</span>
             <span id="xmr-rank" class="stat-change" style="color:var(--xmr-text-muted)">Rank #@xmr.MarketCapRank</span>
         </div>
-        <div class="xmr-stat">
+        <div class="xmr-stat" style="flex:2;min-width:320px;padding:1rem 1.25rem">
             <span class="stat-label">Price Change</span>
-            <div class="price-changes">
+            <div class="price-changes" style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:0.35rem">
                 <span class="change-row">
                     <span class="change-label">1h</span>
                     <span id="xmr-1h" class="@(xmr.PriceChangePercent1h >= 0 ? "text-success" : "text-danger")">
@@ -48,6 +48,12 @@
                     <span class="change-label">30d</span>
                     <span id="xmr-30d" class="@(xmr.PriceChangePercent30d >= 0 ? "text-success" : "text-danger")">
                         @(xmr.PriceChangePercent30d >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent30d).ToString("N2")%
+                    </span>
+                </span>
+                <span class="change-row">
+                    <span class="change-label">1y</span>
+                    <span id="xmr-1y" class="@(xmr.PriceChangePercent1y >= 0 ? "text-success" : "text-danger")">
+                        @(xmr.PriceChangePercent1y >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent1y).ToString("N2")%
                     </span>
                 </span>
             </div>
@@ -94,7 +100,9 @@ else
                 </tr>
             </thead>
             <tbody>
-                @{ int rank = 1; }
+                @{
+                    int rank = 1;
+                }
                 @foreach (var coin in Model.Coins.OrderByDescending(c => c.MarketCapUsd))
                 {
                     var priceInXmr = Model.Monero != null && Model.Monero.PriceUsd > 0
@@ -126,11 +134,19 @@ else
                         <td class="text-end mono cell-price">@FormatUsd(coin.PriceUsd)</td>
                         <td class="text-end mono xmr-val cell-xmr-price">
                             @if (isXmr)
-                            { <span>1 XMR</span> }
+                            {
+                                <span>1 XMR</span>
+                            }
                             else if (priceInXmr >= 1)
-                            { @($"{priceInXmr:N4} XMR") }
+                            {
+
+                                @($"{priceInXmr:N4} XMR")
+                            }
                             else
-                            { @($"{priceInXmr:N8} XMR") }
+                            {
+
+                                @($"{priceInXmr:N8} XMR")
+                            }
                         </td>
                         <td class="text-end mono cell-change @(coin.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                             @(coin.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent24h).ToString("N2")%
@@ -138,11 +154,19 @@ else
                         <td class="text-end mono cell-mcap">@FormatLarge(coin.MarketCapUsd)</td>
                         <td class="text-end cell-ratio" style="white-space:nowrap">
                             @if (isXmr)
-                            { <span class="ratio-base">base</span> }
+                            {
+                                <span class="ratio-base">base</span>
+                            }
                             else if (mcapRatio >= 1)
-                            { <span class="ratio-larger">@mcapRatio.ToString("N1")×</span> }
+                            {
+
+                                <span class="ratio-larger">@mcapRatio.ToString("N1")×</span>
+                            }
                             else
-                            { <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1"))%</span> }
+                            {
+
+                                <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1"))%</span>
+                            }
                         </td>
                         <td class="text-end mono cell-supply">@FormatUnits(coin.CirculatingSupply)</td>
                         <td class="text-end mono xmr-val cell-buys" style="white-space:nowrap">
@@ -153,7 +177,10 @@ else
                                     : $"{coinsPerXmr:N8} {coin.Symbol}")
                             }
                             else
-                            { <span class="text-muted">—</span> }
+                            {
+
+                                <span class="text-muted">—</span>
+                            }
                         </td>
                     </tr>
                     rank++;
@@ -248,6 +275,7 @@ else
                 xmrChangeHelper('xmr-24h', xmr.priceChangePercent24h);
                 xmrChangeHelper('xmr-7d', xmr.priceChangePercent7d);
                 xmrChangeHelper('xmr-30d', xmr.priceChangePercent30d);
+                xmrChangeHelper('xmr-1y', xmr.priceChangePercent1y);
 
                 const priceEl = document.getElementById('xmr-price');
                 if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);

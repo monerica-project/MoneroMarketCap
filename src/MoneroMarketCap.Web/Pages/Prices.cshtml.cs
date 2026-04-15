@@ -27,6 +27,7 @@ public class PricesModel : PageModel
             c.PriceChangePercent1h,
             c.PriceChangePercent7d,
             c.PriceChangePercent30d,
+            c.PriceChangePercent1y,
             c.High24h,
             c.Low24h,
             c.Ath,

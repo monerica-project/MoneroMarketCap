@@ -87,4 +87,7 @@ public class CoinGeckoMarketData
 
     [JsonPropertyName("price_change_percentage_30d_in_currency")]
     public decimal? PriceChangePercentage30d { get; set; }
+
+    [JsonPropertyName("price_change_percentage_1y_in_currency")]
+    public decimal? PriceChangePercentage1y { get; set; }
 }

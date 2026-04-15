@@ -155,7 +155,7 @@ public class CoinGeckoService : ICoinGeckoService
     {
         var url = $"coins/markets?vs_currency=usd&order=market_cap_desc" +
                   $"&per_page={perPage}&page={page}" +
-                  $"&price_change_percentage=1h,24h,7d,30d&sparkline=false&precision=8";
+                  $"&price_change_percentage=1h,24h,7d,30d,1y&sparkline=false&precision=8";
 
         if (!string.IsNullOrEmpty(ids))
             url += $"&ids={ids}";
