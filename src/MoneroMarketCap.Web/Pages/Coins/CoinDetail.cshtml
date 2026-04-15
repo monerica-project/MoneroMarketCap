@@ -123,7 +123,15 @@
 <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>Price (USD) — Last 365 Days</span>
-        <span id="chart-status" style="font-size:0.78rem;color:var(--xmr-text-muted)">Loading...</span>
+        <div class="d-flex align-items-center gap-2">
+            <button id="toggle-btn"
+                    onclick="toggleMode()"
+                    class="btn btn-outline-secondary btn-sm"
+                    style="display:none;font-size:0.75rem">
+                Show vs XMR
+            </button>
+            <span id="chart-status" style="font-size:0.78rem;color:var(--xmr-text-muted)">Loading...</span>
+        </div>
     </div>
     <div class="card-body" style="position:relative;height:320px">
         <canvas id="price-chart"></canvas>
@@ -296,90 +304,181 @@
         </div>
     </div>
 }
-
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script>
         const coinGeckoId = '@coin.CoinGeckoId';
-        const coinSymbol = '@coin.Symbol';
+        const coinSymbol  = '@coin.Symbol';
+        const isXmr       = coinSymbol === 'XMR';
+
+        let chartInstance = null;
+        let rawCoin = null;
+        let rawXmr  = null;
+        let mode    = 'price'; // 'price' | 'vs'
+
+        function formatPrice(v) {
+            if (v >= 1000) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (v >= 1)    return '$' + v.toFixed(2);
+            if (v >= 0.01) return '$' + v.toFixed(4);
+            return '$' + v.toFixed(8);
+        }
+
+        function normalize(series) {
+            if (!series.length) return [];
+            const base = series[0][1];
+            if (!base) return series.map(p => [p[0], 0]);
+            return series.map(p => [p[0], ((p[1] / base) - 1) * 100]);
+        }
+
+        function alignSeries(a, b) {
+            // align b to a's timestamps by nearest date
+            const bMap = new Map(b.map(p => [new Date(p[0]).toDateString(), p[1]]));
+            return a.map(p => {
+                const key = new Date(p[0]).toDateString();
+                return [p[0], bMap.get(key) ?? null];
+            });
+        }
+
+        function buildChart(coinData, xmrData) {
+            const ctx = document.getElementById('price-chart').getContext('2d');
+            if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+            const labels = coinData.map(p => {
+                const d = new Date(p[0]);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+
+            let datasets;
+
+            if (mode === 'price' || isXmr) {
+                datasets = [{
+                    label: coinSymbol + ' Price (USD)',
+                    data: coinData.map(p => p[1]),
+                    borderColor: '#FF6600',
+                    backgroundColor: 'rgba(255,102,0,0.08)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    tension: 0.2,
+                    fill: true,
+                    yAxisID: 'y'
+                }];
+            } else {
+                const normCoin = normalize(coinData);
+                const xmrAligned = alignSeries(coinData, xmrData);
+                const normXmr  = normalize(xmrAligned.filter(p => p[1] !== null).length
+                    ? xmrAligned : coinData.map(p => [p[0], 0]));
+
+                datasets = [
+                    {
+                        label: coinSymbol + ' % change',
+                        data: normCoin.map(p => p[1]),
+                        borderColor: '#FF6600',
+                        backgroundColor: 'rgba(255,102,0,0.06)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.2,
+                        fill: false,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'XMR % change',
+                        data: normalize(xmrAligned).map(p => p[1]),
+                        borderColor: '#4a9eff',
+                        backgroundColor: 'rgba(74,158,255,0.06)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.2,
+                        fill: false,
+                        yAxisID: 'y'
+                    }
+                ];
+            }
+
+            const isVsMode = mode === 'vs' && !isXmr;
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: isVsMode, labels: { color: '#aaa', boxWidth: 12 } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    const v = ctx.parsed.y;
+                                    if (v === null) return null;
+                                    if (isVsMode) return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+                                    return formatPrice(v);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 },
+                            grid:  { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#888',
+                                callback: v => isVsMode
+                                    ? (v >= 0 ? '+' : '') + v.toFixed(0) + '%'
+                                    : (v >= 1000 ? '$' + (v/1000).toFixed(1) + 'k'
+                                     : v >= 1    ? '$' + v.toFixed(2)
+                                     : v >= 0.01 ? '$' + v.toFixed(4)
+                                     :             '$' + v.toFixed(6))
+                            },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    }
+                }
+            });
+        }
 
         async function loadChart() {
+            document.getElementById('chart-status').textContent = 'Loading...';
             try {
-                const res = await fetch('/api/coin/' + coinGeckoId + '/chart');
-                if (!res.ok) throw new Error('fetch failed');
-                const data = await res.json();
+                const [coinRes, xmrRes] = await Promise.all([
+                    fetch('/api/coin/' + coinGeckoId + '/chart'),
+                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart')
+                ]);
 
-                const prices = Array.isArray(data) ? data : (data.prices ?? []);
-                if (!prices.length) {
+                if (!coinRes.ok) throw new Error('fetch failed');
+                const coinJson = await coinRes.json();
+                rawCoin = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
+
+                if (xmrRes) {
+                    const xmrJson = await xmrRes.json();
+                    rawXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
+                }
+
+                if (!rawCoin.length) {
                     document.getElementById('chart-status').textContent = 'No data available';
                     return;
                 }
 
-                document.getElementById('chart-status').textContent = prices.length + ' days';
+                document.getElementById('chart-status').textContent = rawCoin.length + ' days';
+                buildChart(rawCoin, rawXmr ?? []);
 
-                const labels = prices.map(p => {
-                    const d = new Date(p[0]);
-                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                });
-                const values = prices.map(p => p[1]);
-
-                const ctx = document.getElementById('price-chart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels,
-                        datasets: [{
-                            label: coinSymbol + ' Price (USD)',
-                            data: values,
-                            borderColor: '#FF6600',
-                            backgroundColor: 'rgba(255,102,0,0.08)',
-                            borderWidth: 1.5,
-                            pointRadius: 0,
-                            pointHoverRadius: 4,
-                            tension: 0.2,
-                            fill: true
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: { mode: 'index', intersect: false },
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: ctx => {
-                                        const v = ctx.parsed.y;
-                                        if (v >= 1) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                        if (v >= 0.01) return '$' + v.toFixed(4);
-                                        return '$' + v.toFixed(8);
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 },
-                                grid: { color: 'rgba(255,255,255,0.05)' }
-                            },
-                            y: {
-                                ticks: {
-                                    color: '#888',
-                                    callback: v => {
-                                        if (v >= 1000) return '$' + (v / 1000).toFixed(1) + 'k';
-                                        if (v >= 1) return '$' + v.toFixed(2);
-                                        if (v >= 0.01) return '$' + v.toFixed(4);
-                                        return '$' + v.toFixed(6);
-                                    }
-                                },
-                                grid: { color: 'rgba(255,255,255,0.05)' }
-                            }
-                        }
-                    }
-                });
+                if (!isXmr) {
+                    document.getElementById('toggle-btn').style.display = 'inline-block';
+                }
             } catch (e) {
                 document.getElementById('chart-status').textContent = 'Chart unavailable';
             }
+        }
+
+        function toggleMode() {
+            mode = mode === 'price' ? 'vs' : 'price';
+            const btn = document.getElementById('toggle-btn');
+            btn.textContent = mode === 'vs' ? 'Show Price (USD)' : 'Show vs XMR';
+            buildChart(rawCoin, rawXmr ?? []);
         }
 
         loadChart();
