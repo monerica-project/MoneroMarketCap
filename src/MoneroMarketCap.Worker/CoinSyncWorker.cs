@@ -105,7 +105,7 @@ public class CoinSyncWorker : BackgroundService
         _logger.LogInformation("Prices refreshed at {Time}", DateTime.UtcNow);
     }
 
-    private static Coin MapToCoin(CoinGeckoMarketData m) => new ()
+    private static Coin MapToCoin(CoinGeckoMarketData m) => new()
     {
         CoinGeckoId = m.Id,
         Symbol = m.Symbol.ToUpper(),
@@ -131,6 +131,7 @@ public class CoinSyncWorker : BackgroundService
         PriceChangePercent1h = m.PriceChangePercentage1h ?? 0,
         PriceChangePercent7d = m.PriceChangePercentage7d ?? 0,
         PriceChangePercent30d = m.PriceChangePercentage30d ?? 0,
+        PriceChangePercent1y = m.PriceChangePercentage1y ?? 0,
         IsActive = true
     };
 
@@ -151,6 +152,7 @@ public class CoinSyncWorker : BackgroundService
         coin.PriceChangePercent1h = m.PriceChangePercentage1h ?? coin.PriceChangePercent1h;
         coin.PriceChangePercent7d = m.PriceChangePercentage7d ?? coin.PriceChangePercent7d;
         coin.PriceChangePercent30d = m.PriceChangePercentage30d ?? coin.PriceChangePercent30d;
+        coin.PriceChangePercent1y = m.PriceChangePercentage1y ?? coin.PriceChangePercent1y;
         coin.UpdatedAt = DateTime.UtcNow;
     }
 }
