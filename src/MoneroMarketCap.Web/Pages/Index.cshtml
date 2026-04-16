@@ -88,21 +88,18 @@ else
         <table class="table market-table" style="font-size:0.82rem">
             <thead>
                 <tr>
-                    <th style="width:2rem">#</th>
-                    <th>Coin</th>
-                    <th class="text-end">Price (USD)</th>
-                    <th class="text-end">Price (XMR)</th>
-                    <th class="text-end">24h %</th>
-                    <th class="text-end">Market Cap</th>
-                    <th class="text-end">vs XMR</th>
-                    <th class="text-end">Supply</th>
-                    <th class="text-end">1 XMR buys</th>
+                    <th style="width:2rem;cursor:pointer;user-select:none" data-sort="mcap"># <span class="sort-indicator">▼</span></th>
+                    <th style="cursor:pointer;user-select:none" data-sort="name">Coin <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="price">Price (USD) <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="xmr-price">Price (XMR) <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change">24h % <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="mcap">Market Cap <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="ratio">vs XMR <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="supply">Supply <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="buys">1 XMR buys <span class="sort-indicator"></span></th>
                 </tr>
             </thead>
             <tbody>
-                @{
-                    int rank = 1;
-                }
                 @foreach (var coin in Model.Coins.OrderByDescending(c => c.MarketCapUsd))
                 {
                     var priceInXmr = Model.Monero != null && Model.Monero.PriceUsd > 0
@@ -113,8 +110,17 @@ else
                         ? Model.Monero.PriceUsd / coin.PriceUsd : 0;
                     bool isXmr = coin.Symbol.ToUpper() == "XMR";
 
-                    <tr class="@(isXmr ? "xmr-row" : "")" data-symbol="@coin.Symbol">
-                        <td class="rank-cell cell-rank">@rank</td>
+                    <tr class="@(isXmr ? "xmr-row" : "")"
+                        data-symbol="@coin.Symbol"
+                        data-name="@coin.Symbol.ToLower()"
+                        data-price="@coin.PriceUsd"
+                        data-xmr-price="@priceInXmr"
+                        data-change="@coin.PriceChangePercent24h"
+                        data-mcap="@coin.MarketCapUsd"
+                        data-ratio="@mcapRatio"
+                        data-supply="@coin.CirculatingSupply"
+                        data-buys="@coinsPerXmr">
+                        <td class="rank-cell cell-rank"></td>
                         <td>
                             <div class="coin-name-cell">
                                 @if (!string.IsNullOrEmpty(coin.ImageUrl))
@@ -139,12 +145,10 @@ else
                             }
                             else if (priceInXmr >= 1)
                             {
-
                                 @($"{priceInXmr:N4} XMR")
                             }
                             else
                             {
-
                                 @($"{priceInXmr:N8} XMR")
                             }
                         </td>
@@ -159,12 +163,10 @@ else
                             }
                             else if (mcapRatio >= 1)
                             {
-
                                 <span class="ratio-larger">@mcapRatio.ToString("N1")×</span>
                             }
                             else
                             {
-
                                 <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1"))%</span>
                             }
                         </td>
@@ -178,12 +180,10 @@ else
                             }
                             else
                             {
-
                                 <span class="text-muted">—</span>
                             }
                         </td>
                     </tr>
-                    rank++;
                 }
             </tbody>
         </table>
@@ -256,6 +256,79 @@ else
             return { text: (r * 100).toFixed(1) + '%', cls: 'ratio-smaller' };
         }
 
+        // --- Sort state ---
+        let sortCol = 'mcap';
+        let sortDir = 'desc'; // default: market cap descending
+
+        function applySort() {
+            const tbody = document.querySelector('.market-table tbody');
+            if (!tbody) return;
+
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                let aVal, bVal;
+                if (sortCol === 'name') {
+                    aVal = a.dataset.name || '';
+                    bVal = b.dataset.name || '';
+                    return sortDir === 'asc'
+                        ? aVal.localeCompare(bVal)
+                        : bVal.localeCompare(aVal);
+                }
+                const key = sortCol === 'xmr-price' ? 'xmrPrice' : sortCol;
+                // map sort key to dataset key
+                const dsKey = {
+                    'mcap': 'mcap',
+                    'price': 'price',
+                    'xmrPrice': 'xmrPrice',
+                    'change': 'change',
+                    'ratio': 'ratio',
+                    'supply': 'supply',
+                    'buys': 'buys'
+                }[key] || key;
+
+                aVal = parseFloat(a.dataset[dsKey]) || 0;
+                bVal = parseFloat(b.dataset[dsKey]) || 0;
+                return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+
+            // Re-append in sorted order and update rank cells
+            rows.forEach((row, idx) => {
+                const rankCell = row.querySelector('.cell-rank');
+                if (rankCell) rankCell.textContent = idx + 1;
+                tbody.appendChild(row);
+            });
+
+            // Update header indicators
+            document.querySelectorAll('.market-table thead th').forEach(th => {
+                const indicator = th.querySelector('.sort-indicator');
+                if (!indicator) return;
+                if (th.dataset.sort === sortCol) {
+                    indicator.textContent = sortDir === 'asc' ? '▲' : '▼';
+                } else {
+                    indicator.textContent = '';
+                }
+            });
+        }
+
+        // Wire up header clicks
+        document.querySelectorAll('.market-table thead th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = th.dataset.sort;
+                if (sortCol === col) {
+                    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortCol = col;
+                    // Numeric cols default desc, name defaults asc
+                    sortDir = col === 'name' ? 'asc' : 'desc';
+                }
+                applySort();
+            });
+        });
+
+        // Run initial sort to populate rank cells
+        applySort();
+
         async function refreshPrices() {
             try {
                 const res = await fetch('/api/Prices');
@@ -284,13 +357,24 @@ else
                 const rankEl = document.getElementById('xmr-rank');
                 if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
 
-                const sorted = [...coins].sort((a, b) => b.marketCapUsd - a.marketCapUsd);
-                sorted.forEach((coin, idx) => {
+                coins.forEach(coin => {
                     const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
                     if (!row) return;
                     const isXmr = coin.symbol === 'XMR';
-                    const rankCell = row.querySelector('.cell-rank');
-                    if (rankCell) rankCell.textContent = idx + 1;
+
+                    // Update raw data attributes for sorting
+                    const priceInXmr = xmr.priceUsd > 0 ? coin.priceUsd / xmr.priceUsd : 0;
+                    const mcapRatio = xmr.marketCapUsd > 0 ? coin.marketCapUsd / xmr.marketCapUsd : 0;
+                    const coinsPerXmr = coin.priceUsd > 0 ? xmr.priceUsd / coin.priceUsd : 0;
+                    row.dataset.price = coin.priceUsd;
+                    row.dataset.xmrPrice = priceInXmr;
+                    row.dataset.change = coin.priceChangePercent24h;
+                    row.dataset.mcap = coin.marketCapUsd;
+                    row.dataset.ratio = mcapRatio;
+                    row.dataset.supply = coin.circulatingSupply;
+                    row.dataset.buys = coinsPerXmr;
+
+                    // Update display cells
                     const priceCell = row.querySelector('.cell-price');
                     if (priceCell) priceCell.textContent = formatPrice(coin.priceUsd);
                     const xmrPriceCell = row.querySelector('.cell-xmr-price');
@@ -314,13 +398,8 @@ else
                     if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
                 });
 
-                const tbody = document.querySelector('.market-table tbody');
-                if (tbody) {
-                    sorted.forEach(coin => {
-                        const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
-                        if (row) tbody.appendChild(row);
-                    });
-                }
+                // Re-apply current sort after data update
+                applySort();
             } catch (e) {
                 console.error('Price refresh failed:', e);
             }
