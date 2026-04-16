@@ -9,7 +9,6 @@
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
- 
 </head>
 <body>
     <header>
@@ -21,8 +20,6 @@
                 </button>
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1">
-                       
-                      
                         @if (User.Identity?.IsAuthenticated == true)
                         {
                             <li class="nav-item">
@@ -36,16 +33,16 @@
                             @if (User.IsInRole(RoleNames.Admin) || User.IsInRole(RoleNames.Moderator))
                             {
                                 <li class="nav-item">
-                                    <a class="nav-link" asp-page="/Admin/Index">⚙ Admin</a>
+                                    <a class="nav-link" asp-page="/Admin/Index">&#x2699; Admin</a>
                                 </li>
                             }
                             <li class="nav-item">
                                 <span class="nav-link fw-bold" style="color:var(--xmr-orange)">
-                                    👤 @User.Identity.Name
+                                    &#x1F464; @User.Identity.Name
                                 </span>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" asp-page="/Settings">⚙ Settings</a>
+                                <a class="nav-link" asp-page="/Settings">&#x2699; Settings</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-page="/Logout">Logout</a>
@@ -77,6 +74,10 @@
             &copy; @DateTime.UtcNow.Year - MoneroMarketCap
             &nbsp;|&nbsp;
             <a asp-page="/Contact" style="color:var(--xmr-text-muted);font-size:0.85rem">Contact</a>
+            &nbsp;|&nbsp;
+            <a href="http://7vpxaew4op4jy3ltgmdyj6qwmjdkb27mpjkqnwozjxdk63lfj6q7fhad.onion"
+               style="color:var(--xmr-text-muted);font-size:0.85rem"
+               title="Available on Tor">&#x1F9C5; .onion</a>
         </div>
     </footer>
 

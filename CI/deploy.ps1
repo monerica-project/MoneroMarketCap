@@ -11,13 +11,14 @@ param(
     [switch]$SkipBuild,
     [switch]$WebOnly,
     [switch]$WorkerOnly,
-    [switch]$SSL
+    [switch]$SSL,
+    [switch]$Tor
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ── Load config ───────────────────────────────────────────────────────────────
+# -- Load config ---------------------------------------------------------------
 $configPath = Join-Path $PSScriptRoot "deploy-config.ps1"
 if (-not (Test-Path $configPath)) {
     Write-Error "deploy-config.ps1 not found next to deploy.ps1"
@@ -25,7 +26,7 @@ if (-not (Test-Path $configPath)) {
 }
 . $configPath
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# -- Helpers -------------------------------------------------------------------
 function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "    OK: $msg" -ForegroundColor Green }
 
@@ -59,7 +60,7 @@ function Run-RemoteScript([string]$localPath, [string]$remotePath) {
     SSH "chmod +x $remotePath && bash $remotePath"
 }
 
-# ── Maintenance page ──────────────────────────────────────────────────────────
+# -- Maintenance page ----------------------------------------------------------
 # Swaps nginx to a static HTML page while the app service is stopped.
 # Step 7 (unchanged) always restores the real proxy config afterwards.
 
@@ -70,7 +71,7 @@ $MaintenanceHtml = @'
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="15">
-  <title>Updating — MoneroMarketCap</title>
+  <title>Updating - MoneroMarketCap</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -118,7 +119,7 @@ function Enable-MaintenancePage {
     $certNow = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no").Trim()
 
     if ($certNow -eq "yes") {
-        # SSL is active — maintenance config must cover 443 or nginx drops the connection
+        # SSL is active - maintenance config must cover 443 or nginx drops the connection
         $mConf  = "server {`n"
         $mConf += "    listen 80;`n"
         $mConf += "    server_name $DOMAIN www.$DOMAIN;`n"
@@ -167,7 +168,7 @@ function Wait-ForApp {
         $status = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
             "curl -s -o /dev/null -w '%{http_code}' http://localhost:$APP_PORT/ 2>/dev/null || echo 000").Trim()
         if ($status -match "^(200|301|302|303)$") { $healthy = $true; break }
-        Write-Host "    Attempt $attempt/$maxAttempts — HTTP $status, retrying in 5s..." -ForegroundColor Yellow
+        Write-Host "    Attempt $attempt/$maxAttempts - HTTP $status, retrying in 5s..." -ForegroundColor Yellow
         Start-Sleep -Seconds 5
     }
     if (-not $healthy) {
@@ -177,7 +178,7 @@ function Wait-ForApp {
     }
 }
 
-# ── Step 1: Build ─────────────────────────────────────────────────────────────
+# -- Step 1: Build -------------------------------------------------------------
 if (-not $SkipBuild) {
     if (-not $WorkerOnly) {
         Write-Step "Building web app"
@@ -198,7 +199,7 @@ if (-not $SkipBuild) {
     }
 }
 
-# ── Step 2: Bootstrap server (idempotent) ────────────────────────────────────
+# -- Step 2: Bootstrap server (idempotent) ------------------------------------
 Write-Step "Bootstrapping server"
 
 SSH "apt-get update -q"
@@ -210,7 +211,7 @@ SSH-Ignore "ufw allow $APP_PORT/tcp 2>/dev/null || true"
 
 Write-Ok "Server dependencies ready"
 
-# ── Step 3: PostgreSQL ────────────────────────────────────────────────────────
+# -- Step 3: PostgreSQL --------------------------------------------------------
 Write-Step "Setting up PostgreSQL"
 
 $pgScript = "#!/bin/bash`n" +
@@ -227,7 +228,7 @@ Run-RemoteScript $pgScriptFile "/tmp/pg-setup.sh"
 
 Write-Ok "Database ready"
 
-# ── Step 4: Write appsettings.json ────────────────────────────────────────────
+# -- Step 4: Write appsettings.json --------------------------------------------
 Write-Step "Writing config"
 
 $connString = "Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD"
@@ -243,7 +244,7 @@ Save-UnixFile $workerCfgFile $workerCfgContent
 
 Write-Ok "Config ready"
 
-# ── Step 5: Deploy web app ────────────────────────────────────────────────────
+# -- Step 5: Deploy web app ----------------------------------------------------
 if (-not $WorkerOnly) {
     Write-Step "Deploying web app"
 
@@ -272,7 +273,7 @@ if (-not $WorkerOnly) {
     Write-Ok "Web app deployed on port $APP_PORT"
 }
 
-# ── Step 6: Deploy worker ─────────────────────────────────────────────────────
+# -- Step 6: Deploy worker -----------------------------------------------------
 if (-not $WebOnly) {
     Write-Step "Deploying worker"
 
@@ -298,10 +299,10 @@ if (-not $WebOnly) {
     Write-Ok "Worker deployed"
 }
 
-# ── Step 7: Configure Nginx ───────────────────────────────────────────────────
+# -- Step 7: Configure Nginx ---------------------------------------------------
 Write-Step "Configuring Nginx"
 
-# Check if SSL cert exists on server — if so use HTTPS config, otherwise HTTP
+# Check if SSL cert exists on server - if so use HTTPS config, otherwise HTTP
 $certExists = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no").Trim()
 
 if ($certExists -eq "yes") {
@@ -346,7 +347,7 @@ if ($certExists -eq "yes") {
     SSH "docker exec nginx nginx -s reload"
     Write-Ok "Nginx configured for $DOMAIN (HTTPS)"
 } else {
-    # No cert yet — write plain HTTP config
+    # No cert yet - write plain HTTP config
     $nginxConf  = "server {`n"
     $nginxConf += "    listen 80;`n"
     $nginxConf += "    server_name $DOMAIN www.$DOMAIN;`n"
@@ -369,10 +370,10 @@ if ($certExists -eq "yes") {
     SCP $nginxConfFile "/tmp/$APP_NAME.conf"
     SSH "docker cp /tmp/$APP_NAME.conf nginx:/etc/nginx/conf.d/$APP_NAME.conf"
     SSH "docker exec nginx nginx -s reload"
-    Write-Ok "Nginx configured for $DOMAIN (HTTP only — run with -SSL to enable HTTPS)"
+    Write-Ok "Nginx configured for $DOMAIN (HTTP only - run with -SSL to enable HTTPS)"
 }
 
-# ── Step 8: Run EF migrations ─────────────────────────────────────────────────
+# -- Step 8: Run EF migrations -------------------------------------------------
 Write-Step "Running database migrations"
 
 $migrateScript = "#!/bin/bash`n" +
@@ -387,7 +388,7 @@ Run-RemoteScript $migrateScriptFile "/tmp/migrate.sh"
 
 Write-Ok "Migrations complete"
 
-# ── Step 9: SSL (get cert — only needed once) ─────────────────────────────────
+# -- Step 9: SSL (get cert - only needed once) ---------------------------------
 if ($SSL) {
     Write-Step "Getting SSL certificate"
 
@@ -410,7 +411,7 @@ if ($SSL) {
     Save-UnixFile $sslScriptFile $sslScript
     Run-RemoteScript $sslScriptFile "/tmp/ssl-setup.sh"
 
-    Write-Ok "Certificate obtained — re-running nginx config step with SSL..."
+    Write-Ok "Certificate obtained - re-running nginx config step with SSL..."
 
     # Now re-run the nginx config with the cert that now exists
     SSH "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem /tmp/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem /tmp/privkey.pem"
@@ -454,14 +455,46 @@ if ($SSL) {
     Write-Ok "SSL installed for $DOMAIN"
 }
 
-# ── Done ──────────────────────────────────────────────────────────────────────
+# -- Step 10: Tor hidden service (first time only) -----------------------------
+if ($Tor) {
+    Write-Step "Setting up Tor hidden service for $DOMAIN"
+
+    $torScript  = "#!/bin/bash`n"
+    $torScript += "set -e`n"
+    $torScript += "apt-get install -y tor`n"
+    $torScript += "systemctl enable tor`n"
+    $torScript += "if ! grep -q 'moneromarketcap' /etc/tor/torrc; then`n"
+    $torScript += "  echo '' >> /etc/tor/torrc`n"
+    $torScript += "  echo '# MoneroMarketCap hidden service' >> /etc/tor/torrc`n"
+    $torScript += "  echo 'HiddenServiceDir /var/lib/tor/moneromarketcap/' >> /etc/tor/torrc`n"
+    $torScript += "  echo 'HiddenServicePort 80 127.0.0.1:$APP_PORT' >> /etc/tor/torrc`n"
+    $torScript += "fi`n"
+    $torScript += "systemctl restart tor`n"
+    $torScript += "sleep 5`n"
+    $torScript += "echo 'Onion address:'`n"
+    $torScript += "cat /var/lib/tor/moneromarketcap/hostname`n"
+
+    $torScriptFile = Join-Path $env:TEMP "tor-setup.sh"
+    Save-UnixFile $torScriptFile $torScript
+    Run-RemoteScript $torScriptFile "/tmp/tor-setup.sh"
+
+    $onionAddress = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
+        "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo 'not ready yet'").Trim()
+
+    Write-Ok "Tor hidden service configured"
+    Write-Host "   Onion: $onionAddress" -ForegroundColor Magenta
+}
+
+# -- Done ----------------------------------------------------------------------
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Green
 Write-Host " Deployment complete!" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
-Write-Host " Site:   http://$DOMAIN" -ForegroundColor White
-if ($SSL) {
-    Write-Host " HTTPS:  https://$DOMAIN" -ForegroundColor White
+Write-Host " Site:   https://$DOMAIN" -ForegroundColor White
+if ($Tor) {
+    $onion = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
+        "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo 'pending'").Trim()
+    Write-Host " Onion:  http://$onion" -ForegroundColor Magenta
 }
 Write-Host ""
 Write-Host " Useful commands:" -ForegroundColor Gray
