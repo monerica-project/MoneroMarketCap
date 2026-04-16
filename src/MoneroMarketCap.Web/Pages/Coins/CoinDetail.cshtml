@@ -38,10 +38,12 @@
             }
             else if (coin.PriceUsd >= 0.01m)
             {
+
                 <text>$@coin.PriceUsd.ToString("N4", usd)</text>
             }
             else
             {
+
                 <text>$@coin.PriceUsd.ToString("N8", usd)</text>
             }
         </div>
@@ -54,11 +56,11 @@
 @if (isXmr)
 {
     <div class="mb-4">
-        <a href="https://moneropricenow.com/" 
-           target="_blank" 
-           rel="noopener" 
-           class="btn btn-warning fw-bold"
-           style="background:var(--xmr-orange);border-color:var(--xmr-orange);color:#fff">
+        <a href="https://moneropricenow.com/"
+               target="_blank"
+               rel="noopener"
+               class="btn btn-warning fw-bold"
+               style="background:var(--xmr-orange);border-color:var(--xmr-orange);color:#fff">
             Buy Monero (XMR)
         </a>
     </div>
@@ -109,10 +111,12 @@
             }
             else if (coin.MarketCapUsd >= 1_000_000_000m)
             {
+
                 <text>$@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B</text>
             }
             else
             {
+
                 <text>$@((coin.MarketCapUsd / 1_000_000m).ToString("N2", usd))M</text>
             }
         </span>
@@ -126,6 +130,7 @@
             }
             else
             {
+
                 <text>$@((coin.TotalVolume / 1_000_000m).ToString("N2", usd))M</text>
             }
         </span>
@@ -163,27 +168,42 @@
                         <td style="color:var(--xmr-text-muted);width:50%">Price in XMR</td>
                         <td class="mono">
                             @if (priceInXmr >= 1)
-                            { <text>@priceInXmr.ToString("N4", usd) XMR</text> }
+                            {
+                                <text>@priceInXmr.ToString("N4", usd) XMR</text>
+                            }
                             else
-                            { <text>@priceInXmr.ToString("N8", usd) XMR</text> }
+                            {
+
+                                <text>@priceInXmr.ToString("N8", usd) XMR</text>
+                            }
                         </td>
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">1 XMR buys</td>
                         <td class="mono">
                             @if (coinsPerXmr >= 1)
-                            { <text>@coinsPerXmr.ToString("N2", usd) @coin.Symbol</text> }
+                            {
+                                <text>@coinsPerXmr.ToString("N2", usd) @coin.Symbol</text>
+                            }
                             else
-                            { <text>@coinsPerXmr.ToString("N8", usd) @coin.Symbol</text> }
+                            {
+
+                                <text>@coinsPerXmr.ToString("N8", usd) @coin.Symbol</text>
+                            }
                         </td>
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">Market Cap vs XMR</td>
                         <td class="mono">
                             @if (mcapRatio >= 1)
-                            { <span class="ratio-larger">@mcapRatio.ToString("N1", usd)× larger</span> }
+                            {
+                                <span class="ratio-larger">@mcapRatio.ToString("N1", usd)× larger</span>
+                            }
                             else
-                            { <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1", usd))% of XMR</span> }
+                            {
+
+                                <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1", usd))% of XMR</span>
+                            }
                         </td>
                     </tr>
                     @{
@@ -215,45 +235,73 @@
                             </tr>
                         }
                     }
-                    @{ RenderVsXmrRow("7d",  Model.VsXmrChange7d,  coin.Symbol); }
-                    @{ RenderVsXmrRow("30d", Model.VsXmrChange30d, coin.Symbol); }
-                    @{ RenderVsXmrRow("1yr", Model.VsXmrChange1yr, coin.Symbol); }
+                    @{
+                        RenderVsXmrRow("7d", Model.VsXmrChange7d, coin.Symbol);
+                    }
+                    @{
+                        RenderVsXmrRow("30d", Model.VsXmrChange30d, coin.Symbol);
+                    }
+                    @{
+                        RenderVsXmrRow("1yr", Model.VsXmrChange1yr, coin.Symbol);
+                    }
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">@coin.Symbol Supply</td>
+                        <td style="color:var(--xmr-text-muted)">Circulating Supply</td>
+                        <td class="mono">@coin.CirculatingSupply.ToString("N0", usd) @coin.Symbol</td>
+                    </tr>
+                    <tr>
+                        <td style="color:var(--xmr-text-muted)">Max Supply</td>
                         <td class="mono">
-                            @if (coin.CirculatingSupply >= 1_000_000_000m)
-                            { <text>@((coin.CirculatingSupply / 1_000_000_000m).ToString("N2", usd))B</text> }
-                            else if (coin.CirculatingSupply >= 1_000_000m)
-                            { <text>@((coin.CirculatingSupply / 1_000_000m).ToString("N2", usd))M</text> }
+                            @if (coin.MaxSupply.HasValue)
+                            {
+                                <text>@coin.MaxSupply.Value.ToString("N0", usd) @coin.Symbol</text>
+                            }
                             else
-                            { <text>@coin.CirculatingSupply.ToString("N0", usd)</text> }
+                            {
+
+                                <span style="color:var(--xmr-text-muted)">∞ (no cap)</span>
+                            }
                         </td>
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">24h High</td>
                         <td class="mono">
                             @if (coin.High24h >= 1)
-                            { <text>$@coin.High24h.ToString("N2", usd)</text> }
+                            {
+                                <text>$@coin.High24h.ToString("N2", usd)</text>
+                            }
                             else
-                            { <text>$@coin.High24h.ToString("N6", usd)</text> }
+                            {
+
+                                <text>$@coin.High24h.ToString("N6", usd)</text>
+                            }
                         </td>
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">24h Low</td>
                         <td class="mono">
                             @if (coin.Low24h >= 1)
-                            { <text>$@coin.Low24h.ToString("N2", usd)</text> }
+                            {
+                                <text>$@coin.Low24h.ToString("N2", usd)</text>
+                            }
                             else
-                            { <text>$@coin.Low24h.ToString("N6", usd)</text> }
+                            {
+
+                                <text>$@coin.Low24h.ToString("N6", usd)</text>
+                            }
                         </td>
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">All-Time High</td>
                         <td class="mono">
                             @if (coin.Ath >= 1)
-                            { <text>$@coin.Ath.ToString("N2", usd)</text> }
+                            {
+                                <text>$@coin.Ath.ToString("N2", usd)</text>
+                            }
                             else
-                            { <text>$@coin.Ath.ToString("N6", usd)</text> }
+                            {
+
+                                <text>$@coin.Ath.ToString("N6", usd)</text>
+                            }
                             <span class="@(coin.AthChangePercentage >= 0 ? "text-success" : "text-danger")" style="font-size:0.8rem;margin-left:6px">
                                 (@coin.AthChangePercentage.ToString("N1", usd)%)
                             </span>
@@ -289,7 +337,21 @@
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">Circulating Supply</td>
-                        <td class="mono">@((coin.CirculatingSupply / 1_000_000m).ToString("N2", usd))M XMR</td>
+                        <td class="mono">@coin.CirculatingSupply.ToString("N0", usd) XMR</td>
+                    </tr>
+                    <tr>
+                        <td style="color:var(--xmr-text-muted)">Max Supply</td>
+                        <td class="mono">
+                            @if (coin.MaxSupply.HasValue)
+                            {
+                                <text>@coin.MaxSupply.Value.ToString("N0", usd) XMR</text>
+                            }
+                            else
+                            {
+
+                                <span style="color:var(--xmr-text-muted)">∞ (no cap)</span>
+                            }
+                        </td>
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">24h High</td>
@@ -317,76 +379,76 @@
         </div>
     </div>
 }
+
 @section Scripts {
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="~/js/chart.umd.min.js"></script>
     <script>
         const coinGeckoId = '@coin.CoinGeckoId';
-        const coinSymbol  = '@coin.Symbol';
-        const isXmr       = coinSymbol === 'XMR';
+        const coinSymbol = '@coin.Symbol';
+        const isXmr = coinSymbol === 'XMR';
 
         let chartInstance = null;
         let rawCoin = null;
-        let rawXmr  = null;
-        let mode    = 'price'; // 'price' | 'vs'
+        let rawXmr = null;
+        let mode = 'price'; // 'price' | 'vs'
 
         function formatPrice(v) {
-            if (v >= 1000) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            if (v >= 1)    return '$' + v.toFixed(2);
-            if (v >= 0.01) return '$' + v.toFixed(4);
-            return '$' + v.toFixed(8);
+        if (v >= 1000) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (v >= 1) return '$' + v.toFixed(2);
+        if (v >= 0.01) return '$' + v.toFixed(4);
+        return '$' + v.toFixed(8);
         }
 
         function normalize(series) {
-            if (!series.length) return [];
-            const base = series[0][1];
-            if (!base) return series.map(p => [p[0], 0]);
-            return series.map(p => [p[0], ((p[1] / base) - 1) * 100]);
+        if (!series.length) return [];
+        const base = series[0][1];
+        if (!base) return series.map(p => [p[0], 0]);
+        return series.map(p => [p[0], ((p[1] / base) - 1) * 100]);
         }
 
         function alignSeries(a, b) {
-            // align b to a's timestamps by nearest date
-            const bMap = new Map(b.map(p => [new Date(p[0]).toDateString(), p[1]]));
-            return a.map(p => {
-                const key = new Date(p[0]).toDateString();
-                return [p[0], bMap.get(key) ?? null];
-            });
+        const bMap = new Map(b.map(p => [new Date(p[0]).toDateString(), p[1]]));
+        return a.map(p => {
+        const key = new Date(p[0]).toDateString();
+        return [p[0], bMap.get(key) ?? null];
+        });
         }
 
         function buildChart(coinData, xmrData) {
-            const ctx = document.getElementById('price-chart').getContext('2d');
-            if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+        const ctx = document.getElementById('price-chart').getContext('2d');
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
-            const labels = coinData.map(p => {
-                const d = new Date(p[0]);
-                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            });
+        const labels = coinData.map(p => {
+        const d = new Date(p[0]);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
 
-            let datasets;
+        let datasets;
 
-            if (mode === 'price' || isXmr) {
-                datasets = [{
-                    label: coinSymbol + ' Price (USD)',
-                    data: coinData.map(p => p[1]),
-                    borderColor: '#FF6600',
-                    backgroundColor: 'rgba(255,102,0,0.08)',
-                    borderWidth: 1.5,
-                    pointRadius: 0,
-                    pointHoverRadius: 4,
-                    tension: 0.2,
-                    fill: true,
-                    yAxisID: 'y'
-                }];
-            } else {
-                const normCoin = normalize(coinData);
-                const xmrAligned = alignSeries(coinData, xmrData);
-                const normXmr  = normalize(xmrAligned.filter(p => p[1] !== null).length
-                    ? xmrAligned : coinData.map(p => [p[0], 0]));
+        if (mode === 'price' || isXmr) {
+        // Price mode — XMR page orange, all other coins blue
+        datasets = [{
+        label: coinSymbol + ' Price (USD)',
+        data: coinData.map(p => p[1]),
+        borderColor: isXmr ? '#FF6600' : '#4a9eff',
+        backgroundColor: isXmr ? 'rgba(255,102,0,0.08)' : 'rgba(74,158,255,0.08)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.2,
+        fill: true,
+        yAxisID: 'y'
+        }];
+        } else {
+        // vs XMR mode — XMR always orange, coin always blue
+        const normCoin = normalize(coinData);
+        const xmrAligned = alignSeries(coinData, xmrData);
 
-datasets = [
-    {
+        datasets = [
+        {
         label: coinSymbol + ' % change',
         data: normCoin.map(p => p[1]),
-        borderColor: '#4a9eff',           // coin = blue
+        borderColor: '#4a9eff',
         backgroundColor: 'rgba(74,158,255,0.06)',
         borderWidth: 1.5,
         pointRadius: 0,
@@ -394,11 +456,11 @@ datasets = [
         tension: 0.2,
         fill: false,
         yAxisID: 'y'
-    },
-    {
+        },
+        {
         label: 'XMR % change',
         data: normalize(xmrAligned).map(p => p[1]),
-        borderColor: '#FF6600',           // XMR = orange always
+        borderColor: '#FF6600',
         backgroundColor: 'rgba(255,102,0,0.06)',
         borderWidth: 1.5,
         pointRadius: 0,
@@ -406,92 +468,92 @@ datasets = [
         tension: 0.2,
         fill: false,
         yAxisID: 'y'
-    }
-];
-            }
+        }
+        ];
+        }
 
-            const isVsMode = mode === 'vs' && !isXmr;
+        const isVsMode = mode === 'vs' && !isXmr;
 
-            chartInstance = new Chart(ctx, {
-                type: 'line',
-                data: { labels, datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { display: isVsMode, labels: { color: '#aaa', boxWidth: 12 } },
-                        tooltip: {
-                            callbacks: {
-                                label: ctx => {
-                                    const v = ctx.parsed.y;
-                                    if (v === null) return null;
-                                    if (isVsMode) return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
-                                    return formatPrice(v);
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 },
-                            grid:  { color: 'rgba(255,255,255,0.05)' }
-                        },
-                        y: {
-                            ticks: {
-                                color: '#888',
-                                callback: v => isVsMode
-                                    ? (v >= 0 ? '+' : '') + v.toFixed(0) + '%'
-                                    : (v >= 1000 ? '$' + (v/1000).toFixed(1) + 'k'
-                                     : v >= 1    ? '$' + v.toFixed(2)
-                                     : v >= 0.01 ? '$' + v.toFixed(4)
-                                     :             '$' + v.toFixed(6))
-                            },
-                            grid: { color: 'rgba(255,255,255,0.05)' }
-                        }
-                    }
-                }
-            });
+        chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+        legend: { display: isVsMode, labels: { color: '#aaa', boxWidth: 12 } },
+        tooltip: {
+        callbacks: {
+        label: ctx => {
+        const v = ctx.parsed.y;
+        if (v === null) return null;
+        if (isVsMode) return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+        return formatPrice(v);
+        }
+        }
+        }
+        },
+        scales: {
+        x: {
+        ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 },
+        grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+        ticks: {
+        color: '#888',
+        callback: v => isVsMode
+        ? (v >= 0 ? '+' : '') + v.toFixed(0) + '%'
+        : (v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k'
+        : v >= 1 ? '$' + v.toFixed(2)
+        : v >= 0.01 ? '$' + v.toFixed(4)
+        : '$' + v.toFixed(6))
+        },
+        grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+        }
+        }
+        });
         }
 
         async function loadChart() {
-            document.getElementById('chart-status').textContent = 'Loading...';
-            try {
-                const [coinRes, xmrRes] = await Promise.all([
-                    fetch('/api/coin/' + coinGeckoId + '/chart'),
-                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart')
-                ]);
+        document.getElementById('chart-status').textContent = 'Loading...';
+        try {
+        const [coinRes, xmrRes] = await Promise.all([
+        fetch('/api/coin/' + coinGeckoId + '/chart'),
+        isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart')
+        ]);
 
-                if (!coinRes.ok) throw new Error('fetch failed');
-                const coinJson = await coinRes.json();
-                rawCoin = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
+        if (!coinRes.ok) throw new Error('fetch failed');
+        const coinJson = await coinRes.json();
+        rawCoin = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
 
-                if (xmrRes) {
-                    const xmrJson = await xmrRes.json();
-                    rawXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
-                }
+        if (xmrRes) {
+        const xmrJson = await xmrRes.json();
+        rawXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
+        }
 
-                if (!rawCoin.length) {
-                    document.getElementById('chart-status').textContent = 'No data available';
-                    return;
-                }
+        if (!rawCoin.length) {
+        document.getElementById('chart-status').textContent = 'No data available';
+        return;
+        }
 
-                document.getElementById('chart-status').textContent = rawCoin.length + ' days';
-                buildChart(rawCoin, rawXmr ?? []);
+        document.getElementById('chart-status').textContent = rawCoin.length + ' days';
+        buildChart(rawCoin, rawXmr ?? []);
 
-                if (!isXmr) {
-                    document.getElementById('toggle-btn').style.display = 'inline-block';
-                }
-            } catch (e) {
-                document.getElementById('chart-status').textContent = 'Chart unavailable';
-            }
+        if (!isXmr) {
+        document.getElementById('toggle-btn').style.display = 'inline-block';
+        }
+        } catch (e) {
+        document.getElementById('chart-status').textContent = 'Chart unavailable';
+        }
         }
 
         function toggleMode() {
-            mode = mode === 'price' ? 'vs' : 'price';
-            const btn = document.getElementById('toggle-btn');
-            btn.textContent = mode === 'vs' ? 'Show Price (USD)' : 'Show vs XMR';
-            buildChart(rawCoin, rawXmr ?? []);
+        mode = mode === 'price' ? 'vs' : 'price';
+        const btn = document.getElementById('toggle-btn');
+        btn.textContent = mode === 'vs' ? 'Show Price (USD)' : 'Show vs XMR';
+        buildChart(rawCoin, rawXmr ?? []);
         }
 
         loadChart();
