@@ -26,83 +26,85 @@ public class CoinSyncWorker : BackgroundService
     {
         _logger.LogInformation("CoinSyncWorker starting");
 
-        // Seed top 100 on first run if db is empty
-        await SeedIfEmptyAsync();
-
         var intervalMinutes = _config.GetValue<int>("CoinGecko:RefreshIntervalMinutes", 5);
         var interval = TimeSpan.FromMinutes(intervalMinutes);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await RefreshPricesAsync();
+            try
+            {
+                await ReconcileAndRefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Reconcile cycle failed");
+            }
+
             _logger.LogInformation("Next refresh in {Minutes} minutes", intervalMinutes);
             await Task.Delay(interval, stoppingToken);
         }
     }
 
-    private async Task SeedIfEmptyAsync()
+    private async Task ReconcileAndRefreshAsync()
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var gecko = scope.ServiceProvider.GetRequiredService<ICoinGeckoService>();
 
-        var hasCoins = await db.Coins.AnyAsync();
-        if (hasCoins)
+        var topCount = _config.GetValue<int>("CoinGecko:TopCount", 100);
+
+        // 1. Live top N from CoinGecko — source of truth
+        var topCoins = await gecko.GetTopCoinsAsync(topCount);
+        if (topCoins == null || topCoins.Count == 0)
         {
-            _logger.LogInformation("Coins already exist, skipping seed");
+            _logger.LogWarning("CoinGecko returned no top coins; skipping cycle");
             return;
         }
 
-        _logger.LogInformation("No coins found — seeding top {Count} coins from CoinGecko",
-            _config.GetValue<int>("CoinGecko:TopCoinsOnStartup", 100));
+        var topIds = topCoins.Select(c => c.Id).ToHashSet();
 
-        var count = _config.GetValue<int>("CoinGecko:TopCoinsOnStartup", 100);
-        var topCoins = await gecko.GetTopCoinsAsync(count);
+        // 2. Load everything we already track
+        var existing = await db.Coins.ToListAsync();
+        var existingById = existing
+            .Where(c => !string.IsNullOrEmpty(c.CoinGeckoId))
+            .ToDictionary(c => c.CoinGeckoId, c => c);
 
+        int added = 0, updated = 0, reactivated = 0, deactivated = 0;
+
+        // 3. Upsert each coin currently in the top N
         foreach (var m in topCoins)
-            db.Coins.Add(MapToCoin(m));
-
-        await db.SaveChangesAsync();
-        _logger.LogInformation("Seeded {Count} coins", topCoins.Count);
-    }
-
-    private async Task RefreshPricesAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var gecko = scope.ServiceProvider.GetRequiredService<ICoinGeckoService>();
-
-        var coins = await db.Coins
-            .Where(c => c.IsActive && c.CoinGeckoId != "")
-            .ToListAsync();
-
-        if (!coins.Any())
         {
-            _logger.LogWarning("No active coins to refresh");
-            return;
-        }
-
-        _logger.LogInformation("Refreshing prices for {Count} coins", coins.Count);
-
-        // Batch in chunks of 250 (CoinGecko max per request)
-        var chunks = coins.Chunk(250);
-
-        foreach (var chunk in chunks)
-        {
-            var data = await gecko.GetMarketDataBatchAsync(chunk.Select(c => c.CoinGeckoId));
-
-            foreach (var coin in chunk)
+            if (existingById.TryGetValue(m.Id, out var coin))
             {
-                if (!data.TryGetValue(coin.CoinGeckoId, out var m)) continue;
+                if (!coin.IsActive) reactivated++;
                 UpdateCoin(coin, m);
+                coin.IsActive = true;
+                updated++;
             }
+            else
+            {
+                var newCoin = MapToCoin(m);
+                db.Coins.Add(newCoin);
+                added++;
+            }
+        }
 
-            // Respect rate limit between chunks
-            await Task.Delay(TimeSpan.FromSeconds(2));
+        // 4. Deactivate coins that dropped out of the top N
+        foreach (var coin in existing)
+        {
+            if (string.IsNullOrEmpty(coin.CoinGeckoId)) continue;
+            if (!topIds.Contains(coin.CoinGeckoId) && coin.IsActive)
+            {
+                coin.IsActive = false;
+                deactivated++;
+            }
         }
 
         await db.SaveChangesAsync();
-        _logger.LogInformation("Prices refreshed at {Time}", DateTime.UtcNow);
+
+        _logger.LogInformation(
+            "Reconcile complete. Top: {Top}, Added: {Added}, Updated: {Updated}, Reactivated: {Reactivated}, Deactivated: {Deactivated}",
+            topCount, added, updated, reactivated, deactivated);
     }
 
     private static Coin MapToCoin(CoinGeckoMarketData m) => new()
@@ -132,7 +134,8 @@ public class CoinSyncWorker : BackgroundService
         PriceChangePercent7d = m.PriceChangePercentage7d ?? 0,
         PriceChangePercent30d = m.PriceChangePercentage30d ?? 0,
         PriceChangePercent1y = m.PriceChangePercentage1y ?? 0,
-        IsActive = true
+        IsActive = true,
+        UpdatedAt = DateTime.UtcNow,
     };
 
     private static void UpdateCoin(Coin coin, CoinGeckoMarketData m)

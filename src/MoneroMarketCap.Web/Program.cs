@@ -41,8 +41,6 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>();
 
-builder.Services.AddHostedService<CoinPriceUpdateService>();
-
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>
     {

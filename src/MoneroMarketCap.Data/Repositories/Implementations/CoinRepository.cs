@@ -14,8 +14,15 @@ public class CoinRepository : ICoinRepository
     public async Task<Coin?> GetBySymbolAsync(string symbol) =>
         await _db.Coins.FirstOrDefaultAsync(c => c.Symbol == symbol);
 
+    public async Task<Coin?> GetByCoinGeckoIdAsync(string coinGeckoId) =>
+        await _db.Coins.FirstOrDefaultAsync(c => c.CoinGeckoId == coinGeckoId);
+
     public async Task<IReadOnlyList<Coin>> GetAllAsync() =>
-        await _db.Coins.ToListAsync();
+        await _db.Coins
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.MarketCapRank)
+            .Take(100)
+            .ToListAsync();
 
     public async Task AddAsync(Coin entity) => await _db.Coins.AddAsync(entity);
 

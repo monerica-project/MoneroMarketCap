@@ -23,7 +23,7 @@ public class IndexModel : PageModel
     public async Task OnGetAsync()
     {
         Coins = await _coins.GetAllAsync();
-        Monero = Coins.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
+        Monero = await _coins.GetByCoinGeckoIdAsync("monero");
         SponsorRotateIntervalSeconds = _config.GetValue<int>("Sponsors:RotateIntervalSeconds", 30);
     }
 }
