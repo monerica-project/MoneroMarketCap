@@ -16,6 +16,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddRazorPages();
 
+builder.Services.AddRouting(options =>
+{
+    options.LowercaseUrls = true;
+    options.LowercaseQueryStrings = true;
+});
+
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ICoinRepository, CoinRepository>();
 builder.Services.AddScoped<IPortfolioRepository, PortfolioRepository>();
@@ -235,7 +241,10 @@ app.Use(async (context, next) =>
     {
         var lower = path.ToLowerInvariant();
         var query = context.Request.QueryString;
-        context.Response.Redirect(lower + query, permanent: true);
+        // 308 Permanent Redirect preserves the HTTP method (POST stays POST).
+        // 301 downgrades POST to GET, which broke all form submissions.
+        context.Response.StatusCode = 308;
+        context.Response.Headers.Location = lower + query.ToString();
         return;
     }
     await next();
