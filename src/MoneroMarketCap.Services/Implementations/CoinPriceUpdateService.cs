@@ -89,6 +89,7 @@ public class CoinPriceUpdateService : BackgroundService
                 updated++;
             }
 
+            // Price / market / volume fields that always refresh
             coin.IsActive = true;
             coin.PriceUsd = m.CurrentPrice ?? 0;
             coin.MarketCapUsd = m.MarketCap ?? 0;
@@ -103,6 +104,21 @@ public class CoinPriceUpdateService : BackgroundService
             coin.PriceChangePercent7d = m.PriceChangePercentage7d ?? coin.PriceChangePercent7d;
             coin.PriceChangePercent30d = m.PriceChangePercentage30d ?? coin.PriceChangePercent30d;
             coin.PriceChangePercent1y = m.PriceChangePercentage1y ?? coin.PriceChangePercent1y;
+
+            // ATH / ATL — must refresh every cycle. AthChangePercentage drifts every
+            // tick, and Ath/AthDate jump whenever a new high is hit (e.g. RaveDAO).
+            coin.Ath = m.Ath ?? coin.Ath;
+            coin.AthChangePercentage = m.AthChangePercentage ?? coin.AthChangePercentage;
+            coin.AthDate = m.AthDate ?? coin.AthDate;
+            coin.Atl = m.Atl ?? coin.Atl;
+            coin.AtlChangePercentage = m.AtlChangePercentage ?? coin.AtlChangePercentage;
+            coin.AtlDate = m.AtlDate ?? coin.AtlDate;
+
+            // Supply / valuation fields (issuance, burns, cap changes)
+            coin.TotalSupply = m.TotalSupply ?? coin.TotalSupply;
+            coin.MaxSupply = m.MaxSupply ?? coin.MaxSupply;
+            coin.FullyDilutedValuation = m.FullyDilutedValuation ?? coin.FullyDilutedValuation;
+
             coin.UpdatedAt = DateTime.UtcNow;
         }
 

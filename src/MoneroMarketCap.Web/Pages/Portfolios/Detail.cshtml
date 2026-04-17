@@ -69,6 +69,7 @@ else
             <tbody>
                 @foreach (var pc in Model.Portfolio.PortfolioCoins.OrderBy(p => p.Coin.Symbol))
                 {
+                    var isXmrRow = pc.Coin.Symbol.ToUpper() == "XMR";
                     <tr>
                         <td>
                             <div class="coin-name-cell">
@@ -85,7 +86,16 @@ else
                         <td class="text-end mono">$@pc.TotalValueUsd.ToString("N2", usd)</td>
                         @if (Model.XmrPrice > 0)
                         {
-                            <td class="text-end mono xmr-val">@xmrVal(pc.TotalValueUsd).ToString("N4", usd) XMR</td>
+                            <td class="text-end mono xmr-val">
+                                @if (isXmrRow)
+                                {
+                                    <span style="color:var(--xmr-text-muted)">—</span>
+                                }
+                                else
+                                {
+                                    @: @xmrVal(pc.TotalValueUsd).ToString("N4", usd) XMR
+                                }
+                            </td>
                         }
                         <td class="text-end mono">$@pc.TotalCostBasis.ToString("N2", usd)</td>
                         <td class="text-end mono @(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
@@ -93,8 +103,15 @@ else
                         </td>
                         @if (Model.XmrPrice > 0)
                         {
-                            <td class="text-end mono @(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger") xmr-val">
-                                @xmrVal(pc.UnrealizedPnl).ToString("N4", usd) XMR
+                            <td class="text-end mono xmr-val @(isXmrRow ? "" : (pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger"))">
+                                @if (isXmrRow)
+                                {
+                                    <span style="color:var(--xmr-text-muted)">—</span>
+                                }
+                                else
+                                {
+                                    @: @xmrVal(pc.UnrealizedPnl).ToString("N4", usd) XMR
+                                }
                             </td>
                         }
                         <td class="text-end">
