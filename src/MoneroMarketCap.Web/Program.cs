@@ -95,72 +95,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// ── Backfill price history in background (non-blocking) ──────────────────────
-_ = Task.Run(async () =>
-{
-    await Task.Delay(5000); // let the app fully start first
-
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var gecko = scope.ServiceProvider.GetRequiredService<ICoinGeckoService>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-    try
-    {
-        var hasHistory = await db.CoinPriceHistories.AnyAsync();
-        if (hasHistory) return;
-
-        logger.LogInformation("Starting price history backfill...");
-
-        var coins = await db.Coins
-            .Where(c => c.IsActive && c.CoinGeckoId != "")
-            .ToListAsync();
-
-        foreach (var coin in coins)
-        {
-            try
-            {
-                var raw = await gecko.GetMarketChartAsync(coin.CoinGeckoId, 365);
-                if (raw == null) continue;
-
-                using var doc = System.Text.Json.JsonDocument.Parse(raw);
-                foreach (var point in doc.RootElement.EnumerateArray())
-                {
-                    var ts = point[0].GetInt64();
-                    var price = point[1].GetDecimal();
-                    var date = DateTimeOffset.FromUnixTimeMilliseconds(ts).UtcDateTime.Date;
-
-                    db.CoinPriceHistories.Add(new MoneroMarketCap.Data.Models.CoinPriceHistory
-                    {
-                        CoinId = coin.Id,
-                        PriceUsd = price,
-                        MarketCapUsd = 0,
-                        CirculatingSupply = 0,
-                        Interval = "1d",
-                        RecordedAt = date
-                    });
-                }
-
-                await db.SaveChangesAsync();
-                logger.LogInformation("Backfilled {Name}", coin.Name);
-                await Task.Delay(2000);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning("Backfill failed for {Id}: {Msg}", coin.CoinGeckoId, ex.Message);
-            }
-        }
-
-        logger.LogInformation("Price history backfill complete.");
-    }
-    catch (Exception ex)
-    {
-        var logger2 = app.Services.GetRequiredService<ILogger<Program>>();
-        logger2.LogError(ex, "Backfill task failed");
-    }
-});
-
-// ── Chart endpoint — served from DB ──────────────────────────────────────────
+// ── Chart endpoint — served from DB (worker handles writes) ──────────────────
 app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     string coinGeckoId,
     IServiceScopeFactory scopeFactory,
@@ -173,21 +108,33 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     using var scope = scopeFactory.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    var cutoff = DateTime.UtcNow.Date.AddDays(-365);
+    // today + 364 prior days = 365 days total
+    var cutoff = DateTime.UtcNow.Date.AddDays(-364);
 
+    // Group by date to collapse any duplicate rows (defensive — worker upsert
+    // should prevent dupes, but older data may have some).
     var history = await db.CoinPriceHistories
         .Where(h => h.Coin.CoinGeckoId == coinGeckoId
                  && h.Interval == "1d"
                  && h.RecordedAt >= cutoff)
-        .OrderBy(h => h.RecordedAt)
-        .Select(h => new double[]
+        .GroupBy(h => h.RecordedAt.Date)
+        .Select(g => new
         {
-            new DateTimeOffset(h.RecordedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            (double)h.PriceUsd
+            Date = g.Key,
+            Price = g.OrderByDescending(h => h.RecordedAt).First().PriceUsd
         })
+        .OrderBy(x => x.Date)
         .ToListAsync();
 
-    var json = System.Text.Json.JsonSerializer.Serialize(history);
+    var result = history
+        .Select(x => new double[]
+        {
+            new DateTimeOffset(x.Date, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            (double)x.Price
+        })
+        .ToList();
+
+    var json = System.Text.Json.JsonSerializer.Serialize(result);
     cache.Set(cacheKey, json, TimeSpan.FromHours(1));
     return Results.Content(json, "application/json");
 });

@@ -120,38 +120,51 @@ public class CoinPriceUpdateService : BackgroundService
             }
         }
 
-        // 5. Record one daily history entry per active coin
-        var activeCoins = db.Coins.Local.Where(c => c.IsActive && topIds.Contains(c.CoinGeckoId)).ToList();
+        // 5. Upsert today's daily history entry for every active coin so the
+        //    current-day point on the 1y chart always reflects the latest price.
+        var activeCoins = db.Coins.Local
+            .Where(c => c.IsActive && topIds.Contains(c.CoinGeckoId))
+            .ToList();
         var activeIds = activeCoins.Select(c => c.Id).ToList();
 
-        var alreadyRecordedIds = await db.CoinPriceHistories
+        var todaysRows = await db.CoinPriceHistories
             .Where(h => h.Interval == "1d"
-                     && h.RecordedAt.Date == today
+                     && h.RecordedAt == today
                      && activeIds.Contains(h.CoinId))
-            .Select(h => h.CoinId)
             .ToListAsync();
 
-        var alreadyRecordedSet = alreadyRecordedIds.ToHashSet();
+        var todaysByCoinId = todaysRows.ToDictionary(h => h.CoinId, h => h);
+
+        int historyAdded = 0, historyUpdated = 0;
 
         foreach (var coin in activeCoins)
         {
-            if (alreadyRecordedSet.Contains(coin.Id)) continue;
-
-            db.CoinPriceHistories.Add(new CoinPriceHistory
+            if (todaysByCoinId.TryGetValue(coin.Id, out var row))
             {
-                CoinId = coin.Id,
-                PriceUsd = coin.PriceUsd,
-                MarketCapUsd = coin.MarketCapUsd,
-                CirculatingSupply = coin.CirculatingSupply,
-                Interval = "1d",
-                RecordedAt = today
-            });
+                row.PriceUsd = coin.PriceUsd;
+                row.MarketCapUsd = coin.MarketCapUsd;
+                row.CirculatingSupply = coin.CirculatingSupply;
+                historyUpdated++;
+            }
+            else
+            {
+                db.CoinPriceHistories.Add(new CoinPriceHistory
+                {
+                    CoinId = coin.Id,
+                    PriceUsd = coin.PriceUsd,
+                    MarketCapUsd = coin.MarketCapUsd,
+                    CirculatingSupply = coin.CirculatingSupply,
+                    Interval = "1d",
+                    RecordedAt = today
+                });
+                historyAdded++;
+            }
         }
 
         await db.SaveChangesAsync();
 
         this.logger.LogInformation(
-            "Top {Top} refresh complete. Added: {Added}, Updated: {Updated}, Deactivated: {Deactivated}, Interval: {Interval}min",
-            this.topCount, added, updated, deactivated, this.interval.TotalMinutes);
+            "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
+            this.topCount, added, updated, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
     }
 }
