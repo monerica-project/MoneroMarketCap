@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "My Portfolios";
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
 }
 
 <meta name="format-detection" content="telephone=no" />
@@ -26,6 +27,51 @@
 }
 else
 {
+    @if (Model.Allocations.Any() && totalAlloc > 0)
+    {
+        <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Allocation by Coin</h5>
+                <div class="row align-items-center">
+                    <div class="col-md-5">
+                        <div style="position:relative;max-width:340px;margin:0 auto">
+                            <canvas id="allocationChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <table class="table table-sm mb-0" style="color:inherit">
+                            <thead>
+                                <tr>
+                                    <th>Coin</th>
+                                    <th class="text-end">Value (USD)</th>
+                                    <th class="text-end">%</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in Model.Allocations)
+                                {
+                                    var pct = (double)(a.ValueUsd / totalAlloc) * 100.0;
+                                    <tr>
+                                        <td><strong>@a.Symbol</strong></td>
+                                        <td class="text-end">$@a.ValueUsd.ToString("N2", usd)</td>
+                                        <td class="text-end">@pct.ToString("N2", usd)%</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Total</th>
+                                    <th class="text-end">$@totalAlloc.ToString("N2", usd)</th>
+                                    <th class="text-end">100.00%</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <div class="row mb-4">
         @foreach (var p in Model.Portfolios)
         {
@@ -62,3 +108,59 @@ else
         <button type="submit" class="btn btn-success">Create</button>
     </div>
 </form>
+
+@if (Model.Allocations.Any() && totalAlloc > 0)
+{
+    <script src="~/js/chart.umd.min.js"></script>
+    <script>
+        (function() {
+        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
+        const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
+            const palette = [
+                '#4a90e2', '#50c878', '#e74c3c', '#9b59b6', '#f1c40f',
+                '#1abc9c', '#e67e22', '#34495e', '#ff69b4', '#2ecc71',
+                '#8e44ad', '#3498db', '#d35400', '#16a085', '#c0392b'
+            ];
+            const xmrOrange = '#ff6600';
+            let paletteIdx = 0;
+            const colors = labels.map(label => {
+                if (label === 'XMR') return xmrOrange;
+                return palette[paletteIdx++ % palette.length];
+            });
+        const total = values.reduce((s, v) => s + v, 0);
+
+        const ctx = document.getElementById('allocationChart').getContext('2d');
+        new Chart(ctx, {
+        type: 'pie',
+        data: {
+        labels: labels,
+        datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: 'rgba(0,0,0,0.3)',
+        borderWidth: 1
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+        legend: {
+        position: 'bottom',
+        labels: { color: getComputedStyle(document.body).color }
+        },
+        tooltip: {
+        callbacks: {
+        label: function(ctx) {
+        const v = ctx.parsed;
+        const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
+        return ctx.label + ': $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
+        }
+        }
+        }
+        }
+        }
+        });
+        })();
+    </script>
+}

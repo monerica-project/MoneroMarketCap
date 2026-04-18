@@ -17,6 +17,8 @@ public class IndexModel : PageModel
     public decimal TotalNetValue { get; set; }
     public decimal XmrPrice { get; set; }
 
+    public IReadOnlyList<AllocationSlice> Allocations { get; set; } = new List<AllocationSlice>();
+
     [BindProperty] public string PortfolioName { get; set; } = "My Portfolio";
 
     public IndexModel(IPortfolioRepository portfolios, ICoinRepository coins)
@@ -36,6 +38,18 @@ public class IndexModel : PageModel
         var allCoins = await _coins.GetAllAsync();
         var xmr = allCoins.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
         XmrPrice = xmr?.PriceUsd ?? 0;
+
+        Allocations = Portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .GroupBy(pc => pc.Coin.Symbol.ToUpper())
+            .Select(g => new AllocationSlice
+            {
+                Symbol = g.Key,
+                ValueUsd = g.Sum(pc => pc.TotalAmount * pc.Coin.PriceUsd)
+            })
+            .Where(a => a.ValueUsd > 0)
+            .OrderByDescending(a => a.ValueUsd)
+            .ToList();
     }
 
     public async Task<IActionResult> OnPostCreateAsync()
@@ -48,5 +62,11 @@ public class IndexModel : PageModel
         });
         await _portfolios.SaveChangesAsync();
         return RedirectToPage();
+    }
+
+    public class AllocationSlice
+    {
+        public string Symbol { get; set; } = "";
+        public decimal ValueUsd { get; set; }
     }
 }
