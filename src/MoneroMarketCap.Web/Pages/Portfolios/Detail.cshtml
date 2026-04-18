@@ -186,6 +186,9 @@ else
     </div>
 </div>
 
+<partial name="_SponsorList" />
+
+
 @section Scripts {
     <script>
         const prices = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CoinPrices));

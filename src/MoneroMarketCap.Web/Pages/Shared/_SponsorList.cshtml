@@ -1,0 +1,106 @@
+﻿<div class="sponsor-list mt-4" id="sponsor-list-section">
+    <h5 class="mb-3">
+        Sponsors
+        <span style="color:var(--xmr-text-muted);font-size:0.8rem;font-weight:normal">
+            via <a href="https://monerica.com" target="_blank" rel="noopener" style="color:var(--xmr-orange);text-decoration:none">Monerica</a>
+        </span>
+    </h5>
+    <div class="sponsor-list-grid" id="sponsor-list-grid">
+        <div class="sponsor-loading" id="sponsor-list-loading">Loading sponsors...</div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const typeOrder = { 'MainSponsor': 0, 'CategorySponsor': 1, 'SubcategorySponsor': 2 };
+
+        function sponsorTypeBadge(type) {
+            if (type === 'MainSponsor') return '<span class="sp-badge sp-main">Main</span>';
+            if (type === 'CategorySponsor') return '<span class="sp-badge sp-cat">Category</span>';
+            if (type === 'SubcategorySponsor') return '<span class="sp-badge sp-sub">Subcategory</span>';
+            return '';
+        }
+
+        function truncateWords(text, maxChars) {
+            if (!text || text.length <= maxChars) return text || '';
+            const cut = text.substring(0, maxChars);
+            const lastSpace = cut.lastIndexOf(' ');
+            return (lastSpace > 0 ? cut.substring(0, lastSpace) : cut) + '…';
+        }
+
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        async function loadSponsorList() {
+            const grid = document.getElementById('sponsor-list-grid');
+            if (!grid) return;
+            try {
+                const res = await fetch('/api/sponsors');
+                if (!res.ok) {
+                    grid.innerHTML = '<div style="color:var(--xmr-text-muted);font-size:0.85rem">No sponsors available.</div>';
+                    return;
+                }
+                const data = await res.json();
+                if (!data || data.length === 0) {
+                    grid.innerHTML = '<div style="color:var(--xmr-text-muted);font-size:0.85rem">No sponsors available.</div>';
+                    return;
+                }
+                const sorted = data.slice().sort((a, b) => {
+                    const tDiff = (typeOrder[a.sponsorshipType] ?? 9) - (typeOrder[b.sponsorshipType] ?? 9);
+                    if (tDiff !== 0) return tDiff;
+                    return new Date(b.expirationDate) - new Date(a.expirationDate);
+                });
+                grid.innerHTML = sorted.map(s => `
+                            <a class="sponsor-card" href="${escapeHtml(s.link)}" target="_blank" rel="noopener sponsored">
+                                ${sponsorTypeBadge(s.sponsorshipType)}
+                                <span class="sp-name">${escapeHtml(s.name)}</span>
+                                <span class="sp-desc">${escapeHtml(truncateWords(s.description, 180))}</span>
+                            </a>
+                        `).join('');
+            } catch (e) {
+                grid.innerHTML = '<div style="color:var(--xmr-text-muted);font-size:0.85rem">Failed to load sponsors.</div>';
+            }
+        }
+
+        loadSponsorList();
+    })();
+</script>
+
+<style>
+    .sponsor-list-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 0.75rem;
+    }
+
+        .sponsor-list-grid .sponsor-card {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            padding: 0.75rem;
+            background: var(--xmr-surface);
+            border: 1px solid var(--xmr-border);
+            border-radius: 6px;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.15s ease;
+        }
+
+            .sponsor-list-grid .sponsor-card:hover {
+                border-color: var(--xmr-orange);
+            }
+
+        .sponsor-list-grid .sp-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .sponsor-list-grid .sp-desc {
+            font-size: 0.82rem;
+            color: var(--xmr-text-muted);
+            line-height: 1.35;
+        }
+</style>
