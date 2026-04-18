@@ -1,27 +1,77 @@
 ﻿@page
 @model RegisterModel
+@{
+    ViewData["Title"] = "Create Account";
+}
 
-<h2>Create Account</h2>
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+            <div class="card-body">
+                <h3 class="card-title mb-4 text-center">Create Account</h3>
 
-@if (Model.GeneratedUsername != null)
-{
-    <div style="border:1px solid green; padding:1rem; margin:1rem 0;">
-        <strong>Save these credentials — they won't be shown again!</strong><br />
-        Username: <code>@Model.GeneratedUsername</code><br />
-        Password: <code>@Model.GeneratedPassword</code>
+                @if (Model.GeneratedUsername != null)
+                {
+                    <div class="alert alert-warning" style="font-size:0.9rem">
+                        <strong>⚠ Save these credentials — they won't be shown again!</strong>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;color:var(--xmr-text-muted)">Username</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control mono" value="@Model.GeneratedUsername" id="gen-username" readonly />
+                            <button type="button" class="btn btn-outline-secondary" onclick="copyValue('gen-username', this)">Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label" style="font-size:0.85rem;color:var(--xmr-text-muted)">Password</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control mono" value="@Model.GeneratedPassword" id="gen-password" readonly />
+                            <button type="button" class="btn btn-outline-secondary" onclick="copyValue('gen-password', this)">Copy</button>
+                        </div>
+                    </div>
+
+                    <a href="/Login" class="btn btn-primary w-100">Go to Login</a>
+
+                    <script>
+                                        function copyValue(id, btn) {
+                                            const el = document.getElementById(id);
+                                            el.select();
+                                            navigator.clipboard.writeText(el.value).then(() => {
+                                                const original = btn.textContent;
+                                                btn.textContent = 'Copied!';
+                                                setTimeout(() => btn.textContent = original, 1500);
+                                            });
+                                        }
+                    </script>
+                }
+                else
+                {
+                    <p style="color:var(--xmr-text-muted);font-size:0.9rem" class="mb-3">
+                        We generate a random username and password for you — no email, no personal info.
+                    </p>
+
+                    <form method="post">
+                        @Html.AntiForgeryToken()
+
+                        <div class="mb-3">
+                            <label class="form-label">@Model.CaptchaQuestion</label>
+                            <input type="number" name="CaptchaAnswer" class="form-control" required autofocus />
+                            @if (!string.IsNullOrEmpty(Model.CaptchaError))
+                            {
+                                <div class="text-danger mt-2" style="font-size:0.85rem">@Model.CaptchaError</div>
+                            }
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100">Generate My Account</button>
+                    </form>
+
+                    <p class="text-center mt-3 mb-0" style="font-size:0.9rem">
+                        Already have an account? <a href="/Login" style="color:var(--xmr-orange)">Login</a>
+                    </p>
+                }
+            </div>
+        </div>
     </div>
-    <a href="/Login">Go to Login</a>
-}
-else
-{
-    <form method="post">
-        @Html.AntiForgeryToken()
-        <p>@Model.CaptchaQuestion</p>
-        <input type="number" name="CaptchaAnswer" required />
-        @if (!string.IsNullOrEmpty(Model.CaptchaError))
-        {
-            <p style="color:red;">@Model.CaptchaError</p>
-        }
-        <button type="submit">Generate My Account</button>
-    </form>
-}
+</div>

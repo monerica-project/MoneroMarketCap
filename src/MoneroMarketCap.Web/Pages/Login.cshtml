@@ -1,23 +1,40 @@
 ﻿@page
 @model LoginModel
-
-<h2>Login</h2>
-
-@if (Model.Error != null)
-{
-    <p style="color:red">@Model.Error</p>
+@{
+    ViewData["Title"] = "Login";
 }
 
-<form method="post">
-    <div>
-        <label>Username</label>
-        <input asp-for="Username" />
-    </div>
-    <div>
-        <label>Password</label>
-        <input asp-for="Password" type="password" />
-    </div>
-    <button type="submit">Login</button>
-</form>
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="card" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+            <div class="card-body">
+                <h3 class="card-title mb-4 text-center">Login</h3>
 
-<p>No account? <a href="/Register">Create one</a></p>
+                @if (Model.Error != null)
+                {
+                    <div class="alert alert-danger py-2" style="font-size:0.9rem">@Model.Error</div>
+                }
+
+                <form method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input asp-for="Username" class="form-control" autocomplete="username" autofocus />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input asp-for="Password" type="password" class="form-control" autocomplete="current-password" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Login</button>
+                </form>
+
+                <p class="text-center mt-3 mb-0" style="font-size:0.9rem">
+                    No account? <a href="/Register" style="color:var(--xmr-orange)">Create one</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
