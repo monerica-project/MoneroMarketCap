@@ -80,7 +80,6 @@ csx/
 rcf/
 !chromedriver.exe #allow
 !migrate.exe #allow
-
  
  
 /src/MoneroMarketCap/appsettings.json
