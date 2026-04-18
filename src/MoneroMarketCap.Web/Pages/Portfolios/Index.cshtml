@@ -18,6 +18,18 @@
                 @((Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)) XMR
             </div>
         }
+        <div class="mt-1" style="font-size:0.9rem;white-space:nowrap">
+            Total P&amp;L:
+            <strong class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
+                $@Model.TotalPnl.ToString("N2", usd)
+            </strong>
+            @if (Model.XmrPrice > 0)
+            {
+                <span class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")" style="font-size:0.82rem">
+                    (@((Model.TotalPnl / Model.XmrPrice).ToString("N4", usd)) XMR)
+                </span>
+            }
+        </div>
     </div>
 </div>
 

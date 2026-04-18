@@ -15,6 +15,8 @@ public class IndexModel : PageModel
 
     public IReadOnlyList<Portfolio> Portfolios { get; set; } = new List<Portfolio>();
     public decimal TotalNetValue { get; set; }
+    public decimal TotalCostBasis { get; set; }
+    public decimal TotalPnl { get; set; }
     public decimal XmrPrice { get; set; }
 
     public IReadOnlyList<AllocationSlice> Allocations { get; set; } = new List<AllocationSlice>();
@@ -50,6 +52,14 @@ public class IndexModel : PageModel
             .Where(a => a.ValueUsd > 0)
             .OrderByDescending(a => a.ValueUsd)
             .ToList();
+
+        TotalCostBasis = Portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .Sum(pc => pc.TotalCostBasis);
+
+        TotalPnl = Portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .Sum(pc => pc.UnrealizedPnl);
     }
 
     public async Task<IActionResult> OnPostCreateAsync()
