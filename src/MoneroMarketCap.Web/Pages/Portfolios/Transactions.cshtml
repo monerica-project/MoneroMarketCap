@@ -14,7 +14,11 @@
     return;
 }
 
-<h2>@Model.PortfolioCoin.Coin.Symbol — Transaction History</h2>
+<h2>
+    <a href="/coins/@Model.PortfolioCoin.Coin.Symbol.ToLower()" style="color:inherit;text-decoration:none">
+        @Model.PortfolioCoin.Coin.Symbol
+    </a> — Transaction History
+</h2>
 <p style="color:var(--xmr-text-muted)">Portfolio: <strong>@Model.PortfolioCoin.Portfolio.Name</strong></p>
 
 <div class="mb-4">

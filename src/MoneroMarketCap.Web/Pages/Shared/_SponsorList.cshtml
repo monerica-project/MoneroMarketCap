@@ -54,12 +54,12 @@
                     return new Date(b.expirationDate) - new Date(a.expirationDate);
                 });
                 grid.innerHTML = sorted.map(s => `
-                            <a class="sponsor-card" href="${escapeHtml(s.link)}" target="_blank" rel="noopener sponsored">
-                                ${sponsorTypeBadge(s.sponsorshipType)}
-                                <span class="sp-name">${escapeHtml(s.name)}</span>
-                                <span class="sp-desc">${escapeHtml(truncateWords(s.description, 180))}</span>
-                            </a>
-                        `).join('');
+                        <a class="sponsor-card" href="${escapeHtml(s.link)}" target="_blank" rel="noopener sponsored">
+                            ${sponsorTypeBadge(s.sponsorshipType)}
+                            <span class="sp-name">${escapeHtml(s.name)}</span>
+                            <span class="sp-desc">${escapeHtml(truncateWords(s.description, 180))}</span>
+                        </a>
+                    `).join('');
             } catch (e) {
                 grid.innerHTML = '<div style="color:var(--xmr-text-muted);font-size:0.85rem">Failed to load sponsors.</div>';
             }

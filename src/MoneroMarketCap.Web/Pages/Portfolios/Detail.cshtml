@@ -1,10 +1,11 @@
-﻿@page "{id:int}"
+@page "{id:int}"
 @model MoneroMarketCap.Pages.Portfolios.DetailModel
 @using MoneroMarketCap.Data.Models
 @{
     ViewData["Title"] = Model.Portfolio?.Name ?? "Portfolio";
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     decimal xmrVal(decimal v) => Model.XmrPrice > 0 ? v / Model.XmrPrice : 0;
+    var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
 }
 
 <meta name="format-detection" content="telephone=no" />
@@ -38,6 +39,45 @@
         <button type="submit" class="btn btn-danger btn-sm">🗑 Delete Portfolio</button>
     </form>
 </div>
+
+@if (Model.PnlSeries.Any() || (Model.Allocations.Any() && totalAlloc > 0))
+{
+    <div class="row mb-4">
+        @if (Model.Allocations.Any() && totalAlloc > 0)
+        {
+            <div class="col-lg-5 mb-3">
+                <div class="card h-100" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">Allocation</h5>
+                        <div style="position:relative;max-width:320px;margin:0 auto">
+                            <canvas id="portfolioAllocationChart" style="cursor:pointer"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (Model.PnlSeries.Any())
+        {
+            <div class="col-lg-7 mb-3">
+                <div class="card h-100" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">P&amp;L Over Time</h5>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary active" id="pnl-toggle-usd">USD</button>
+                                <button type="button" class="btn btn-outline-primary" id="pnl-toggle-xmr">XMR</button>
+                            </div>
+                        </div>
+                        <div style="position:relative;height:280px">
+                            <canvas id="pnlChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
 
 @if (!Model.Portfolio.PortfolioCoins.Any())
 {
@@ -75,10 +115,12 @@ else
                             <div class="coin-name-cell">
                                 @if (!string.IsNullOrEmpty(pc.Coin.ImageUrl))
                                 {
-                                    <img src="@pc.Coin.ImageUrl" width="18" height="18" style="border-radius:50%;flex-shrink:0" />
+                                    <a href="/coins/@pc.Coin.Symbol.ToLower()">
+                                        <img src="@pc.Coin.ImageUrl" width="18" height="18" style="border-radius:50%;flex-shrink:0" />
+                                    </a>
                                 }
-                                <span class="coin-symbol">@pc.Coin.Symbol</span>
-                                <span class="coin-name d-none d-lg-inline">@pc.Coin.Name</span>
+                                <a href="/coins/@pc.Coin.Symbol.ToLower()" class="coin-symbol" style="color:inherit;text-decoration:none">@pc.Coin.Symbol</a>
+                                <a href="/coins/@pc.Coin.Symbol.ToLower()" class="coin-name d-none d-lg-inline" style="color:var(--xmr-text-muted);text-decoration:none">@pc.Coin.Name</a>
                             </div>
                         </td>
                         <td class="text-end mono">@pc.TotalAmount.ToString("N8", usd)</td>
@@ -188,9 +230,143 @@ else
 
 <partial name="_SponsorList" />
 
-
 @section Scripts {
+    <script src="~/js/chart.umd.min.js"></script>
     <script>
+        // ─── Allocation pie ─────────────────────────────────────
+        (function () {
+            const allocLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
+            const allocValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
+            if (allocLabels.length === 0) return;
+
+            const palette = [
+                '#4a90e2', '#50c878', '#e74c3c', '#9b59b6', '#f1c40f',
+                '#1abc9c', '#e67e22', '#34495e', '#ff69b4', '#2ecc71',
+                '#8e44ad', '#3498db', '#d35400', '#16a085', '#c0392b'
+            ];
+            const xmrOrange = '#ff6600';
+            let idx = 0;
+            const colors = allocLabels.map(l => l === 'XMR' ? xmrOrange : palette[idx++ % palette.length]);
+            const total = allocValues.reduce((s, v) => s + v, 0);
+
+            const canvas = document.getElementById('portfolioAllocationChart');
+            if (!canvas) return;
+            new Chart(canvas.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: allocLabels,
+                    datasets: [{ data: allocValues, backgroundColor: colors, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 1 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    onClick: function (evt, els) {
+                        if (els && els.length > 0) window.location.href = '/coins/' + allocLabels[els[0].index].toLowerCase();
+                    },
+                    onHover: function (evt, els) {
+                        evt.native.target.style.cursor = (els && els.length > 0) ? 'pointer' : 'default';
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: getComputedStyle(document.body).color },
+                            onClick: function (evt, item) { window.location.href = '/coins/' + item.text.toLowerCase(); }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (c) {
+                                    const v = c.parsed;
+                                    const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
+                                    return c.label + ': $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })();
+
+        // ─── P&L over time ──────────────────────────────────────
+        (function() {
+        const pnlSeries = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                    Model.PnlSeries,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }
+                    ));
+        console.log('PnL series length:', pnlSeries ? pnlSeries.length : 'null');
+        if (!pnlSeries || pnlSeries.length === 0) return;
+
+        const canvas = document.getElementById('pnlChart');
+        if (!canvas) return;
+
+        let mode = 'usd';
+        const labels = pnlSeries.map(p => new Date(p.timestampMs).toISOString().slice(0, 10));
+
+        function dataFor(m) { return pnlSeries.map(p => m === 'usd' ? p.pnlUsd : p.pnlXmr); }
+
+        const chart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+        labels: labels,
+        datasets: [{
+        label: 'P&L (USD)',
+        data: dataFor('usd'),
+        borderColor: '#ff6600',
+        backgroundColor: 'rgba(255, 102, 0, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.2,
+        pointRadius: 0,
+        pointHoverRadius: 4
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        scales: {
+        x: {
+        ticks: { color: getComputedStyle(document.body).color, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+        grid: { color: 'rgba(128,128,128,0.15)' }
+        },
+        y: {
+        ticks: {
+        color: getComputedStyle(document.body).color,
+        callback: function(val) {
+        if (mode === 'usd') return '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        return val.toFixed(4) + ' XMR';
+        }
+        },
+        grid: { color: 'rgba(128,128,128,0.15)' }
+        }
+        },
+        plugins: {
+        legend: { display: false },
+        tooltip: {
+        callbacks: {
+        label: function(c) {
+        const v = c.parsed.y;
+        if (mode === 'usd') return 'P&L: $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return 'P&L: ' + v.toFixed(4) + ' XMR';
+        }
+        }
+        }
+        }
+        }
+        });
+
+        function setMode(newMode) {
+        mode = newMode;
+        chart.data.datasets[0].label = 'P&L (' + (mode === 'usd' ? 'USD' : 'XMR') + ')';
+        chart.data.datasets[0].data = dataFor(mode);
+        chart.update();
+        document.getElementById('pnl-toggle-usd').classList.toggle('active', mode === 'usd');
+        document.getElementById('pnl-toggle-xmr').classList.toggle('active', mode === 'xmr');
+        }
+        document.getElementById('pnl-toggle-usd').addEventListener('click', () => setMode('usd'));
+        document.getElementById('pnl-toggle-xmr').addEventListener('click', () => setMode('xmr'));
+        })();
+
+        // ─── Existing: price auto-fill on coin select ──────────
         const prices = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CoinPrices));
         const coinSelect = document.getElementById('coin-select');
         const priceInput = document.getElementById('price-input');

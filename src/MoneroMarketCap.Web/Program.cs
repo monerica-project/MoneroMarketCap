@@ -146,21 +146,27 @@ var _sponsorCacheTtl = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
 var _sponsorLock = new SemaphoreSlim(1, 1);
 
-app.MapGet("/api/sponsors", async (IHttpClientFactory httpFactory, CancellationToken ct) =>
+app.MapGet("/api/sponsors", async (HttpContext ctx, IHttpClientFactory httpFactory, CancellationToken cancel) =>
 {
-    if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
-        return Results.Content(_sponsorCache, "application/json");
+    ctx.Response.Headers["Cache-Control"] = "public, max-age=300";
 
-    await _sponsorLock.WaitAsync(ct);
+    if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
+    {
+        return Results.Content(_sponsorCache, "application/json");
+    }
+
+    await _sponsorLock.WaitAsync(cancel);
     try
     {
         if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
+        {
             return Results.Content(_sponsorCache, "application/json");
+        }
 
         var url = app.Configuration["Sponsors:SourceUrl"];
         var client = httpFactory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(10);
-        var json = await client.GetStringAsync(url, ct);
+        var json = await client.GetStringAsync(url, cancel);
         _sponsorCache = json;
         _sponsorCachedAt = DateTime.UtcNow;
         return Results.Content(json, "application/json");
