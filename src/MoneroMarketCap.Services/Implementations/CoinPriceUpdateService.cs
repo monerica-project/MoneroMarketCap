@@ -13,63 +13,86 @@ public class CoinPriceUpdateService : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ILogger<CoinPriceUpdateService> logger;
+    private readonly CoinHistoryBackfillService backfillService;
     private readonly TimeSpan interval;
     private readonly int topCount;
+    private readonly int backfillDelayMs;
+    private readonly int backfillThresholdDays;
 
     public CoinPriceUpdateService(
         IServiceScopeFactory scopeFactory,
         ILogger<CoinPriceUpdateService> logger,
+        CoinHistoryBackfillService backfillService,
         IConfiguration config)
     {
         this.scopeFactory = scopeFactory;
         this.logger = logger;
+        this.backfillService = backfillService;
         var minutes = config.GetValue<int>("CoinGecko:RefreshIntervalMinutes", 8);
         this.interval = TimeSpan.FromMinutes(minutes);
         this.topCount = config.GetValue<int>("CoinGecko:TopCount", 100);
+        this.backfillDelayMs = config.GetValue<int>("CoinGecko:BackfillDelayMs", 2500);
+        this.backfillThresholdDays = config.GetValue<int>("CoinGecko:BackfillThresholdDays", 300);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
+            List<int> coinsNeedingBackfill = new();
+
             try
             {
-                await UpdatePricesAsync();
+                coinsNeedingBackfill = await UpdatePricesAsync();
             }
             catch (Exception ex)
             {
                 this.logger.LogError(ex, "Price update cycle failed");
             }
+
+            if (coinsNeedingBackfill.Count > 0)
+            {
+                try
+                {
+                    await BackfillCoinsAsync(coinsNeedingBackfill, stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    this.logger.LogError(ex, "Per-cycle backfill failed");
+                }
+            }
+
             await Task.Delay(this.interval, stoppingToken);
         }
     }
 
-    private async Task UpdatePricesAsync()
+    /// <summary>
+    /// Reconciles top N, upserts today's history. Returns the list of Coin IDs
+    /// whose 1d history is below the backfill threshold and needs filling in.
+    /// </summary>
+    private async Task<List<int>> UpdatePricesAsync()
     {
         using var scope = this.scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var geckoService = scope.ServiceProvider.GetRequiredService<ICoinGeckoService>();
 
-        // 1. Pull the CURRENT top N from CoinGecko (source of truth)
         var topCoins = await geckoService.GetTopCoinsAsync(this.topCount);
         if (topCoins == null || topCoins.Count == 0)
         {
             this.logger.LogWarning("CoinGecko returned no top coins; skipping this cycle");
-            return;
+            return new();
         }
 
         var topIds = topCoins.Select(c => c.Id).ToHashSet();
 
-        // 2. Load all coins we already track
         var existing = await db.Coins.ToListAsync();
         var existingById = existing
             .Where(c => !string.IsNullOrEmpty(c.CoinGeckoId))
             .ToDictionary(c => c.CoinGeckoId, c => c);
 
         var today = DateTime.UtcNow.Date;
-        int added = 0, updated = 0, deactivated = 0;
+        int added = 0, updated = 0, reactivated = 0, deactivated = 0;
 
-        // 3. Upsert every coin currently in the top N
         foreach (var m in topCoins)
         {
             if (!existingById.TryGetValue(m.Id, out var coin))
@@ -86,10 +109,10 @@ public class CoinPriceUpdateService : BackgroundService
             }
             else
             {
+                if (!coin.IsActive) reactivated++;
                 updated++;
             }
 
-            // Price / market / volume fields that always refresh
             coin.IsActive = true;
             coin.PriceUsd = m.CurrentPrice ?? 0;
             coin.MarketCapUsd = m.MarketCap ?? 0;
@@ -105,8 +128,6 @@ public class CoinPriceUpdateService : BackgroundService
             coin.PriceChangePercent30d = m.PriceChangePercentage30d ?? coin.PriceChangePercent30d;
             coin.PriceChangePercent1y = m.PriceChangePercentage1y ?? coin.PriceChangePercent1y;
 
-            // ATH / ATL — must refresh every cycle. AthChangePercentage drifts every
-            // tick, and Ath/AthDate jump whenever a new high is hit (e.g. RaveDAO).
             coin.Ath = m.Ath ?? coin.Ath;
             coin.AthChangePercentage = m.AthChangePercentage ?? coin.AthChangePercentage;
             coin.AthDate = m.AthDate ?? coin.AthDate;
@@ -114,7 +135,6 @@ public class CoinPriceUpdateService : BackgroundService
             coin.AtlChangePercentage = m.AtlChangePercentage ?? coin.AtlChangePercentage;
             coin.AtlDate = m.AtlDate ?? coin.AtlDate;
 
-            // Supply / valuation fields (issuance, burns, cap changes)
             coin.TotalSupply = m.TotalSupply ?? coin.TotalSupply;
             coin.MaxSupply = m.MaxSupply ?? coin.MaxSupply;
             coin.FullyDilutedValuation = m.FullyDilutedValuation ?? coin.FullyDilutedValuation;
@@ -122,10 +142,8 @@ public class CoinPriceUpdateService : BackgroundService
             coin.UpdatedAt = DateTime.UtcNow;
         }
 
-        // Save here so newly-added coins get Ids before we write history rows
         await db.SaveChangesAsync();
 
-        // 4. Deactivate coins that fell out of the top N
         foreach (var coin in existing)
         {
             if (string.IsNullOrEmpty(coin.CoinGeckoId)) continue;
@@ -136,8 +154,6 @@ public class CoinPriceUpdateService : BackgroundService
             }
         }
 
-        // 5. Upsert today's daily history entry for every active coin so the
-        //    current-day point on the 1y chart always reflects the latest price.
         var activeCoins = db.Coins.Local
             .Where(c => c.IsActive && topIds.Contains(c.CoinGeckoId))
             .ToList();
@@ -180,7 +196,51 @@ public class CoinPriceUpdateService : BackgroundService
         await db.SaveChangesAsync();
 
         this.logger.LogInformation(
-            "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
-            this.topCount, added, updated, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
+            "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, reactivated: {Reactivated}, deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
+            this.topCount, added, updated, reactivated, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
+
+        // Find active coins with thin history (< threshold days) so they get backfilled.
+        // This covers newly-added entrants, reactivated dropouts, and any coin that
+        // ended up with incomplete history for any other reason.
+        var historyCounts = await db.CoinPriceHistories
+            .Where(h => h.Interval == "1d" && activeIds.Contains(h.CoinId))
+            .GroupBy(h => h.CoinId)
+            .Select(g => new { CoinId = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var countByCoinId = historyCounts.ToDictionary(x => x.CoinId, x => x.Count);
+
+        var toBackfill = activeIds
+            .Where(id => !countByCoinId.TryGetValue(id, out var count) || count < this.backfillThresholdDays)
+            .ToList();
+
+        if (toBackfill.Count > 0)
+        {
+            this.logger.LogInformation("Found {Count} active coin(s) with <{Threshold} days of history; queueing backfill",
+                toBackfill.Count, this.backfillThresholdDays);
+        }
+
+        return toBackfill;
+    }
+
+    private async Task BackfillCoinsAsync(List<int> coinIds, CancellationToken ct)
+    {
+        this.logger.LogInformation("Backfilling history for {Count} coin(s)", coinIds.Count);
+
+        int rowsTotal = 0, failed = 0;
+        foreach (var coinId in coinIds)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            var result = await this.backfillService.BackfillCoinAsync(coinId, ct);
+            if (result.Status == BackfillStatus.Failed) failed++;
+            rowsTotal += result.RowsInserted;
+
+            if (coinIds.Count > 1)
+                await Task.Delay(this.backfillDelayMs, ct);
+        }
+
+        this.logger.LogInformation("Per-cycle backfill done: {Rows} rows across {Count} coin(s), {Failed} failed",
+            rowsTotal, coinIds.Count, failed);
     }
 }

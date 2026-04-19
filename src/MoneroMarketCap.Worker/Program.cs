@@ -31,7 +31,8 @@ builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>()
 builder.Services.AddScoped<ICoinRepository, CoinRepository>();
 
 // Runs once on startup to fill any gap in daily history for active coins.
-builder.Services.AddHostedService<CoinHistoryBackfillService>();
+builder.Services.AddSingleton<CoinHistoryBackfillService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CoinHistoryBackfillService>());
 
 // Ongoing: reconciles top N, upserts coin rows, upserts today's history row each cycle.
 builder.Services.AddHostedService<CoinPriceUpdateService>();

@@ -11,8 +11,9 @@ using MoneroMarketCap.Services.Interfaces;
 namespace MoneroMarketCap.Services.Implementations;
 
 /// <summary>
-/// One-shot backfill on startup. For each active coin, pulls the daily
-/// market_chart from CoinGecko and inserts any missing 1d history rows.
+/// Fills in daily history for active coins. Runs once on startup as a
+/// BackgroundService, and exposes BackfillCoinAsync for on-demand calls
+/// (used when a new coin enters the top N or a dropout returns).
 /// Safe to re-run: existing (CoinId, RecordedAt) rows are skipped.
 /// </summary>
 public class CoinHistoryBackfillService : BackgroundService
@@ -35,30 +36,31 @@ public class CoinHistoryBackfillService : BackgroundService
         this.enabled = config.GetValue<bool>("CoinGecko:BackfillOnStartup", true);
     }
 
+    public int Days => this.days;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!this.enabled)
         {
-            this.logger.LogInformation("History backfill disabled via config; skipping");
+            this.logger.LogInformation("Startup history backfill disabled via config; skipping");
             return;
         }
 
-        // Let the main update service do its first cycle so the Coins table is populated
-        // before we try to backfill history for them.
+        // Let the update service do its first cycle so the Coins table is populated.
         await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
         if (stoppingToken.IsCancellationRequested) return;
 
         try
         {
-            await RunBackfillAsync(stoppingToken);
+            await RunStartupBackfillAsync(stoppingToken);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "History backfill failed");
+            this.logger.LogError(ex, "Startup history backfill failed");
         }
     }
 
-    private async Task RunBackfillAsync(CancellationToken ct)
+    private async Task RunStartupBackfillAsync(CancellationToken ct)
     {
         using var scope = this.scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -68,105 +70,138 @@ public class CoinHistoryBackfillService : BackgroundService
             .Where(c => c.IsActive && c.CoinGeckoId != null && c.CoinGeckoId != "")
             .ToListAsync(ct);
 
-        this.logger.LogInformation("Backfill starting for {Count} active coins, {Days} days each",
+        this.logger.LogInformation("Startup backfill for {Count} active coins, {Days} days each",
             activeCoins.Count, this.days);
 
-        int coinsProcessed = 0, rowsInserted = 0, coinsSkipped = 0, coinsFailed = 0;
+        int processed = 0, rowsInserted = 0, skipped = 0, failed = 0;
 
         foreach (var coin in activeCoins)
         {
             if (ct.IsCancellationRequested) break;
 
-            try
+            var result = await BackfillCoinInternalAsync(db, gecko, coin, this.days, ct);
+            switch (result.Status)
             {
-                var pricesJson = await gecko.GetMarketChartAsync(coin.CoinGeckoId!, this.days);
-                if (string.IsNullOrEmpty(pricesJson))
-                {
-                    coinsFailed++;
-                    continue;
-                }
-
-                // market_chart "prices" is an array of [unix_ms, price] pairs.
-                var pricesByDate = new Dictionary<DateTime, decimal>();
-                using (var doc = JsonDocument.Parse(pricesJson))
-                {
-                    foreach (var pair in doc.RootElement.EnumerateArray())
-                    {
-                        if (pair.GetArrayLength() < 2) continue;
-                        var ms = pair[0].GetInt64();
-                        var priceElement = pair[1];
-                        if (priceElement.ValueKind != JsonValueKind.Number) continue;
-
-                        var date = DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime.Date;
-                        var price = priceElement.GetDecimal();
-
-                        // CoinGecko daily points are one per day; last write wins if duplicates.
-                        pricesByDate[date] = price;
-                    }
-                }
-
-                if (pricesByDate.Count == 0)
-                {
-                    coinsSkipped++;
-                    continue;
-                }
-
-                // What do we already have for this coin?
-                var existingDates = await db.CoinPriceHistories
-                    .Where(h => h.CoinId == coin.Id && h.Interval == "1d")
-                    .Select(h => h.RecordedAt)
-                    .ToListAsync(ct);
-                var existingSet = existingDates.Select(d => d.Date).ToHashSet();
-
-                int insertedThisCoin = 0;
-                foreach (var kv in pricesByDate)
-                {
-                    if (existingSet.Contains(kv.Key)) continue;
-
-                    db.CoinPriceHistories.Add(new CoinPriceHistory
-                    {
-                        CoinId = coin.Id,
-                        PriceUsd = kv.Value,
-                        // We only have price from market_chart; leave mcap/supply at
-                        // 0 for historical points — the live updater fills current day.
-                        MarketCapUsd = 0,
-                        CirculatingSupply = 0,
-                        Interval = "1d",
-                        RecordedAt = kv.Key
-                    });
-                    insertedThisCoin++;
-                }
-
-                if (insertedThisCoin > 0)
-                {
-                    await db.SaveChangesAsync(ct);
-                    rowsInserted += insertedThisCoin;
-                }
-                else
-                {
-                    coinsSkipped++;
-                }
-
-                coinsProcessed++;
-
-                if (coinsProcessed % 10 == 0)
-                {
-                    this.logger.LogInformation("Backfill progress: {Done}/{Total} coins, {Rows} rows inserted",
-                        coinsProcessed, activeCoins.Count, rowsInserted);
-                }
-            }
-            catch (Exception ex)
-            {
-                coinsFailed++;
-                this.logger.LogWarning(ex, "Backfill failed for {Id}", coin.CoinGeckoId);
+                case BackfillStatus.Inserted:
+                    rowsInserted += result.RowsInserted;
+                    processed++;
+                    break;
+                case BackfillStatus.AlreadyCurrent:
+                    skipped++;
+                    processed++;
+                    break;
+                case BackfillStatus.Failed:
+                    failed++;
+                    break;
             }
 
-            // Rate-limit pacing for CoinGecko demo tier.
+            if (processed > 0 && processed % 10 == 0)
+            {
+                this.logger.LogInformation("Startup backfill progress: {Done}/{Total} coins, {Rows} rows",
+                    processed, activeCoins.Count, rowsInserted);
+            }
+
             await Task.Delay(this.delayMs, ct);
         }
 
         this.logger.LogInformation(
-            "Backfill complete. Processed: {Processed}, rows inserted: {Rows}, skipped (already current): {Skipped}, failed: {Failed}",
-            coinsProcessed, rowsInserted, coinsSkipped, coinsFailed);
+            "Startup backfill complete. Processed: {Processed}, rows: {Rows}, skipped: {Skipped}, failed: {Failed}",
+            processed, rowsInserted, skipped, failed);
+    }
+
+    /// <summary>
+    /// Backfill history for a single coin. Safe to call any time; will skip
+    /// dates already present. Uses its own DB scope so callers don't need to.
+    /// </summary>
+    public async Task<BackfillResult> BackfillCoinAsync(int coinId, CancellationToken ct = default)
+    {
+        using var scope = this.scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var gecko = scope.ServiceProvider.GetRequiredService<ICoinGeckoService>();
+
+        var coin = await db.Coins.FindAsync(new object[] { coinId }, ct);
+        if (coin == null || string.IsNullOrEmpty(coin.CoinGeckoId))
+            return new BackfillResult(BackfillStatus.Failed, 0);
+
+        return await BackfillCoinInternalAsync(db, gecko, coin, this.days, ct);
+    }
+
+    private async Task<BackfillResult> BackfillCoinInternalAsync(
+        AppDbContext db,
+        ICoinGeckoService gecko,
+        Coin coin,
+        int daysToFetch,
+        CancellationToken ct)
+    {
+        try
+        {
+            var pricesJson = await gecko.GetMarketChartAsync(coin.CoinGeckoId!, daysToFetch);
+            if (string.IsNullOrEmpty(pricesJson))
+                return new BackfillResult(BackfillStatus.Failed, 0);
+
+            var pricesByDate = new Dictionary<DateTime, decimal>();
+            using (var doc = JsonDocument.Parse(pricesJson))
+            {
+                foreach (var pair in doc.RootElement.EnumerateArray())
+                {
+                    if (pair.GetArrayLength() < 2) continue;
+                    var ms = pair[0].GetInt64();
+                    var priceElement = pair[1];
+                    if (priceElement.ValueKind != JsonValueKind.Number) continue;
+
+                    var date = DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime.Date;
+                    pricesByDate[date] = priceElement.GetDecimal();
+                }
+            }
+
+            if (pricesByDate.Count == 0)
+                return new BackfillResult(BackfillStatus.AlreadyCurrent, 0);
+
+            var existingDates = await db.CoinPriceHistories
+                .Where(h => h.CoinId == coin.Id && h.Interval == "1d")
+                .Select(h => h.RecordedAt)
+                .ToListAsync(ct);
+            var existingSet = existingDates.Select(d => d.Date).ToHashSet();
+
+            int insertedThisCoin = 0;
+            foreach (var kv in pricesByDate)
+            {
+                if (existingSet.Contains(kv.Key)) continue;
+
+                db.CoinPriceHistories.Add(new CoinPriceHistory
+                {
+                    CoinId = coin.Id,
+                    PriceUsd = kv.Value,
+                    MarketCapUsd = 0,
+                    CirculatingSupply = 0,
+                    Interval = "1d",
+                    RecordedAt = kv.Key
+                });
+                insertedThisCoin++;
+            }
+
+            if (insertedThisCoin > 0)
+            {
+                await db.SaveChangesAsync(ct);
+                this.logger.LogInformation("Backfilled {Coin}: {Rows} rows", coin.CoinGeckoId, insertedThisCoin);
+                return new BackfillResult(BackfillStatus.Inserted, insertedThisCoin);
+            }
+
+            return new BackfillResult(BackfillStatus.AlreadyCurrent, 0);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning(ex, "Backfill failed for {Id}", coin.CoinGeckoId);
+            return new BackfillResult(BackfillStatus.Failed, 0);
+        }
     }
 }
+
+public enum BackfillStatus
+{
+    Inserted,
+    AlreadyCurrent,
+    Failed
+}
+
+public record BackfillResult(BackfillStatus Status, int RowsInserted);
