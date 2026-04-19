@@ -108,11 +108,8 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     using var scope = scopeFactory.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // today + 364 prior days = 365 days total
     var cutoff = DateTime.UtcNow.Date.AddDays(-364);
 
-    // Group by date to collapse any duplicate rows (defensive — worker upsert
-    // should prevent dupes, but older data may have some).
     var history = await db.CoinPriceHistories
         .Where(h => h.Coin.CoinGeckoId == coinGeckoId
                  && h.Interval == "1d"
@@ -185,15 +182,17 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Lowercase URL redirect — GET requests only. POSTs keep their original path
+// (Razor Pages routing is case-insensitive, so they match regardless).
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    if (path != null && path != path.ToLowerInvariant())
+    if (HttpMethods.IsGet(context.Request.Method)
+        && path != null
+        && path != path.ToLowerInvariant())
     {
         var lower = path.ToLowerInvariant();
         var query = context.Request.QueryString;
-        // 308 Permanent Redirect preserves the HTTP method (POST stays POST).
-        // 301 downgrades POST to GET, which broke all form submissions.
         context.Response.StatusCode = 308;
         context.Response.Headers.Location = lower + query.ToString();
         return;
@@ -202,15 +201,11 @@ app.Use(async (context, next) =>
 });
 
 // Onion-Location header — advertises .onion equivalent to Tor Browser.
-// Tor Browser auto-detects this and offers to switch to the onion version,
-// preserving the current path so the user lands on the same page.
 var onionHost = builder.Configuration["Tor:OnionHost"];
 if (!string.IsNullOrEmpty(onionHost))
 {
     app.Use(async (context, next) =>
     {
-        // Only advertise on successful HTML responses to real pages,
-        // not on API responses, redirects, or error pages.
         context.Response.OnStarting(() =>
         {
             var statusCode = context.Response.StatusCode;
