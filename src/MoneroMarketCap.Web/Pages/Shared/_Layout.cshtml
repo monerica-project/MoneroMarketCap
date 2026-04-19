@@ -1,5 +1,5 @@
 ﻿@using MoneroMarketCap.Data.Constants
-@using MoneroMarketCap.Data.Models
+@inject IConfiguration Configuration
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -71,10 +71,16 @@
             &copy; @DateTime.UtcNow.Year - MoneroMarketCap
             &nbsp;|&nbsp;
             <a asp-page="/Contact" style="color:var(--xmr-text-muted);font-size:0.85rem">Contact</a>
-            &nbsp;|&nbsp;
-            <a href="http://7vpxaew4op4jy3ltgmdyj6qwmjdkb27mpjkqnwozjxdk63lfj6q7fhad.onion"
-               style="color:var(--xmr-text-muted);font-size:0.85rem"
-               title="Available on Tor">&#x1F9C5; .onion</a>
+            @{
+                var onionHost = Configuration["Tor:OnionHost"];
+            }
+            @if (!string.IsNullOrEmpty(onionHost))
+            {
+                <text>&nbsp;|&nbsp;</text>
+                <a href="http://@onionHost@(Context.Request.Path)@(Context.Request.QueryString)"
+                   style="color:var(--xmr-text-muted);font-size:0.85rem"
+                   title="Available on Tor">&#x1F9C5; .onion</a>
+            }
             &nbsp;|&nbsp;
             <a style="color:var(--xmr-text-muted);font-size:0.85rem" href="https://github.com/monerica-project/MoneroMarketCap" target="_blank">Code</a>
         </div>

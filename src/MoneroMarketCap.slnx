@@ -3,6 +3,7 @@
     <File Path="../.gitignore" />
     <File Path="../CI/backup-postgres.ps1" />
     <File Path="../CI/deploy.ps1" />
+    <File Path="../README.md" />
     <File Path="StyleCop.Analyzers.ruleset" />
     <File Path="stylecop.json" />
   </Folder>

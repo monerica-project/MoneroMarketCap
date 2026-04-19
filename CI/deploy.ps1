@@ -229,13 +229,64 @@ Run-RemoteScript $pgScriptFile "/tmp/pg-setup.sh"
 Write-Ok "Database ready"
 
 # -- Step 4: Write appsettings.json --------------------------------------------
+# -- Step 4: Write appsettings.json --------------------------------------------
 Write-Step "Writing config"
 
 $connString = "Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD"
 
-$webCfgContent = "{`n  `"ConnectionStrings`": {`n    `"DefaultConnection`": `"$connString`"`n  },`n  `"CoinGecko`": {`n    `"ApiKey`": `"$COINGECKO_API_KEY`",`n    `"RefreshIntervalMinutes`": $COINGECKO_REFRESH_MINUTES`n  },`n  `"Admin`": {`n    `"Username`": `"$ADMIN_USERNAME`",`n    `"Password`": `"$ADMIN_PASSWORD`"`n  },`n  `"Sponsors`": {`n    `"SourceUrl`": `"$SPONSOR_URL`",`n    `"CacheTtlMinutes`": $SPONSOR_CACHE_TTL,`n    `"RotateIntervalSeconds`": $SPONSOR_ROTATE_SECONDS`n  }`n}`n"
+# If Tor is already set up on the server, grab the onion hostname so we can
+# include it in the web app's config (used for Onion-Location header + footer).
+$onionHost = ""
+try {
+    $onionHost = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
+        "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo ''").Trim()
+} catch {
+    $onionHost = ""
+}
 
-$workerCfgContent = "{`n  `"ConnectionStrings`": {`n    `"DefaultConnection`": `"$connString`"`n  },`n  `"CoinGecko`": {`n    `"ApiKey`": `"$COINGECKO_API_KEY`",`n    `"TopCoinsOnStartup`": 100,`n    `"RefreshIntervalMinutes`": $COINGECKO_REFRESH_MINUTES`n  }`n}`n"
+if ($onionHost) {
+    Write-Host "    Found onion: $onionHost" -ForegroundColor Gray
+}
+
+# Build web config as a hashtable, then serialize to JSON
+$webCfg = [ordered]@{
+    ConnectionStrings = @{
+        DefaultConnection = $connString
+    }
+    CoinGecko = [ordered]@{
+        ApiKey = $COINGECKO_API_KEY
+        RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
+    }
+    Admin = [ordered]@{
+        Username = $ADMIN_USERNAME
+        Password = $ADMIN_PASSWORD
+    }
+    Sponsors = [ordered]@{
+        SourceUrl = $SPONSOR_URL
+        CacheTtlMinutes = [int]$SPONSOR_CACHE_TTL
+        RotateIntervalSeconds = [int]$SPONSOR_ROTATE_SECONDS
+    }
+}
+
+if ($onionHost) {
+    $webCfg.Tor = [ordered]@{
+        OnionHost = $onionHost
+    }
+}
+
+$workerCfg = [ordered]@{
+    ConnectionStrings = @{
+        DefaultConnection = $connString
+    }
+    CoinGecko = [ordered]@{
+        ApiKey = $COINGECKO_API_KEY
+        TopCoinsOnStartup = 100
+        RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
+    }
+}
+
+$webCfgContent    = ($webCfg    | ConvertTo-Json -Depth 5) + "`n"
+$workerCfgContent = ($workerCfg | ConvertTo-Json -Depth 5) + "`n"
 
 $webCfgFile    = Join-Path $env:TEMP "web-appsettings.json"
 $workerCfgFile = Join-Path $env:TEMP "worker-appsettings.json"

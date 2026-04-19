@@ -201,6 +201,35 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Onion-Location header — advertises .onion equivalent to Tor Browser.
+// Tor Browser auto-detects this and offers to switch to the onion version,
+// preserving the current path so the user lands on the same page.
+var onionHost = builder.Configuration["Tor:OnionHost"];
+if (!string.IsNullOrEmpty(onionHost))
+{
+    app.Use(async (context, next) =>
+    {
+        // Only advertise on successful HTML responses to real pages,
+        // not on API responses, redirects, or error pages.
+        context.Response.OnStarting(() =>
+        {
+            var statusCode = context.Response.StatusCode;
+            var contentType = context.Response.ContentType ?? "";
+            var path = context.Request.Path.Value ?? "/";
+
+            if (statusCode == 200
+                && contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase)
+                && !path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+            {
+                var onionUrl = $"http://{onionHost}{path}{context.Request.QueryString}";
+                context.Response.Headers["Onion-Location"] = onionUrl;
+            }
+            return Task.CompletedTask;
+        });
+        await next();
+    });
+}
+
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAuthentication();
