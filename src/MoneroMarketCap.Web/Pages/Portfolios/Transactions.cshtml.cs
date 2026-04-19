@@ -23,6 +23,7 @@ public class TransactionsModel : PageModel
     [BindProperty] public decimal Amount { get; set; }
     [BindProperty] public decimal PriceUsdAtTime { get; set; }
     [BindProperty] public string? Notes { get; set; }
+    public bool PrivacyMode { get; set; }
 
     public TransactionsModel(AppDbContext db, IPortfolioRepository portfolios)
     {
@@ -31,6 +32,14 @@ public class TransactionsModel : PageModel
     }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    private async Task LoadPrivacyModeAsync()
+    {
+        PrivacyMode = await _db.Users
+            .Where(u => u.Id == GetUserId())
+            .Select(u => u.PrivacyMode)
+            .FirstOrDefaultAsync();
+    }
 
     private async Task<bool> LoadPortfolioCoin(int portfolioCoinId)
     {
@@ -56,6 +65,7 @@ public class TransactionsModel : PageModel
         if (!await LoadPortfolioCoin(portfolioCoinId))
             return Forbid();
 
+        await LoadPrivacyModeAsync();
         PriceUsdAtTime = CoinCurrentPrice;
         return Page();
     }
@@ -90,8 +100,6 @@ public class TransactionsModel : PageModel
 
         await _portfolios.DeleteTransactionAsync(transactionId);
 
-        // If that was the last transaction the PortfolioCoin is now deleted
-        // so redirect back to the portfolio instead
         if (isLastTransaction)
             return RedirectToPage("/Portfolios/Detail", new { id = portfolioId });
 

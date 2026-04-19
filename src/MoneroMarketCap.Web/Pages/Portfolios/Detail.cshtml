@@ -6,6 +6,7 @@
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     decimal xmrVal(decimal v) => Model.XmrPrice > 0 ? v / Model.XmrPrice : 0;
     var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
+    string Mask(string v) => Model.PrivacyMode ? "••••" : v;
 }
 
 <meta name="format-detection" content="telephone=no" />
@@ -16,16 +17,19 @@
     return;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>@Model.Portfolio.Name</h2>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0">@Model.Portfolio.Name</h2>
     <div class="text-end">
-        <div class="fs-5">Total Value: <strong>$@Model.Portfolio.TotalValueUsd.ToString("N2", usd)</strong></div>
+        <div class="fs-5">Total Value: <strong>@Mask($"${Model.Portfolio.TotalValueUsd.ToString("N2", usd)}")</strong></div>
         @if (Model.XmrPrice > 0)
         {
             <div style="color:var(--xmr-text-muted);font-size:0.85rem;white-space:nowrap">
-                @xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd) XMR
+                @Mask($"{xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd)} XMR")
             </div>
         }
+        <div class="mt-2">
+            <partial name="_PrivacyToggle" />
+        </div>
     </div>
 </div>
 
@@ -40,7 +44,7 @@
     </form>
 </div>
 
-@if (Model.PnlSeries.Any() || (Model.Allocations.Any() && totalAlloc > 0))
+@if (Model.Allocations.Any() && totalAlloc > 0 || (!Model.PrivacyMode && Model.PnlSeries.Any()))
 {
     <div class="row mb-4">
         @if (Model.Allocations.Any() && totalAlloc > 0)
@@ -57,7 +61,7 @@
             </div>
         }
 
-        @if (Model.PnlSeries.Any())
+        @if (!Model.PrivacyMode && Model.PnlSeries.Any())
         {
             <div class="col-lg-7 mb-3">
                 <div class="card h-100" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
@@ -103,6 +107,7 @@ else
                     {
                         <th class="text-end">P&amp;L (XMR)</th>
                     }
+                    <th class="text-end">%</th>
                     <th></th>
                 </tr>
             </thead>
@@ -110,6 +115,9 @@ else
                 @foreach (var pc in Model.Portfolio.PortfolioCoins.OrderBy(p => p.Coin.Symbol))
                 {
                     var isXmrRow = pc.Coin.Symbol.ToUpper() == "XMR";
+                    var pct = Model.Portfolio.TotalValueUsd > 0
+                        ? (double)(pc.TotalValueUsd / Model.Portfolio.TotalValueUsd) * 100.0
+                        : 0.0;
                     <tr>
                         <td>
                             <div class="coin-name-cell">
@@ -123,9 +131,9 @@ else
                                 <a href="/coins/@pc.Coin.Symbol.ToLower()" class="coin-name d-none d-lg-inline" style="color:var(--xmr-text-muted);text-decoration:none">@pc.Coin.Name</a>
                             </div>
                         </td>
-                        <td class="text-end mono">@pc.TotalAmount.ToString("N8", usd)</td>
+                        <td class="text-end mono">@Mask(pc.TotalAmount.ToString("N8", usd))</td>
                         <td class="text-end mono">$@pc.Coin.PriceUsd.ToString("N2", usd)</td>
-                        <td class="text-end mono">$@pc.TotalValueUsd.ToString("N2", usd)</td>
+                        <td class="text-end mono">@Mask($"${pc.TotalValueUsd.ToString("N2", usd)}")</td>
                         @if (Model.XmrPrice > 0)
                         {
                             <td class="text-end mono xmr-val">
@@ -135,13 +143,13 @@ else
                                 }
                                 else
                                 {
-                                    @: @xmrVal(pc.TotalValueUsd).ToString("N4", usd) XMR
+                                    @Mask($"{xmrVal(pc.TotalValueUsd).ToString("N4", usd)} XMR")
                                 }
                             </td>
                         }
-                        <td class="text-end mono">$@pc.TotalCostBasis.ToString("N2", usd)</td>
+                        <td class="text-end mono">@Mask($"${pc.TotalCostBasis.ToString("N2", usd)}")</td>
                         <td class="text-end mono @(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
-                            $@pc.UnrealizedPnl.ToString("N2", usd)
+                            @Mask($"${pc.UnrealizedPnl.ToString("N2", usd)}")
                         </td>
                         @if (Model.XmrPrice > 0)
                         {
@@ -152,10 +160,11 @@ else
                                 }
                                 else
                                 {
-                                    @: @xmrVal(pc.UnrealizedPnl).ToString("N4", usd) XMR
+                                    @Mask($"{xmrVal(pc.UnrealizedPnl).ToString("N4", usd)} XMR")
                                 }
                             </td>
                         }
+                        <td class="text-end mono">@pct.ToString("N2", usd)%</td>
                         <td class="text-end">
                             <a asp-page="/Portfolios/Transactions"
                                asp-route-portfolioCoinId="@pc.Id"
@@ -171,21 +180,22 @@ else
                 }
                 <tr style="border-top:2px solid var(--xmr-border);font-weight:600">
                     <td colspan="3">Total</td>
-                    <td class="text-end mono">$@Model.Portfolio.TotalValueUsd.ToString("N2", usd)</td>
+                    <td class="text-end mono">@Mask($"${Model.Portfolio.TotalValueUsd.ToString("N2", usd)}")</td>
                     @if (Model.XmrPrice > 0)
                     {
-                        <td class="text-end mono xmr-val">@xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd) XMR</td>
+                        <td class="text-end mono xmr-val">@Mask($"{xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd)} XMR")</td>
                     }
-                    <td class="text-end mono">$@totalBasis.ToString("N2", usd)</td>
+                    <td class="text-end mono">@Mask($"${totalBasis.ToString("N2", usd)}")</td>
                     <td class="text-end mono @(totalPnl >= 0 ? "text-success" : "text-danger")">
-                        $@totalPnl.ToString("N2", usd)
+                        @Mask($"${totalPnl.ToString("N2", usd)}")
                     </td>
                     @if (Model.XmrPrice > 0)
                     {
                         <td class="text-end mono @(totalPnl >= 0 ? "text-success" : "text-danger") xmr-val">
-                            @xmrVal(totalPnl).ToString("N4", usd) XMR
+                            @Mask($"{xmrVal(totalPnl).ToString("N4", usd)} XMR")
                         </td>
                     }
+                    <td class="text-end mono">100.00%</td>
                     <td></td>
                 </tr>
             </tfoot>
@@ -233,66 +243,72 @@ else
 @section Scripts {
     <script src="~/js/chart.umd.min.js"></script>
     <script>
+        const privacyMode = @(Model.PrivacyMode ? "true" : "false");
+
         // ─── Allocation pie ─────────────────────────────────────
-        (function () {
-            const allocLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
-            const allocValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
-            if (allocLabels.length === 0) return;
+        (function() {
+        const allocLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
+        const allocValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
+        if (allocLabels.length === 0) return;
 
-            const palette = [
-                '#4a90e2', '#50c878', '#e74c3c', '#9b59b6', '#f1c40f',
-                '#1abc9c', '#e67e22', '#34495e', '#ff69b4', '#2ecc71',
-                '#8e44ad', '#3498db', '#d35400', '#16a085', '#c0392b'
-            ];
-            const xmrOrange = '#ff6600';
-            let idx = 0;
-            const colors = allocLabels.map(l => l === 'XMR' ? xmrOrange : palette[idx++ % palette.length]);
-            const total = allocValues.reduce((s, v) => s + v, 0);
+        const palette = [
+        '#4a90e2', '#50c878', '#e74c3c', '#9b59b6', '#f1c40f',
+        '#1abc9c', '#e67e22', '#34495e', '#ff69b4', '#2ecc71',
+        '#8e44ad', '#3498db', '#d35400', '#16a085', '#c0392b'
+        ];
+        const xmrOrange = '#ff6600';
+        let idx = 0;
+        const colors = allocLabels.map(l => l === 'XMR' ? xmrOrange : palette[idx++ % palette.length]);
+        const total = allocValues.reduce((s, v) => s + v, 0);
 
-            const canvas = document.getElementById('portfolioAllocationChart');
-            if (!canvas) return;
-            new Chart(canvas.getContext('2d'), {
-                type: 'pie',
-                data: {
-                    labels: allocLabels,
-                    datasets: [{ data: allocValues, backgroundColor: colors, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 1 }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    onClick: function (evt, els) {
-                        if (els && els.length > 0) window.location.href = '/coins/' + allocLabels[els[0].index].toLowerCase();
-                    },
-                    onHover: function (evt, els) {
-                        evt.native.target.style.cursor = (els && els.length > 0) ? 'pointer' : 'default';
-                    },
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: { color: getComputedStyle(document.body).color },
-                            onClick: function (evt, item) { window.location.href = '/coins/' + item.text.toLowerCase(); }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function (c) {
-                                    const v = c.parsed;
-                                    const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
-                                    return c.label + ': $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+        const canvas = document.getElementById('portfolioAllocationChart');
+        if (!canvas) return;
+        new Chart(canvas.getContext('2d'), {
+        type: 'pie',
+        data: {
+        labels: allocLabels,
+        datasets: [{ data: allocValues, backgroundColor: colors, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 1 }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        onClick: function(evt, els) {
+        if (els && els.length > 0) window.location.href = '/coins/' + allocLabels[els[0].index].toLowerCase();
+        },
+        onHover: function(evt, els) {
+        evt.native.target.style.cursor = (els && els.length > 0) ? 'pointer' : 'default';
+        },
+        plugins: {
+        legend: {
+        position: 'bottom',
+        labels: { color: getComputedStyle(document.body).color },
+        onClick: function(evt, item) { window.location.href = '/coins/' + item.text.toLowerCase(); }
+        },
+        tooltip: {
+        callbacks: {
+        label: function(c) {
+        const v = c.parsed;
+        const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
+        if (privacyMode) {
+        return c.label + ': ' + pct + '%';
+        }
+        return c.label + ': $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
+        }
+        }
+        }
+        }
+        }
+        });
         })();
 
-        // ─── P&L over time ──────────────────────────────────────
+        // ─── P&L over time (hidden in privacy mode) ─────────────
         (function() {
+        if (privacyMode) return;
+
         const pnlSeries = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
                     Model.PnlSeries,
                     new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }
                     ));
-        console.log('PnL series length:', pnlSeries ? pnlSeries.length : 'null');
         if (!pnlSeries || pnlSeries.length === 0) return;
 
         const canvas = document.getElementById('pnlChart');
@@ -372,10 +388,10 @@ else
         const priceInput = document.getElementById('price-input');
 
         function updatePrice() {
-            const id = parseInt(coinSelect.value);
-            if (prices[id] !== undefined) {
-                priceInput.value = prices[id];
-            }
+        const id = parseInt(coinSelect.value);
+        if (prices[id] !== undefined) {
+        priceInput.value = prices[id];
+        }
         }
 
         coinSelect.addEventListener('change', updatePrice);

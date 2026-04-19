@@ -30,6 +30,7 @@ public class DetailModel : PageModel
     [BindProperty] public decimal Amount { get; set; }
     [BindProperty] public decimal PriceUsdAtTime { get; set; }
     [BindProperty] public string? Notes { get; set; }
+    public bool PrivacyMode { get; set; }
 
     public DetailModel(IPortfolioRepository portfolios, ICoinRepository coins, AppDbContext db)
     {
@@ -46,11 +47,20 @@ public class DetailModel : PageModel
         return Portfolio != null && Portfolio.UserId == GetUserId();
     }
 
+    private async Task LoadPrivacyModeAsync()
+    {
+        PrivacyMode = await _db.Users
+            .Where(u => u.Id == GetUserId())
+            .Select(u => u.PrivacyMode)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<IActionResult> OnGetAsync(int id)
     {
         if (!await LoadPortfolio(id))
             return NotFound();
 
+        await LoadPrivacyModeAsync();
         await LoadCoinOptions();
 
         var coins = await _coins.GetAllAsync();
@@ -62,7 +72,6 @@ public class DetailModel : PageModel
             XmrPrice = xmr.PriceUsd;
         }
 
-        // Build allocations + P&L timeline
         Allocations = Portfolio!.PortfolioCoins
             .Select(pc => new AllocationSlice
             {
@@ -127,7 +136,6 @@ public class DetailModel : PageModel
         if (Portfolio == null || !Portfolio.PortfolioCoins.Any())
             return new List<PnlPoint>();
 
-        // Gather all transactions across all coins in this portfolio, ordered by date
         var allTxs = Portfolio.PortfolioCoins
             .SelectMany(pc => pc.Transactions.Select(t => new
             {
@@ -148,7 +156,6 @@ public class DetailModel : PageModel
         var startDate = allTxs.First().TransactedAt.Date;
         var endDate = DateTime.UtcNow.Date;
 
-        // Load daily price history for every coin in the portfolio from startDate onward
         var coinGeckoIds = Portfolio.PortfolioCoins
             .Select(pc => pc.Coin.CoinGeckoId)
             .Distinct()
@@ -166,7 +173,6 @@ public class DetailModel : PageModel
             })
             .ToListAsync();
 
-        // priceLookup[coinGeckoId][date] = priceUsd
         var priceLookup = historyRaw
             .GroupBy(h => h.CoinGeckoId)
             .ToDictionary(
@@ -174,7 +180,6 @@ public class DetailModel : PageModel
                 g => g.GroupBy(x => x.Date)
                       .ToDictionary(dg => dg.Key, dg => dg.Last().PriceUsd));
 
-        // XMR historical prices (for XMR-denominated P&L line)
         var xmrGeckoId = Portfolio.PortfolioCoins
             .FirstOrDefault(pc => pc.Coin.Symbol.ToUpper() == "XMR")?.Coin.CoinGeckoId;
         if (xmrGeckoId == null)
@@ -195,10 +200,9 @@ public class DetailModel : PageModel
             }
         }
 
-        // Walk day by day
         var result = new List<PnlPoint>();
-        var holdings = new Dictionary<int, decimal>();   // coinId -> amount held
-        var costBasis = new Dictionary<int, decimal>();  // coinId -> cost basis USD
+        var holdings = new Dictionary<int, decimal>();
+        var costBasis = new Dictionary<int, decimal>();
         var coinIdToGeckoId = Portfolio.PortfolioCoins
             .ToDictionary(pc => pc.CoinId, pc => pc.Coin.CoinGeckoId);
 
@@ -207,7 +211,6 @@ public class DetailModel : PageModel
 
         for (var day = startDate; day <= endDate; day = day.AddDays(1))
         {
-            // Apply all transactions that happened on or before end of this day
             while (txIdx < allTxs.Count && allTxs[txIdx].TransactedAt.Date <= day)
             {
                 var tx = allTxs[txIdx];
@@ -221,7 +224,7 @@ public class DetailModel : PageModel
                     holdings[tx.CoinId] += tx.Amount;
                     costBasis[tx.CoinId] += tx.TotalUsd;
                 }
-                else // Sell: reduce holdings and reduce basis proportionally
+                else
                 {
                     var prevAmount = holdings[tx.CoinId];
                     if (prevAmount > 0)
@@ -235,7 +238,6 @@ public class DetailModel : PageModel
                 txIdx++;
             }
 
-            // Compute portfolio value and total basis on this day
             decimal valueUsd = 0;
             decimal totalBasis = 0;
             foreach (var kv in holdings)

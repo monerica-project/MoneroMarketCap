@@ -11,4 +11,6 @@ public class AppUser : AuditableEntity
 
     public bool IsInRole(string roleName) =>
         UserRoles.Any(ur => ur.Role?.Name == roleName);
+
+    public bool PrivacyMode { get; set; } = false;
 }

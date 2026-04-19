@@ -4,31 +4,35 @@
     ViewData["Title"] = "My Portfolios";
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
+    string Mask(string v) => Model.PrivacyMode ? "••••" : v;
 }
 
 <meta name="format-detection" content="telephone=no" />
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>My Portfolios</h2>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0">My Portfolios</h2>
     <div class="text-end">
-        <div class="fs-5">Total Net Value: <strong>$@Model.TotalNetValue.ToString("N2", usd)</strong></div>
+        <div class="fs-5">Total Net Value: <strong>@Mask($"${Model.TotalNetValue.ToString("N2", usd)}")</strong></div>
         @if (Model.XmrPrice > 0)
         {
             <div style="color:var(--xmr-text-muted);font-size:0.85rem;white-space:nowrap">
-                @((Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)) XMR
+                @Mask($"{(Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)} XMR")
             </div>
         }
         <div class="mt-1" style="font-size:0.9rem;white-space:nowrap">
             Total P&amp;L:
             <strong class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
-                $@Model.TotalPnl.ToString("N2", usd)
+                @Mask($"${Model.TotalPnl.ToString("N2", usd)}")
             </strong>
             @if (Model.XmrPrice > 0)
             {
                 <span class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")" style="font-size:0.82rem">
-                    (@((Model.TotalPnl / Model.XmrPrice).ToString("N4", usd)) XMR)
+                    (@Mask($"{(Model.TotalPnl / Model.XmrPrice).ToString("N4", usd)} XMR"))
                 </span>
             }
+        </div>
+        <div class="mt-2">
+            <partial name="_PrivacyToggle" />
         </div>
     </div>
 </div>
@@ -65,7 +69,7 @@ else
                                     var pct = (double)(a.ValueUsd / totalAlloc) * 100.0;
                                     <tr>
                                         <td><a href="/coins/@a.Symbol.ToLower()"><strong>@a.Symbol</strong></a></td>
-                                        <td class="text-end">$@a.ValueUsd.ToString("N2", usd)</td>
+                                        <td class="text-end">@Mask($"${a.ValueUsd.ToString("N2", usd)}")</td>
                                         <td class="text-end">@pct.ToString("N2", usd)%</td>
                                     </tr>
                                 }
@@ -73,7 +77,7 @@ else
                             <tfoot>
                                 <tr>
                                     <th>Total</th>
-                                    <th class="text-end">$@totalAlloc.ToString("N2", usd)</th>
+                                    <th class="text-end">@Mask($"${totalAlloc.ToString("N2", usd)}")</th>
                                     <th class="text-end">100.00%</th>
                                 </tr>
                             </tfoot>
@@ -92,12 +96,12 @@ else
                     <div class="card-body">
                         <h5 class="card-title">@p.Name</h5>
                         <p class="card-text mb-1">
-                            Value: <strong>$@p.TotalValueUsd.ToString("N2", usd)</strong>
+                            Value: <strong>@Mask($"${p.TotalValueUsd.ToString("N2", usd)}")</strong>
                         </p>
                         @if (Model.XmrPrice > 0)
                         {
                             <p class="card-text mb-1" style="color:var(--xmr-text-muted);font-size:0.82rem;white-space:nowrap">
-                                @((p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)) XMR
+                                @Mask($"{(p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)} XMR")
                             </p>
                         }
                         <p class="card-text mb-2" style="font-size:0.85rem">
@@ -128,6 +132,7 @@ else
     <script src="~/js/chart.umd.min.js"></script>
     <script>
         (function() {
+        const privacyMode = @(Model.PrivacyMode ? "true" : "false");
         const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
         const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
         const palette = [
@@ -183,6 +188,9 @@ else
         label: function(ctx) {
         const v = ctx.parsed;
         const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
+        if (privacyMode) {
+        return ctx.label + ': ' + pct + '%';
+        }
         return ctx.label + ': $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
         }
         }

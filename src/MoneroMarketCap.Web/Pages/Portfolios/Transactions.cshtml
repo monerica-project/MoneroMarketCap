@@ -4,6 +4,7 @@
 @{
     ViewData["Title"] = "Transaction History";
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    string Mask(string v) => Model.PrivacyMode ? "••••" : v;
 }
 
 <meta name="format-detection" content="telephone=no" />
@@ -14,12 +15,21 @@
     return;
 }
 
-<h2>
-    <a href="/coins/@Model.PortfolioCoin.Coin.Symbol.ToLower()" style="color:inherit;text-decoration:none">
-        @Model.PortfolioCoin.Coin.Symbol
-    </a> — Transaction History
-</h2>
-<p style="color:var(--xmr-text-muted)">Portfolio: <strong>@Model.PortfolioCoin.Portfolio.Name</strong></p>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-1">
+            <a href="/coins/@Model.PortfolioCoin.Coin.Symbol.ToLower()" style="color:inherit;text-decoration:none">
+                @Model.PortfolioCoin.Coin.Symbol
+            </a> — Transaction History
+        </h2>
+        <p class="mb-0" style="color:var(--xmr-text-muted)">
+            Portfolio: <strong>@Model.PortfolioCoin.Portfolio.Name</strong>
+        </p>
+    </div>
+    <div>
+        <partial name="_PrivacyToggle" />
+    </div>
+</div>
 
 <div class="mb-4">
     <a asp-page="/Portfolios/Detail" asp-route-id="@Model.PortfolioCoin.PortfolioId"
@@ -56,9 +66,9 @@ else
                                 @t.Type
                             </span>
                         </td>
-                        <td class="text-end mono">@t.Amount.ToString("N12", usd)</td>
-                        <td class="text-end mono">$@t.PriceUsdAtTime.ToString("N8", usd)</td>
-                        <td class="text-end mono">$@t.TotalUsd.ToString("N2", usd)</td>
+                        <td class="text-end mono">@Mask(t.Amount.ToString("N12", usd))</td>
+                        <td class="text-end mono">@Mask($"${t.PriceUsdAtTime.ToString("N8", usd)}")</td>
+                        <td class="text-end mono">@Mask($"${t.TotalUsd.ToString("N2", usd)}")</td>
                         <td>@t.Notes</td>
                         <td class="text-end">
                             <form method="post"

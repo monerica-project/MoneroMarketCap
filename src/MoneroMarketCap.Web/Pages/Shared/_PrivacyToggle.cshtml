@@ -1,0 +1,34 @@
+﻿@using Microsoft.EntityFrameworkCore
+@using MoneroMarketCap.Data
+@inject AppDbContext Db
+@{
+    bool privacyMode = false;
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(userIdClaim, out var uid))
+        {
+            privacyMode = await Db.Users
+                .Where(u => u.Id == uid)
+                .Select(u => u.PrivacyMode)
+                .FirstOrDefaultAsync();
+        }
+    }
+    var currentUrl = $"{Context.Request.Path}{Context.Request.QueryString}";
+}
+
+<form method="post" asp-page="/TogglePrivacy" asp-route-returnUrl="@currentUrl" style="display:inline">
+    @Html.AntiForgeryToken()
+    <button type="submit"
+            class="btn btn-sm @(privacyMode ? "btn-warning" : "btn-outline-secondary")"
+            title="@(privacyMode ? "Show amounts" : "Hide amounts")">
+        @if (privacyMode)
+        {
+            <span>👁 Show Amounts</span>
+        }
+        else
+        {
+            <span>🚫 Hide Amounts</span>
+        }
+    </button>
+</form>
