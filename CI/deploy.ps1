@@ -253,10 +253,13 @@ $webCfg = [ordered]@{
     ConnectionStrings = @{
         DefaultConnection = $connString
     }
-    CoinGecko = [ordered]@{
-        ApiKey = $COINGECKO_API_KEY
-        RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
-    }
+CoinGecko = [ordered]@{
+    ApiKey                 = $COINGECKO_API_KEY
+    BaseUrl                = $COINGECKO_BASE_URL
+    ApiKeyHeader           = $COINGECKO_API_KEY_HEADER
+    TopCoinsOnStartup      = 100
+    RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
+}
     Admin = [ordered]@{
         Username = $ADMIN_USERNAME
         Password = $ADMIN_PASSWORD
@@ -278,10 +281,11 @@ $workerCfg = [ordered]@{
     ConnectionStrings = @{
         DefaultConnection = $connString
     }
-    CoinGecko = [ordered]@{
-        ApiKey = $COINGECKO_API_KEY
-        TopCoinsOnStartup = 100
-        RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
+CoinGecko = [ordered]@{
+    ApiKey                 = $COINGECKO_API_KEY
+    BaseUrl                = $COINGECKO_BASE_URL
+    ApiKeyHeader           = $COINGECKO_API_KEY_HEADER
+    RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
     }
 }
 

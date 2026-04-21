@@ -8,6 +8,9 @@ namespace MoneroMarketCap.Services.Implementations;
 
 public class CoinGeckoService : ICoinGeckoService
 {
+    private const string DefaultBaseUrl = "https://api.coingecko.com/api/v3/";
+    private const string DefaultApiKeyHeader = "x-cg-demo-api-key";
+
     private readonly HttpClient _http;
     private readonly ILogger<CoinGeckoService> _logger;
 
@@ -19,16 +22,30 @@ public class CoinGeckoService : ICoinGeckoService
     public CoinGeckoService(HttpClient http, ILogger<CoinGeckoService> logger, IConfiguration config)
     {
         _http = http;
-        _http.BaseAddress = new Uri("https://api.coingecko.com/api/v3/");
+
+        var baseUrl = config["CoinGecko:BaseUrl"];
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            baseUrl = DefaultBaseUrl;
+        if (!baseUrl.EndsWith('/'))
+            baseUrl += "/";
+
+        _http.BaseAddress = new Uri(baseUrl);
         _http.Timeout = TimeSpan.FromSeconds(120);
         _http.DefaultRequestHeaders.Add("Accept", "application/json");
         _http.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
 
         var apiKey = config["CoinGecko:ApiKey"];
+        var apiKeyHeader = config["CoinGecko:ApiKeyHeader"];
+        if (string.IsNullOrWhiteSpace(apiKeyHeader))
+            apiKeyHeader = DefaultApiKeyHeader;
+
         if (!string.IsNullOrEmpty(apiKey))
-            _http.DefaultRequestHeaders.Add("x-cg-demo-api-key", apiKey);
+            _http.DefaultRequestHeaders.Add(apiKeyHeader, apiKey);
 
         _logger = logger;
+        _logger.LogInformation(
+            "CoinGecko client configured: BaseUrl={BaseUrl}, ApiKeyHeader={Header}, ApiKeyPresent={HasKey}",
+            baseUrl, apiKeyHeader, !string.IsNullOrEmpty(apiKey));
     }
 
     public async Task<string?> GetMarketChartAsync(string coinGeckoId, int days = 365)
