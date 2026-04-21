@@ -156,13 +156,13 @@ public class TransactionsModel : PageModel
         portfolioCoin.TotalCostBasis = totalCostBasis;
     }
 
-    public async Task<IActionResult> OnGetAsync(int portfolioCoinId, int page = 1)
+    public async Task<IActionResult> OnGetAsync(int portfolioCoinId, int pageNumber = 1)
     {
         if (!await LoadPortfolioCoin(portfolioCoinId))
             return Forbid();
 
         await LoadPrivacyModeAsync();
-        await LoadTransactionsPageAsync(portfolioCoinId, page);
+        await LoadTransactionsPageAsync(portfolioCoinId, pageNumber);
 
         if (TempData["ImportMessage"] is string msg)
         {
@@ -433,7 +433,7 @@ public class TransactionsModel : PageModel
         return RedirectToPage(new { portfolioCoinId });
     }
 
-    public async Task<IActionResult> OnPostEditAsync(int portfolioCoinId, int page = 1)
+    public async Task<IActionResult> OnPostEditAsync(int portfolioCoinId, int pageNumber = 1)
     {
         if (!await LoadPortfolioCoin(portfolioCoinId))
             return Forbid();
@@ -458,10 +458,10 @@ public class TransactionsModel : PageModel
         await RecalculateTotalsAsync(PortfolioCoin!);
         await _db.SaveChangesAsync();
 
-        return RedirectToPage(new { portfolioCoinId, page });
+        return RedirectToPage(new { portfolioCoinId, pageNumber });
     }
 
-    public async Task<IActionResult> OnPostDeleteAsync(int portfolioCoinId, int transactionId, int page = 1)
+    public async Task<IActionResult> OnPostDeleteAsync(int portfolioCoinId, int transactionId, int pageNumber = 1)
     {
         if (!await LoadPortfolioCoin(portfolioCoinId))
             return Forbid();
@@ -490,7 +490,7 @@ public class TransactionsModel : PageModel
         if (remainingCount <= 1)
             return RedirectToPage("/Portfolios/Detail", new { id = PortfolioCoin!.PortfolioId });
 
-        return RedirectToPage(new { portfolioCoinId, page });
+        return RedirectToPage(new { portfolioCoinId, pageNumber });
     }
 
     // ─── CSV helpers ────────────────────────────────────────────────────────
