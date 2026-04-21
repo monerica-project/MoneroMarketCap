@@ -1,0 +1,32 @@
+@page "/NotFound"
+@{
+    ViewData["Title"] = "404 — Page Not Found";
+    Layout = "_Layout";
+}
+
+<meta name="format-detection" content="telephone=no" />
+
+<div class="d-flex flex-column align-items-center justify-content-center text-center" style="min-height:60vh;padding:2rem 1rem">
+    <div style="font-size:6rem;font-weight:700;color:var(--xmr-orange);line-height:1;margin-bottom:0.5rem">
+        404
+    </div>
+    <h2 class="mb-3" style="color:var(--xmr-text)">Page not found</h2>
+    <p style="color:var(--xmr-text-muted);max-width:480px;margin-bottom:2rem">
+        The page you're looking for doesn't exist, was moved, or never existed in the first place.
+    </p>
+
+    <div class="d-flex gap-2 flex-wrap justify-content-center">
+        <a href="/" class="btn btn-primary"
+           style="background:var(--xmr-orange);border-color:var(--xmr-orange)">
+            ← Back to Home
+        </a>
+        <a href="/coins/xmr" class="btn btn-outline-secondary">
+            View Monero (XMR)
+        </a>
+    </div>
+
+    <div style="margin-top:3rem;color:var(--xmr-text-muted);font-size:0.85rem">
+        <span style="opacity:0.6">Mined by a confidential transaction · </span>
+        <a href="/" style="color:var(--xmr-text-muted);text-decoration:underline">MoneroMarketCap</a>
+    </div>
+</div>

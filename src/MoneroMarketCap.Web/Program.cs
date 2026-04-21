@@ -182,6 +182,9 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Route 404s (and other error codes) to the NotFound page
+app.UseStatusCodePagesWithReExecute("/NotFound");
+
 // Lowercase URL redirect — GET requests only. POSTs keep their original path
 // (Razor Pages routing is case-insensitive, so they match regardless).
 app.Use(async (context, next) =>
