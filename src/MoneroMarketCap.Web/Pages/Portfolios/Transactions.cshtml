@@ -1,4 +1,4 @@
-﻿@page
+@page
 @model MoneroMarketCap.Pages.Portfolios.TransactionsModel
 @using MoneroMarketCap.Data.Models
 @{
@@ -24,6 +24,10 @@
         </h2>
         <p class="mb-0" style="color:var(--xmr-text-muted)">
             Portfolio: <strong>@Model.PortfolioCoin.Portfolio.Name</strong>
+            @if (Model.TotalTransactionCount > 0)
+            {
+                <span>· @Model.TotalTransactionCount transaction@(Model.TotalTransactionCount == 1 ? "" : "s")</span>
+            }
         </p>
     </div>
     <div>
@@ -31,10 +35,63 @@
     </div>
 </div>
 
-<div class="mb-4">
+@if (!string.IsNullOrEmpty(Model.ImportMessage))
+{
+    <div class="alert @(Model.ImportSuccess ? "alert-success" : "alert-warning") mb-3">
+        @Model.ImportMessage
+    </div>
+}
+
+<div class="mb-4 d-flex gap-2 flex-wrap">
     <a asp-page="/Portfolios/Detail" asp-route-id="@Model.PortfolioCoin.PortfolioId"
        class="btn btn-secondary btn-sm">← Back to Portfolio</a>
+
+    @if (Model.TotalTransactionCount > 0)
+    {
+        <a asp-page-handler="Export"
+           asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+           class="btn btn-outline-primary btn-sm">
+            ⬇ Export CSV
+        </a>
+    }
+
+    @if (Model.IsXmrCoin)
+    {
+        <button type="button"
+                class="btn btn-outline-warning btn-sm"
+                onclick="const p=document.getElementById('import-panel');p.style.display=p.style.display==='none'?'':'none';">
+            ⬆ Import from Monero GUI
+        </button>
+    }
 </div>
+
+@if (Model.IsXmrCoin)
+{
+    <div id="import-panel" class="card mb-4" style="display:none;background:var(--xmr-surface);border-color:var(--xmr-border)">
+        <div class="card-header">Import from Monero GUI CSV</div>
+        <div class="card-body">
+            <p style="color:var(--xmr-text-muted);font-size:0.85rem">
+                Export your transactions from the Monero GUI wallet (<em>History → Export as CSV</em>) and upload the file here.
+                <strong>Incoming</strong> transactions become Buys, <strong>outgoing</strong> become Sells. Historical USD price
+                is looked up per day from the stored price history. Transactions with a txid that already exists for this coin are skipped.
+            </p>
+            <form method="post"
+                  asp-page-handler="ImportMonero"
+                  asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+                  enctype="multipart/form-data"
+                  class="row g-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-8">
+                    <label class="form-label">Monero GUI CSV file</label>
+                    <input type="file" name="ImportFile" accept=".csv,text/csv" class="form-control" required />
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
 
 <!-- Transaction list -->
 @if (!Model.Transactions.Any())
@@ -43,7 +100,7 @@
 }
 else
 {
-    <div class="table-responsive mb-4">
+    <div class="table-responsive mb-3">
         <table class="table market-table" style="font-size:0.82rem">
             <thead>
                 <tr>
@@ -52,6 +109,7 @@ else
                     <th class="text-end">Amount</th>
                     <th class="text-end">Price (USD)</th>
                     <th class="text-end">Total (USD)</th>
+                    <th>External ID</th>
                     <th>Notes</th>
                     <th></th>
                 </tr>
@@ -59,7 +117,11 @@ else
             <tbody>
                 @foreach (var t in Model.Transactions)
                 {
-                    <tr>
+                    var rowId  = $"tx-row-{t.Id}";
+                    var editId = $"tx-edit-{t.Id}";
+
+                    <!-- Display row -->
+                    <tr id="@rowId">
                         <td>@t.TransactedAt.ToString("yyyy-MM-dd HH:mm")</td>
                         <td>
                             <span class="@(t.Type == TransactionType.Buy ? "text-success" : "text-danger")">
@@ -69,12 +131,20 @@ else
                         <td class="text-end mono">@Mask(t.Amount.ToString("N12", usd))</td>
                         <td class="text-end mono">@Mask($"${t.PriceUsdAtTime.ToString("N8", usd)}")</td>
                         <td class="text-end mono">@Mask($"${t.TotalUsd.ToString("N2", usd)}")</td>
+                        <td class="mono" style="font-size:0.78rem;color:var(--xmr-text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@t.ExternalTransactionId">
+                            @(string.IsNullOrEmpty(t.ExternalTransactionId) ? "—" : t.ExternalTransactionId)
+                        </td>
                         <td>@t.Notes</td>
-                        <td class="text-end">
+                        <td class="text-end" style="white-space:nowrap">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    onclick="document.getElementById('@rowId').style.display='none';document.getElementById('@editId').style.display='';">
+                                Edit
+                            </button>
                             <form method="post"
                                   asp-page-handler="Delete"
                                   asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
                                   asp-route-transactionId="@t.Id"
+                                  asp-route-page="@Model.CurrentPage"
                                   onsubmit="return confirm('Delete this transaction?')"
                                   style="display:inline">
                                 @Html.AntiForgeryToken()
@@ -82,10 +152,134 @@ else
                             </form>
                         </td>
                     </tr>
+
+                    <!-- Edit row (hidden by default) -->
+                    <tr id="@editId" style="display:none;background:rgba(255,102,0,0.04)">
+                        <td colspan="8">
+                            <form method="post"
+                                  asp-page-handler="Edit"
+                                  asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+                                  asp-route-page="@Model.CurrentPage"
+                                  class="row g-2 align-items-end">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="EditTransactionId" value="@t.Id" />
+
+                                <div class="col-md-2">
+                                    <label class="form-label" style="font-size:0.75rem">Date (UTC)</label>
+                                    <input type="datetime-local" name="EditTransactedAt" class="form-control form-control-sm"
+                                           value="@t.TransactedAt.ToString("yyyy-MM-ddTHH:mm")" required />
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label" style="font-size:0.75rem">Type</label>
+                                    <select name="EditType" class="form-select form-select-sm">
+                                        <option value="Buy" selected="@(t.Type == TransactionType.Buy)">Buy</option>
+                                        <option value="Sell" selected="@(t.Type == TransactionType.Sell)">Sell</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label" style="font-size:0.75rem">Amount</label>
+                                    <input type="number" step="any" min="0" name="EditAmount"
+                                           class="form-control form-control-sm"
+                                           value="@t.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)" required />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label" style="font-size:0.75rem">Price (USD)</label>
+                                    <input type="number" step="any" min="0" name="EditPriceUsdAtTime"
+                                           class="form-control form-control-sm"
+                                           value="@t.PriceUsdAtTime.ToString(System.Globalization.CultureInfo.InvariantCulture)" required />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label" style="font-size:0.75rem">External ID</label>
+                                    <input type="text" name="EditExternalTransactionId"
+                                           class="form-control form-control-sm"
+                                           value="@t.ExternalTransactionId" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label" style="font-size:0.75rem">Notes</label>
+                                    <input type="text" name="EditNotes"
+                                           class="form-control form-control-sm"
+                                           value="@t.Notes" />
+                                </div>
+                                <div class="col-md-1 d-flex gap-1">
+                                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            onclick="document.getElementById('@editId').style.display='none';document.getElementById('@rowId').style.display='';">
+                                        ✕
+                                    </button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
                 }
             </tbody>
         </table>
     </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        var startIdx = (Model.CurrentPage - 1) * MoneroMarketCap.Pages.Portfolios.TransactionsModel.PageSize + 1;
+        var endIdx   = Math.Min(startIdx + Model.Transactions.Count - 1, Model.TotalTransactionCount);
+
+        <nav aria-label="Transactions paging" class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+            <span style="color:var(--xmr-text-muted);font-size:0.85rem">
+                Showing @startIdx–@endIdx of @Model.TotalTransactionCount
+            </span>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(Model.CurrentPage == 1 ? "disabled" : "")">
+                    <a class="page-link"
+                       asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+                       asp-route-page="@(Model.CurrentPage - 1)">← Prev</a>
+                </li>
+
+                @{
+                    var windowStart = Math.Max(1, Model.CurrentPage - 2);
+                    var windowEnd   = Math.Min(Model.TotalPages, windowStart + 4);
+                    windowStart = Math.Max(1, windowEnd - 4);
+                }
+
+                @if (windowStart > 1)
+                {
+                    <li class="page-item">
+                        <a class="page-link"
+                           asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+                           asp-route-page="1">1</a>
+                    </li>
+                    if (windowStart > 2)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                }
+
+                @for (int p = windowStart; p <= windowEnd; p++)
+                {
+                    <li class="page-item @(p == Model.CurrentPage ? "active" : "")">
+                        <a class="page-link"
+                           asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+                           asp-route-page="@p">@p</a>
+                    </li>
+                }
+
+                @if (windowEnd < Model.TotalPages)
+                {
+                    if (windowEnd < Model.TotalPages - 1)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                    <li class="page-item">
+                        <a class="page-link"
+                           asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+                           asp-route-page="@Model.TotalPages">@Model.TotalPages</a>
+                    </li>
+                }
+
+                <li class="page-item @(Model.CurrentPage == Model.TotalPages ? "disabled" : "")">
+                    <a class="page-link"
+                       asp-route-portfolioCoinId="@Model.PortfolioCoin.Id"
+                       asp-route-page="@(Model.CurrentPage + 1)">Next →</a>
+                </li>
+            </ul>
+        </nav>
+    }
 }
 
 <!-- Add transaction -->
@@ -98,21 +292,30 @@ else
               class="row g-3">
             @Html.AntiForgeryToken()
             <div class="col-md-2">
+                <label class="form-label">Date (UTC)</label>
+                <input asp-for="TransactedAt" type="datetime-local" class="form-control"
+                       value="@Model.TransactedAt.ToString("yyyy-MM-ddTHH:mm")" required />
+            </div>
+            <div class="col-md-1">
                 <label class="form-label">Type</label>
                 <select asp-for="TransactionType" class="form-select">
                     <option value="Buy">Buy</option>
                     <option value="Sell">Sell</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Amount</label>
                 <input asp-for="Amount" type="number" step="any" min="0" class="form-control" />
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Price at Time (USD)</label>
                 <input asp-for="PriceUsdAtTime" type="number" step="any" min="0" class="form-control" id="price-input" />
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label">External ID</label>
+                <input asp-for="ExternalTransactionId" class="form-control" placeholder="e.g. exchange trade ID" />
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Notes</label>
                 <input asp-for="Notes" class="form-control" />
             </div>
@@ -125,7 +328,11 @@ else
 
 @section Scripts {
     <script>
-        // Pre-fill price with current coin price on load
-        document.getElementById('price-input').value = @Model.CoinCurrentPrice.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        (function() {
+            const priceEl = document.getElementById('price-input');
+            if (priceEl && !priceEl.value) {
+                priceEl.value = @Model.CoinCurrentPrice.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+        })();
     </script>
 }

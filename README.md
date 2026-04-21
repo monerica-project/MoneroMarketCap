@@ -179,6 +179,12 @@ Make sure at minimum the following are ignored:
 CI/deploy-config.ps1
 CI/backup-config.ps1
 ```
+## Migrations
+```
+dotnet ef migrations add MIGRATIONNAME --project MoneroMarketCap.Data --startup-project MoneroMarketCap.Web
+
+dotnet ef database update --project MoneroMarketCap.Data --startup-project MoneroMarketCap.Web
+```
 
 ## License
 

@@ -33,8 +33,20 @@
     </div>
 </div>
 
-<div class="d-flex gap-2 mb-4">
+@if (!string.IsNullOrEmpty(Model.ImportMessage))
+{
+    <div class="alert @(Model.ImportSuccess ? "alert-success" : "alert-warning") mb-3">
+        @Model.ImportMessage
+    </div>
+}
+
+<div class="d-flex gap-2 mb-4 flex-wrap">
     <a asp-page="/Portfolios/Index" class="btn btn-secondary btn-sm">← Back</a>
+    <button type="button"
+            class="btn btn-outline-warning btn-sm"
+            onclick="const p=document.getElementById('import-panel');p.style.display=p.style.display==='none'?'':'none';">
+        ⬆ Import from Monero GUI
+    </button>
     <form method="post"
           asp-page-handler="DeletePortfolio"
           asp-route-id="@Model.Portfolio.Id"
@@ -42,6 +54,32 @@
         @Html.AntiForgeryToken()
         <button type="submit" class="btn btn-danger btn-sm">🗑 Delete Portfolio</button>
     </form>
+</div>
+
+<div id="import-panel" class="card mb-4" style="display:none;background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card-header">Import XMR Transactions from Monero GUI CSV</div>
+    <div class="card-body">
+        <p style="color:var(--xmr-text-muted);font-size:0.85rem">
+            Export your transactions from the Monero GUI wallet (<em>History → Export as CSV</em>) and upload the file here.
+            Transactions will be added to the <strong>XMR</strong> coin in this portfolio.
+            <strong>Incoming</strong> becomes Buy, <strong>outgoing</strong> becomes Sell. Historical USD price per day is
+            looked up automatically. Duplicates (by txid) are skipped.
+        </p>
+        <form method="post"
+              asp-page-handler="ImportMonero"
+              asp-route-id="@Model.Portfolio.Id"
+              enctype="multipart/form-data"
+              class="row g-2 align-items-end">
+            @Html.AntiForgeryToken()
+            <div class="col-md-8">
+                <label class="form-label">Monero GUI CSV file</label>
+                <input type="file" name="ImportFile" accept=".csv,text/csv" class="form-control" required />
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary">Import</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 @if (Model.Allocations.Any() && totalAlloc > 0 || (!Model.PrivacyMode && Model.PnlSeries.Any()))
@@ -208,26 +246,35 @@ else
     <div class="card-body">
         <form method="post" asp-page-handler="AddTransaction" asp-route-id="@Model.Portfolio.Id" class="row g-3">
             @Html.AntiForgeryToken()
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Coin</label>
                 <select asp-for="CoinId" asp-items="Model.CoinOptions" class="form-select" id="coin-select"></select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">Date (UTC)</label>
+                <input asp-for="TransactedAt" type="datetime-local" class="form-control"
+                       value="@Model.TransactedAt.ToString("yyyy-MM-ddTHH:mm")" required />
+            </div>
+            <div class="col-md-1">
                 <label class="form-label">Type</label>
                 <select asp-for="TransactionType" class="form-select">
                     <option value="Buy">Buy</option>
                     <option value="Sell">Sell</option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <label class="form-label">Amount</label>
                 <input asp-for="Amount" type="number" step="any" min="0" class="form-control" />
             </div>
             <div class="col-md-2">
-                <label class="form-label">Price at Time (USD)</label>
+                <label class="form-label">Price (USD)</label>
                 <input asp-for="PriceUsdAtTime" type="number" step="any" min="0" class="form-control" id="price-input" />
             </div>
             <div class="col-md-2">
+                <label class="form-label">External ID</label>
+                <input asp-for="ExternalTransactionId" class="form-control" placeholder="e.g. transaction ID" />
+            </div>
+            <div class="col-md-1">
                 <label class="form-label">Notes</label>
                 <input asp-for="Notes" class="form-control" />
             </div>
@@ -237,6 +284,7 @@ else
         </form>
     </div>
 </div>
+
 
 <partial name="_SponsorList" />
 

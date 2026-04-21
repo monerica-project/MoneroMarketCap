@@ -13,4 +13,10 @@ public class CoinTransaction : AuditableEntity
     public decimal TotalUsd => Amount * PriceUsdAtTime;
     public DateTime TransactedAt { get; set; } = DateTime.UtcNow;
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// User-supplied external reference (e.g., exchange trade ID, tx hash).
+    /// Free-form, not unique — just for personal tracking.
+    /// </summary>
+    public string? ExternalTransactionId { get; set; }
 }
