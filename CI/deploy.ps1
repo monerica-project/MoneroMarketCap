@@ -6,6 +6,7 @@
 #   -WebOnly      only deploy the web app
 #   -WorkerOnly   only deploy the worker
 #   -SSL          install Let's Encrypt SSL after deploy
+#   -Tor          set up Tor hidden service
 
 param(
     [switch]$SkipBuild,
@@ -29,6 +30,7 @@ if (-not (Test-Path $configPath)) {
 # -- Helpers -------------------------------------------------------------------
 function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "    OK: $msg" -ForegroundColor Green }
+function Write-Warn($msg) { Write-Host "    WARN: $msg" -ForegroundColor Yellow }
 
 function SSH($cmd) {
     & $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" $cmd
@@ -40,6 +42,11 @@ function SSH($cmd) {
 
 function SSH-Ignore($cmd) {
     & $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" $cmd
+}
+
+function SSH-Query($cmd) {
+    # Runs a command and returns stdout as a trimmed string; does not fail the script.
+    return (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" $cmd 2>$null | Out-String).Trim()
 }
 
 function SCP($local, $remote) {
@@ -61,9 +68,6 @@ function Run-RemoteScript([string]$localPath, [string]$remotePath) {
 }
 
 # -- Maintenance page ----------------------------------------------------------
-# Swaps nginx to a static HTML page while the app service is stopped.
-# Step 7 (unchanged) always restores the real proxy config afterwards.
-
 $MaintenanceHtml = @'
 <!DOCTYPE html>
 <html lang="en">
@@ -116,10 +120,9 @@ function Enable-MaintenancePage {
     SSH "docker exec nginx mkdir -p /var/www"
     SSH "docker cp /tmp/maintenance.html nginx:/var/www/maintenance.html"
 
-    $certNow = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no").Trim()
+    $certNow = SSH-Query "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no"
 
     if ($certNow -eq "yes") {
-        # SSL is active - maintenance config must cover 443 or nginx drops the connection
         $mConf  = "server {`n"
         $mConf += "    listen 80;`n"
         $mConf += "    server_name $DOMAIN www.$DOMAIN;`n"
@@ -163,19 +166,25 @@ function Wait-ForApp {
     $maxAttempts = 24   # 2 min total
     $attempt = 0
     $healthy = $false
+    $lastStatus = ""
     while ($attempt -lt $maxAttempts) {
         $attempt++
-        $status = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
-            "curl -s -o /dev/null -w '%{http_code}' http://localhost:$APP_PORT/ 2>/dev/null || echo 000").Trim()
-        if ($status -match "^(200|301|302|303)$") { $healthy = $true; break }
-        Write-Host "    Attempt $attempt/$maxAttempts - HTTP $status, retrying in 5s..." -ForegroundColor Yellow
+        # -L follows redirects; only accept final 200. A broken page that redirects
+        # or throws 500 will NOT pass this check.
+        $lastStatus = SSH-Query "curl -sL -o /dev/null -w '%{http_code}' http://localhost:$APP_PORT/ 2>/dev/null || echo 000"
+        if ($lastStatus -eq "200") { $healthy = $true; break }
+        Write-Host "    Attempt $attempt/$maxAttempts - HTTP $lastStatus, retrying in 5s..." -ForegroundColor Yellow
         Start-Sleep -Seconds 5
     }
     if (-not $healthy) {
-        Write-Host "    WARNING: App did not respond after $maxAttempts attempts." -ForegroundColor Red
-    } else {
-        Write-Ok "App is healthy (HTTP $status)"
+        Write-Host ""
+        Write-Host "    App did not respond with HTTP 200 after $maxAttempts attempts." -ForegroundColor Red
+        Write-Host "    Last status: HTTP $lastStatus" -ForegroundColor Red
+        Write-Host "    Check logs:  journalctl -u $APP_NAME -n 80 --no-pager" -ForegroundColor Red
+        Write-Error "Deployment aborted - app unhealthy"
+        exit 1
     }
+    Write-Ok "App is healthy (HTTP 200)"
 }
 
 # -- Step 1: Build -------------------------------------------------------------
@@ -215,12 +224,13 @@ Write-Ok "Server dependencies ready"
 Write-Step "Setting up PostgreSQL"
 
 $pgScript = "#!/bin/bash`n" +
+    "set -e`n" +
     "sudo -u postgres psql -c `"CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';`" 2>/dev/null || true`n" +
     "sudo -u postgres psql -c `"CREATE DATABASE $DB_NAME OWNER $DB_USER;`" 2>/dev/null || true`n" +
     "sudo -u postgres psql -c `"GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;`" 2>/dev/null || true`n" +
     "sudo -u postgres psql -d $DB_NAME -c `"GRANT ALL ON SCHEMA public TO $DB_USER;`" 2>/dev/null || true`n" +
     "sudo -u postgres psql -d $DB_NAME -c `"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;`" 2>/dev/null || true`n" +
-    "echo `"DB setup complete`"`n"
+    "echo 'DB setup complete'`n"
 
 $pgScriptFile = Join-Path $env:TEMP "pg-setup.sh"
 Save-UnixFile $pgScriptFile $pgScript
@@ -229,17 +239,14 @@ Run-RemoteScript $pgScriptFile "/tmp/pg-setup.sh"
 Write-Ok "Database ready"
 
 # -- Step 4: Write appsettings.json --------------------------------------------
-# -- Step 4: Write appsettings.json --------------------------------------------
 Write-Step "Writing config"
 
 $connString = "Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD"
 
-# If Tor is already set up on the server, grab the onion hostname so we can
-# include it in the web app's config (used for Onion-Location header + footer).
+# If Tor is already set up on the server, grab the onion hostname.
 $onionHost = ""
 try {
-    $onionHost = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
-        "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo ''").Trim()
+    $onionHost = SSH-Query "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo ''"
 } catch {
     $onionHost = ""
 }
@@ -248,25 +255,35 @@ if ($onionHost) {
     Write-Host "    Found onion: $onionHost" -ForegroundColor Gray
 }
 
-# Build web config as a hashtable, then serialize to JSON
+# Monerod config is optional. If $MONEROD_RPC_URL is not set or empty,
+# the supply worker simply doesn't register and the site works normally.
+$hasMonerod = $false
+try {
+    if ($MONEROD_RPC_URL -and $MONEROD_RPC_URL.Trim().Length -gt 0) {
+        $hasMonerod = $true
+    }
+} catch {
+    $hasMonerod = $false
+}
+
 $webCfg = [ordered]@{
     ConnectionStrings = @{
         DefaultConnection = $connString
     }
-CoinGecko = [ordered]@{
-    ApiKey                 = $COINGECKO_API_KEY
-    BaseUrl                = $COINGECKO_BASE_URL
-    ApiKeyHeader           = $COINGECKO_API_KEY_HEADER
-    TopCoinsOnStartup      = 100
-    RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
-}
+    CoinGecko = [ordered]@{
+        ApiKey                 = $COINGECKO_API_KEY
+        BaseUrl                = $COINGECKO_BASE_URL
+        ApiKeyHeader           = $COINGECKO_API_KEY_HEADER
+        TopCoinsOnStartup      = 100
+        RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
+    }
     Admin = [ordered]@{
         Username = $ADMIN_USERNAME
         Password = $ADMIN_PASSWORD
     }
     Sponsors = [ordered]@{
-        SourceUrl = $SPONSOR_URL
-        CacheTtlMinutes = [int]$SPONSOR_CACHE_TTL
+        SourceUrl             = $SPONSOR_URL
+        CacheTtlMinutes       = [int]$SPONSOR_CACHE_TTL
         RotateIntervalSeconds = [int]$SPONSOR_ROTATE_SECONDS
     }
 }
@@ -281,12 +298,23 @@ $workerCfg = [ordered]@{
     ConnectionStrings = @{
         DefaultConnection = $connString
     }
-CoinGecko = [ordered]@{
-    ApiKey                 = $COINGECKO_API_KEY
-    BaseUrl                = $COINGECKO_BASE_URL
-    ApiKeyHeader           = $COINGECKO_API_KEY_HEADER
-    RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
+    CoinGecko = [ordered]@{
+        ApiKey                 = $COINGECKO_API_KEY
+        BaseUrl                = $COINGECKO_BASE_URL
+        ApiKeyHeader           = $COINGECKO_API_KEY_HEADER
+        RefreshIntervalMinutes = [int]$COINGECKO_REFRESH_MINUTES
     }
+}
+
+if ($hasMonerod) {
+    $workerCfg.Monerod = [ordered]@{
+        RpcUrl                 = $MONEROD_RPC_URL
+        RefreshIntervalMinutes = [int]$MONEROD_REFRESH_MINUTES
+        TimeoutSeconds         = [int]$MONEROD_TIMEOUT_SECONDS
+    }
+    Write-Host "    Monerod RPC: $MONEROD_RPC_URL" -ForegroundColor Gray
+} else {
+    Write-Host "    Monerod RPC: not configured (supply worker disabled)" -ForegroundColor Gray
 }
 
 $webCfgContent    = ($webCfg    | ConvertTo-Json -Depth 5) + "`n"
@@ -300,10 +328,18 @@ Save-UnixFile $workerCfgFile $workerCfgContent
 Write-Ok "Config ready"
 
 # -- Step 5: Deploy web app ----------------------------------------------------
+# Order matters:
+#   1. Show maintenance page.
+#   2. Stop old service.
+#   3. Copy new binaries + config.
+#   4. Run migrations against the NEW DLL, while NO service is running.
+#      If migrations fail, abort — we never start a binary against wrong schema.
+#   5. Start new service, Wait-ForApp requires HTTP 200.
+#   6. (Step 7) Restore real nginx config.
 if (-not $WorkerOnly) {
     Write-Step "Deploying web app"
 
-    Enable-MaintenancePage                                          # <-- show maintenance page
+    Enable-MaintenancePage
     SSH-Ignore "systemctl stop $APP_NAME 2>/dev/null || true"
 
     $webOut = Join-Path $PSScriptRoot "..\publish\web"
@@ -317,13 +353,49 @@ if (-not $WorkerOnly) {
     SCP $webCfgFile "$DEPLOY_PATH/appsettings.json"
     SSH "chown -R www-data:www-data $DEPLOY_PATH && chmod -R 755 $DEPLOY_PATH"
 
-    $svcContent = "[Unit]`nDescription=MoneroMarketCap Web ($DOMAIN)`nAfter=network.target postgresql.service`n`n[Service]`nWorkingDirectory=$DEPLOY_PATH`nExecStart=/usr/bin/dotnet $DEPLOY_PATH/MoneroMarketCap.Web.dll`nRestart=always`nRestartSec=10`nUser=www-data`nEnvironment=ASPNETCORE_ENVIRONMENT=Production`nEnvironment=ASPNETCORE_URLS=http://0.0.0.0:" + $APP_PORT + "`nEnvironment=DOTNET_PRINT_TELEMETRY_MESSAGE=false`n`n[Install]`nWantedBy=multi-user.target`n"
+    # --- Run EF migrations BEFORE starting the new service ---
+    # set -e ensures a migration failure exits non-zero, Run-RemoteScript fails,
+    # and the deploy aborts before we start a binary against the wrong schema.
+    Write-Step "Running database migrations (pre-start)"
+
+    $migrateScript = "#!/bin/bash`n" +
+        "set -e`n" +
+        "export ConnectionStrings__DefaultConnection='Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD'`n" +
+        "export ASPNETCORE_ENVIRONMENT=Production`n" +
+        "cd $DEPLOY_PATH`n" +
+        "echo 'Running migrations...'`n" +
+        "dotnet MoneroMarketCap.Web.dll --migrate-only`n" +
+        "echo 'Migrations complete.'`n"
+
+    $migrateScriptFile = Join-Path $env:TEMP "migrate.sh"
+    Save-UnixFile $migrateScriptFile $migrateScript
+    Run-RemoteScript $migrateScriptFile "/tmp/migrate.sh"
+    Write-Ok "Migrations applied"
+
+    # --- Write systemd unit and start service ---
+    $svcContent = "[Unit]`n" +
+        "Description=MoneroMarketCap Web ($DOMAIN)`n" +
+        "After=network.target postgresql.service`n" +
+        "`n" +
+        "[Service]`n" +
+        "WorkingDirectory=$DEPLOY_PATH`n" +
+        "ExecStart=/usr/bin/dotnet $DEPLOY_PATH/MoneroMarketCap.Web.dll`n" +
+        "Restart=always`n" +
+        "RestartSec=10`n" +
+        "User=www-data`n" +
+        "Environment=ASPNETCORE_ENVIRONMENT=Production`n" +
+        "Environment=ASPNETCORE_URLS=http://0.0.0.0:$APP_PORT`n" +
+        "Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false`n" +
+        "`n" +
+        "[Install]`n" +
+        "WantedBy=multi-user.target`n"
+
     $svcFile = Join-Path $env:TEMP "$APP_NAME.service"
     Save-UnixFile $svcFile $svcContent
     SCP $svcFile "/etc/systemd/system/$APP_NAME.service"
     SSH "systemctl daemon-reload && systemctl enable $APP_NAME && systemctl restart $APP_NAME"
 
-    Wait-ForApp                                                     # <-- poll until app responds
+    Wait-ForApp  # exits the script if app doesn't return HTTP 200
 
     Write-Ok "Web app deployed on port $APP_PORT"
 }
@@ -345,7 +417,23 @@ if (-not $WebOnly) {
     SCP $workerCfgFile "$WORKER_PATH/appsettings.json"
     SSH "chown -R www-data:www-data $WORKER_PATH && chmod -R 755 $WORKER_PATH"
 
-    $workerSvcContent = "[Unit]`nDescription=MoneroMarketCap Worker ($DOMAIN)`nAfter=network.target postgresql.service`n`n[Service]`nWorkingDirectory=$WORKER_PATH`nExecStart=/usr/bin/dotnet $WORKER_PATH/MoneroMarketCap.Worker.dll`nRestart=always`nRestartSec=10`nUser=www-data`nEnvironment=ASPNETCORE_ENVIRONMENT=Production`nEnvironment=DOTNET_ENVIRONMENT=Production`nEnvironment=DOTNET_PRINT_TELEMETRY_MESSAGE=false`n`n[Install]`nWantedBy=multi-user.target`n"
+    $workerSvcContent = "[Unit]`n" +
+        "Description=MoneroMarketCap Worker ($DOMAIN)`n" +
+        "After=network.target postgresql.service`n" +
+        "`n" +
+        "[Service]`n" +
+        "WorkingDirectory=$WORKER_PATH`n" +
+        "ExecStart=/usr/bin/dotnet $WORKER_PATH/MoneroMarketCap.Worker.dll`n" +
+        "Restart=always`n" +
+        "RestartSec=10`n" +
+        "User=www-data`n" +
+        "Environment=ASPNETCORE_ENVIRONMENT=Production`n" +
+        "Environment=DOTNET_ENVIRONMENT=Production`n" +
+        "Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false`n" +
+        "`n" +
+        "[Install]`n" +
+        "WantedBy=multi-user.target`n"
+
     $workerSvcFile = Join-Path $env:TEMP "$WORKER_NAME.service"
     Save-UnixFile $workerSvcFile $workerSvcContent
     SCP $workerSvcFile "/etc/systemd/system/$WORKER_NAME.service"
@@ -354,20 +442,17 @@ if (-not $WebOnly) {
     Write-Ok "Worker deployed"
 }
 
-# -- Step 7: Configure Nginx ---------------------------------------------------
+# -- Step 7: Configure Nginx (restore real proxy config, removing maintenance) -
 Write-Step "Configuring Nginx"
 
-# Check if SSL cert exists on server - if so use HTTPS config, otherwise HTTP
-$certExists = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no").Trim()
+$certExists = SSH-Query "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no"
 
 if ($certExists -eq "yes") {
-    # Copy certs into container (resolve symlinks with cp -L)
     SSH "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem /tmp/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem /tmp/privkey.pem"
     SSH "docker exec nginx mkdir -p /etc/letsencrypt/live/$DOMAIN"
     SSH "docker cp /tmp/fullchain.pem nginx:/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
     SSH "docker cp /tmp/privkey.pem nginx:/etc/letsencrypt/live/$DOMAIN/privkey.pem"
 
-    # Write HTTPS nginx config via file (no heredoc quoting issues)
     $nginxSslConf  = "server {`n"
     $nginxSslConf += "    listen 80;`n"
     $nginxSslConf += "    server_name $DOMAIN www.$DOMAIN;`n"
@@ -402,7 +487,6 @@ if ($certExists -eq "yes") {
     SSH "docker exec nginx nginx -s reload"
     Write-Ok "Nginx configured for $DOMAIN (HTTPS)"
 } else {
-    # No cert yet - write plain HTTP config
     $nginxConf  = "server {`n"
     $nginxConf += "    listen 80;`n"
     $nginxConf += "    server_name $DOMAIN www.$DOMAIN;`n"
@@ -428,28 +512,12 @@ if ($certExists -eq "yes") {
     Write-Ok "Nginx configured for $DOMAIN (HTTP only - run with -SSL to enable HTTPS)"
 }
 
-# -- Step 8: Run EF migrations -------------------------------------------------
-Write-Step "Running database migrations"
-
-$migrateScript = "#!/bin/bash`n" +
-    "export ConnectionStrings__DefaultConnection='Host=localhost;Port=5432;Database=$DB_NAME;Username=$DB_USER;Password=$DB_PASSWORD'`n" +
-    "cd $DEPLOY_PATH`n" +
-    "dotnet MoneroMarketCap.Web.dll --migrate-only`n" +
-    "echo `"Migration exit: `$?`"`n"
-
-$migrateScriptFile = Join-Path $env:TEMP "migrate.sh"
-Save-UnixFile $migrateScriptFile $migrateScript
-Run-RemoteScript $migrateScriptFile "/tmp/migrate.sh"
-
-Write-Ok "Migrations complete"
-
-# -- Step 9: SSL (get cert - only needed once) ---------------------------------
+# -- Step 8: SSL (get cert - only needed once) ---------------------------------
 if ($SSL) {
     Write-Step "Getting SSL certificate"
 
     SSH "apt-get install -y certbot"
 
-    # Stop docker nginx to free port 80, get cert, restart
     $sslScript  = "#!/bin/bash`n"
     $sslScript += "set -e`n"
     $sslScript += "echo 'Stopping docker nginx...'`n"
@@ -466,9 +534,8 @@ if ($SSL) {
     Save-UnixFile $sslScriptFile $sslScript
     Run-RemoteScript $sslScriptFile "/tmp/ssl-setup.sh"
 
-    Write-Ok "Certificate obtained - re-running nginx config step with SSL..."
+    Write-Ok "Certificate obtained - re-running nginx config with SSL..."
 
-    # Now re-run the nginx config with the cert that now exists
     SSH "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem /tmp/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem /tmp/privkey.pem"
     SSH "docker exec nginx mkdir -p /etc/letsencrypt/live/$DOMAIN"
     SSH "docker cp /tmp/fullchain.pem nginx:/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
@@ -510,7 +577,7 @@ if ($SSL) {
     Write-Ok "SSL installed for $DOMAIN"
 }
 
-# -- Step 10: Tor hidden service (first time only) -----------------------------
+# -- Step 9: Tor hidden service (first time only) -----------------------------
 if ($Tor) {
     Write-Step "Setting up Tor hidden service for $DOMAIN"
 
@@ -533,8 +600,7 @@ if ($Tor) {
     Save-UnixFile $torScriptFile $torScript
     Run-RemoteScript $torScriptFile "/tmp/tor-setup.sh"
 
-    $onionAddress = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
-        "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo 'not ready yet'").Trim()
+    $onionAddress = SSH-Query "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo 'not ready yet'"
 
     Write-Ok "Tor hidden service configured"
     Write-Host "   Onion: $onionAddress" -ForegroundColor Magenta
@@ -547,8 +613,7 @@ Write-Host " Deployment complete!" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
 Write-Host " Site:   https://$DOMAIN" -ForegroundColor White
 if ($Tor) {
-    $onion = (& $PLINK -ssh -pw $SSH_PASSWORD -batch "$SSH_USER@$SSH_HOST" `
-        "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo 'pending'").Trim()
+    $onion = SSH-Query "cat /var/lib/tor/moneromarketcap/hostname 2>/dev/null || echo 'pending'"
     Write-Host " Onion:  http://$onion" -ForegroundColor Magenta
 }
 Write-Host ""

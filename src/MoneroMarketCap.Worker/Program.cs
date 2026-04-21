@@ -37,5 +37,21 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<CoinHistoryBackfil
 // Ongoing: reconciles top N, upserts coin rows, upserts today's history row each cycle.
 builder.Services.AddHostedService<CoinPriceUpdateService>();
 
+builder.Services.AddHttpClient<IMoneroSupplyService, MoneroSupplyService>(client =>
+{
+    var baseUrl = builder.Configuration["Monerod:RpcUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+    {
+        // Log-only; worker will skip cycles gracefully.
+        return;
+    }
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(
+        builder.Configuration.GetValue<int>("Monerod:TimeoutSeconds", 30));
+});
+
+
+builder.Services.AddHostedService<MoneroSupplyWorker>();
+
 var host = builder.Build();
 host.Run();

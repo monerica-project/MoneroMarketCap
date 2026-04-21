@@ -40,5 +40,12 @@ public class Coin : AuditableEntity
     public decimal PriceChangePercent30d { get; set; }
     public decimal PriceChangePercent1y { get; set; }
 
+    // --- Node-sourced supply (independent of CoinGecko columns) ---
+    public decimal? NodeSupply { get; set; }             // XMR, decimal for precision
+    public ulong? NodeSupplyHeight { get; set; }         // last block included
+    public ulong? NodeEmissionLow64 { get; set; }        // persisted running total (atomic units, low)
+    public ulong? NodeEmissionHigh64 { get; set; }       // persisted running total (atomic units, high)
+    public DateTime? NodeSupplyUpdatedAt { get; set; }
+
     public ICollection<CoinPriceHistory> PriceHistory { get; set; } = new List<CoinPriceHistory>();
 }

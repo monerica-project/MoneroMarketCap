@@ -1,0 +1,58 @@
+﻿@* Pages/Shared/_NodeSupplyBadge.cshtml *@
+@using MoneroMarketCap.Data.Models
+@using MoneroMarketCap.Services.Display
+@model Coin
+
+@if (Model.Symbol?.ToUpper() == "XMR" && Model.NodeSupply is not null)
+{
+    var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    var fresh = MoneroSupplyDisplay.IsNodeSupplyFresh(Model);
+    var ago = MoneroSupplyDisplay.FormatAgo(Model.NodeSupplyUpdatedAt);
+
+    <div class="card mb-3" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+        <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span style="font-size:0.8rem;color:var(--xmr-text-muted);text-transform:uppercase;letter-spacing:0.05em">
+                            Supply (verified via our node)
+                        </span>
+                        @if (fresh)
+                        {
+                            <span class="badge" style="background:#1a7f3c;color:#fff;font-weight:500">Live</span>
+                        }
+                        else
+                        {
+                            <span class="badge" style="background:#7f6e1a;color:#fff;font-weight:500">Stale</span>
+                        }
+                    </div>
+                    <div class="mono" style="font-size:1.35rem;font-weight:600">
+                        @Model.NodeSupply.Value.ToString("N4", usd) XMR
+                    </div>
+                    @if (Model.NodeSupplyHeight is not null)
+                    {
+                        <div style="font-size:0.8rem;color:var(--xmr-text-muted)">
+                            Block height @Model.NodeSupplyHeight.Value.ToString("N0", usd) · updated @ago
+                        </div>
+                    }
+                </div>
+
+                @if (Model.CirculatingSupply > 0)
+                {
+                    var delta = Model.NodeSupply.Value - Model.CirculatingSupply;
+                    var pct = Model.CirculatingSupply != 0
+                        ? (double)(delta / Model.CirculatingSupply) * 100.0
+                        : 0.0;
+                    <div class="text-end">
+                        <div style="font-size:0.8rem;color:var(--xmr-text-muted)">CoinGecko reports</div>
+                        <div class="mono">@Model.CirculatingSupply.ToString("N0", usd) XMR</div>
+                        <div class="mono" style="font-size:0.8rem;color:var(--xmr-text-muted)">
+                            diff: @(delta >= 0 ? "+" : "")@delta.ToString("N2", usd)
+                            (@(pct >= 0 ? "+" : "")@pct.ToString("N4", usd)%)
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}

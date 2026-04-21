@@ -1,5 +1,6 @@
 @page "/coins/{symbol}"
 @model MoneroMarketCap.Pages.Coins.DetailModel
+@using MoneroMarketCap.Services.Display
 @{
     ViewData["Title"] = Model.Coin?.Symbol + " — " + Model.Coin?.Name;
     ViewBag.SponsorRotateIntervalSeconds = 30;
@@ -19,6 +20,20 @@
 <div class="mb-3">
     <a asp-page="/Index" class="btn btn-secondary btn-sm">← Back</a>
 </div>
+
+
+@if (isXmr && MoneroSupplyDisplay.IsNodeSupplyFresh(coin))
+{
+    <div class="mb-4" style="font-size:0.82rem;color:var(--xmr-text-muted)">
+        <span style="color:#1a7f3c">✓</span>
+        Circulating supply independently verified via our full node:
+        <span class="mono" style="color:var(--xmr-text)">
+            @coin.NodeSupply!.Value.ToString("N4", usd) XMR
+        </span>
+        at block @coin.NodeSupplyHeight!.Value.ToString("N0", usd)
+        (@MoneroSupplyDisplay.FormatAgo(coin.NodeSupplyUpdatedAt))
+    </div>
+}
 
 <!-- Header -->
 <div class="d-flex align-items-center gap-3 mb-4">
