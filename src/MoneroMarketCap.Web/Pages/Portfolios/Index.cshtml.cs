@@ -12,6 +12,8 @@ namespace MoneroMarketCap.Pages.Portfolios;
 [Authorize]
 public class IndexModel : PageModel
 {
+    public const int MaxPortfoliosPerUser = 6;
+
     private readonly IPortfolioRepository _portfolios;
     private readonly ICoinRepository _coins;
     private readonly AppDbContext _db;
@@ -22,10 +24,14 @@ public class IndexModel : PageModel
     public decimal TotalPnl { get; set; }
     public decimal XmrPrice { get; set; }
     public bool PrivacyMode { get; set; }
+    public bool AtPortfolioLimit => Portfolios.Count >= MaxPortfoliosPerUser;
 
     public IReadOnlyList<AllocationSlice> Allocations { get; set; } = new List<AllocationSlice>();
 
     [BindProperty] public string PortfolioName { get; set; } = "My Portfolio";
+
+    [TempData] public string? FlashMessage { get; set; }
+    [TempData] public bool FlashSuccess { get; set; }
 
     public IndexModel(IPortfolioRepository portfolios, ICoinRepository coins, AppDbContext db)
     {
@@ -76,12 +82,22 @@ public class IndexModel : PageModel
     public async Task<IActionResult> OnPostCreateAsync()
     {
         var userId = GetUserId();
+
+        var existingCount = await _db.Portfolios.CountAsync(p => p.UserId == userId);
+        if (existingCount >= MaxPortfoliosPerUser)
+        {
+            FlashMessage = $"You've reached the limit of {MaxPortfoliosPerUser} portfolios. Delete an existing one to create a new portfolio.";
+            FlashSuccess = false;
+            return RedirectToPage();
+        }
+
         await _portfolios.AddAsync(new Portfolio
         {
             UserId = userId,
             Name = string.IsNullOrWhiteSpace(PortfolioName) ? "My Portfolio" : PortfolioName
         });
         await _portfolios.SaveChangesAsync();
+
         return RedirectToPage();
     }
 
