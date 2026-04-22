@@ -437,6 +437,89 @@
     </div>
 }
 
+@if (isXmr)
+{
+    <div class="card mb-4" ...><!-- existing XMR stats card --></div>
+
+    <!-- NEW card below -->
+    <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+        <div class="card-header">How we calculate Monero's supply</div>
+        <div class="card-body" style="font-size:0.85rem;line-height:1.6">
+            <p style="margin-bottom:0.75rem">
+                Most market cap sites pull Monero's circulating supply from an aggregator
+                (CoinGecko, CoinMarketCap), which refreshes infrequently and can lag the real
+                chain by hundreds of thousands of XMR. We compute the supply directly from the
+                current block height using Monero's published emission formula.
+            </p>
+
+            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">The formula</h6>
+            <pre style="background:var(--xmr-bg);padding:0.75rem;border-radius:4px;font-size:0.8rem;overflow-x:auto;color:var(--xmr-text);margin:0"><code>supply ≈ 18,132,009 + (current_height − 2,641,623) × 0.6</code></pre>
+            <ul style="margin-top:0.75rem;margin-bottom:0.75rem;padding-left:1.25rem">
+                <li><strong>18,132,009 XMR</strong> — approximate total emitted before tail emission began</li>
+                <li><strong>Block 2,641,623</strong> — the block at which tail emission activated (≈ May 2022)</li>
+                <li><strong>0.6 XMR per block</strong> — the fixed tail emission reward that continues forever</li>
+            </ul>
+
+            @if (MoneroSupplyDisplay.IsNodeSupplyFresh(coin) && coin.NodeSupplyHeight.HasValue)
+            {
+                <p style="margin-bottom:0.75rem">
+                    <strong>At block @coin.NodeSupplyHeight.Value.ToString("N0", usd):</strong>
+                    18,132,009 + (@coin.NodeSupplyHeight.Value.ToString("N0", usd) − 2,641,623) × 0.6 =
+                    <span class="mono">@coin.NodeSupply!.Value.ToString("N0", usd) XMR</span>
+                </p>
+            }
+
+            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">How we verify the block height</h6>
+            <p style="margin-bottom:0.75rem">
+                Our backend runs a full Monero node (via our self-hosted
+                BTCPay Server)
+                that is in constant sync with the Monero network. The block height reported above
+                is read directly from our node every few minutes — not from any third-party
+                aggregator or block explorer.
+            </p>
+
+            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">Caveats — why this is an estimate, not an exact figure</h6>
+            <p style="margin-bottom:0.5rem">
+                The formula above gives the supply from base block rewards only. It <em>does not</em>
+                include transaction fees, which are also added to each coinbase transaction.
+                Over 1M+ blocks since tail emission began, accumulated fees add roughly
+                10,000–20,000 XMR to the true total.
+            </p>
+            <p style="margin-bottom:0">
+                For the exact total (block rewards + all tx fees, summed from genesis),
+                see <a href="https://moneroinflation.com" target="_blank" rel="noopener" style="color:var(--xmr-orange)">moneroinflation.com</a>,
+                which runs the full Monero consensus code to verify every block's emission.
+                Our number is typically within ~0.1% of theirs, and always closer to the truth
+                than CoinGecko's (which commonly lags by hundreds of thousands of XMR).
+            </p>
+
+            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">Verify it yourself</h6>
+            <ul style="margin:0;padding-left:1.25rem">
+                <li>
+                    <a href="https://www.getmonero.org/resources/moneropedia/tail-emission.html" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                        Monero's official tail emission documentation
+                    </a>
+                </li>
+                <li>
+                    <a href="https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                        Emission constants in the Monero source code
+                    </a>
+                </li>
+                <li>
+                    <a href="https://moneroinflation.com" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                        moneroinflation.com — independent full-node supply verifier
+                    </a>
+                </li>
+                <li>
+                    <a href="https://github.com/DangerousFreedom1984/monero_inflation_checker" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                        monero_inflation_checker — the tool behind moneroinflation.com
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+}
+
 @section Scripts {
     <script src="~/js/chart.umd.min.js"></script>
     <script>

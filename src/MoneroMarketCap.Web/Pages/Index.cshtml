@@ -22,10 +22,6 @@
         <div class="xmr-stat" style="flex:1;min-width:160px;padding:1rem 1.25rem">
             <span class="stat-label">
                 Market Cap
-                @if (MoneroSupplyDisplay.IsNodeVerified(xmr))
-                {
-                    <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Circulating supply verified by our full Monero node">✓ node</span>
-                }
             </span>
             <span class="stat-value" id="xmr-mcap">@FormatLarge(MoneroSupplyDisplay.EffectiveMarketCapUsd(xmr))</span>
             <span id="xmr-rank" class="stat-change" style="color:var(--xmr-text-muted)">Rank #@xmr.MarketCapRank</span>
@@ -193,10 +189,6 @@ else
                         </td>
                         <td class="text-end mono cell-mcap">
                             @FormatLarge(effectiveMcap)
-                            @if (isNodeVerified)
-                            {
-                                <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Verified by our full node">✓</span>
-                            }
                         </td>
                         <td class="text-end cell-ratio" style="white-space:nowrap">
                             @if (isXmr)
@@ -214,10 +206,6 @@ else
                         </td>
                         <td class="text-end mono cell-supply">
                             @FormatUnits(effectiveSupply)
-                            @if (isNodeVerified)
-                            {
-                                <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Verified by our full node">✓</span>
-                            }
                         </td>
                         <td class="text-end mono xmr-val cell-buys" style="white-space:nowrap">
                             @if (!isXmr)
