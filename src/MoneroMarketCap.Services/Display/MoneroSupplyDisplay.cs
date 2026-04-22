@@ -5,13 +5,33 @@ namespace MoneroMarketCap.Services.Display;
 
 public static class MoneroSupplyDisplay
 {
-    // Block reward is 0.6 XMR every ~2 min. 30 min staleness = ~9 XMR max drift.
+    // Block reward is 0.6 XMR every ~2 min. 30 min staleness window = ~9 XMR max drift.
     private static readonly TimeSpan FreshnessWindow = TimeSpan.FromMinutes(30);
 
     public static bool IsNodeSupplyFresh(Coin coin) =>
         coin.NodeSupply is not null
         && coin.NodeSupplyUpdatedAt is { } ts
         && DateTime.UtcNow - ts < FreshnessWindow;
+
+    public static bool IsNodeVerified(Coin coin) => IsNodeSupplyFresh(coin);
+
+    public static decimal EffectiveMarketCapUsd(Coin coin)
+    {
+        if (IsNodeSupplyFresh(coin) && coin.NodeSupply.HasValue && coin.PriceUsd > 0)
+        {
+            return coin.NodeSupply.Value * coin.PriceUsd;
+        }
+        return coin.MarketCapUsd;
+    }
+
+    public static decimal EffectiveCirculatingSupply(Coin coin)
+    {
+        if (IsNodeSupplyFresh(coin) && coin.NodeSupply.HasValue)
+        {
+            return coin.NodeSupply.Value;
+        }
+        return coin.CirculatingSupply;
+    }
 
     public static decimal? NodeMarketCapUsd(Coin coin) =>
         coin.NodeSupply is { } supply && coin.PriceUsd > 0

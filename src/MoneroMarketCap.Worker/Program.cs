@@ -53,5 +53,17 @@ builder.Services.AddHttpClient<IMoneroSupplyService, MoneroSupplyService>(client
 
 builder.Services.AddHostedService<MoneroSupplyWorker>();
 
+var btcPayConfig = builder.Configuration.GetSection("BtcPay");
+if (!string.IsNullOrWhiteSpace(btcPayConfig["BaseUrl"])
+    && !string.IsNullOrWhiteSpace(btcPayConfig["ApiKey"]))
+{
+    builder.Services.AddHttpClient<IMoneroSupplyService, MoneroSupplyService>(c =>
+    {
+        var timeout = btcPayConfig.GetValue<int?>("TimeoutSeconds") ?? 30;
+        c.Timeout = TimeSpan.FromSeconds(timeout);
+    });
+    builder.Services.AddHostedService<MoneroSupplyWorker>();
+}
+
 var host = builder.Build();
 host.Run();

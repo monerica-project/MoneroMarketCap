@@ -7,7 +7,8 @@ namespace MoneroMarketCap.Services.Interfaces
 
     public interface IMoneroSupplyService
     {
-        Task<(ulong Height, decimal SupplyXmr)> GetHeightAndSupplyAsync(CancellationToken ct);
+         Task<(ulong height, decimal supply)?> GetHeightAndSupplyAsync(
+         CancellationToken ct);
 
     }
 

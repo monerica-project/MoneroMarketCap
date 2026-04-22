@@ -255,15 +255,17 @@ if ($onionHost) {
     Write-Host "    Found onion: $onionHost" -ForegroundColor Gray
 }
 
-# Monerod config is optional. If $MONEROD_RPC_URL is not set or empty,
-# the supply worker simply doesn't register and the site works normally.
-$hasMonerod = $false
+# BTCPay config is optional. If $BTCPAY_BASE_URL or $BTCPAY_API_KEY is not set,
+# the supply worker simply doesn't register and the site works normally
+# (page falls back to CoinGecko).
+$hasBtcPay = $false
 try {
-    if ($MONEROD_RPC_URL -and $MONEROD_RPC_URL.Trim().Length -gt 0) {
-        $hasMonerod = $true
+    if ($BTCPAY_BASE_URL -and $BTCPAY_BASE_URL.Trim().Length -gt 0 `
+        -and $BTCPAY_API_KEY -and $BTCPAY_API_KEY.Trim().Length -gt 0) {
+        $hasBtcPay = $true
     }
 } catch {
-    $hasMonerod = $false
+    $hasBtcPay = $false
 }
 
 $webCfg = [ordered]@{
@@ -306,15 +308,16 @@ $workerCfg = [ordered]@{
     }
 }
 
-if ($hasMonerod) {
-    $workerCfg.Monerod = [ordered]@{
-        RpcUrl                 = $MONEROD_RPC_URL
-        RefreshIntervalMinutes = [int]$MONEROD_REFRESH_MINUTES
-        TimeoutSeconds         = [int]$MONEROD_TIMEOUT_SECONDS
+if ($hasBtcPay) {
+    $workerCfg.BtcPay = [ordered]@{
+        BaseUrl          = $BTCPAY_BASE_URL
+        ApiKey           = $BTCPAY_API_KEY
+        RefreshMinutes   = [int]$BTCPAY_REFRESH_MINUTES
+        TimeoutSeconds   = [int]$BTCPAY_TIMEOUT_SECONDS
     }
-    Write-Host "    Monerod RPC: $MONEROD_RPC_URL" -ForegroundColor Gray
+    Write-Host "    BTCPay supply source: $BTCPAY_BASE_URL" -ForegroundColor Gray
 } else {
-    Write-Host "    Monerod RPC: not configured (supply worker disabled)" -ForegroundColor Gray
+    Write-Host "    BTCPay: not configured (node-verified supply disabled)" -ForegroundColor Gray
 }
 
 $webCfgContent    = ($webCfg    | ConvertTo-Json -Depth 5) + "`n"

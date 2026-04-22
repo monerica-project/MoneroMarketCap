@@ -77,14 +77,21 @@ public class MoneroSupplyWorker : BackgroundService
             return;
         }
 
-        var (height, supplyXmr) = await supplySvc.GetHeightAndSupplyAsync(ct);
+        var result = await supplySvc.GetHeightAndSupplyAsync(ct);
+        if (result is null)
+        {
+            _logger.LogWarning(
+                "Supply service returned null (BTCPay unreachable, daemon not synced, or XMR entry missing); leaving DB values as-is.");
+            return;
+        }
+
+        var (height, supplyXmr) = result.Value;
 
         monero.NodeSupplyHeight = height;
         monero.NodeSupply = supplyXmr;
         monero.NodeSupplyUpdatedAt = DateTime.UtcNow;
 
-        // These are from the old 128-bit design and no longer used. Clear them
-        // if they were previously populated, or leave them null. Either is fine.
+        // Legacy columns from the old 128-bit design — no longer populated.
         monero.NodeEmissionHigh64 = null;
         monero.NodeEmissionLow64 = null;
 

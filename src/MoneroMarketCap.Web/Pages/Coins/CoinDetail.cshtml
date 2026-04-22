@@ -346,13 +346,56 @@
         <div class="card-body p-0">
             <table class="table table-sm mb-0" style="font-size:0.85rem">
                 <tbody>
+                    @{
+                        var hasNode = MoneroSupplyDisplay.IsNodeSupplyFresh(coin);
+                        var nodeSupply = hasNode ? coin.NodeSupply!.Value : 0m;
+                        var nodeMarketCap = hasNode ? nodeSupply * coin.PriceUsd : 0m;
+                    }
+
                     <tr>
-                        <td style="color:var(--xmr-text-muted);width:50%">Market Cap</td>
-                        <td class="mono">$@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B</td>
+                        <td style="color:var(--xmr-text-muted);width:50%">
+                            Market Cap
+                            @if (hasNode)
+                            {
+                                <span class="badge bg-success ms-1" style="font-size:0.65rem;font-weight:normal;vertical-align:middle">✓ node</span>
+                            }
+                        </td>
+                        <td class="mono">
+                            @if (hasNode)
+                            {
+                                <div>$@((nodeMarketCap / 1_000_000_000m).ToString("N2", usd))B</div>
+                                <div style="font-size:0.75rem;color:var(--xmr-text-muted);margin-top:2px">
+                                    CoinGecko: $@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B
+                                </div>
+                            }
+                            else
+                            {
+                                <text>$@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B</text>
+                            }
+                        </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">Circulating Supply</td>
-                        <td class="mono">@coin.CirculatingSupply.ToString("N0", usd) XMR</td>
+                        <td style="color:var(--xmr-text-muted)">
+                            Circulating Supply
+                            @if (hasNode)
+                            {
+                                <span class="badge bg-success ms-1" style="font-size:0.65rem;font-weight:normal;vertical-align:middle">✓ node</span>
+                            }
+                        </td>
+                        <td class="mono">
+                            @if (hasNode)
+                            {
+                                <div>@nodeSupply.ToString("N0", usd) XMR</div>
+                                <div style="font-size:0.75rem;color:var(--xmr-text-muted);margin-top:2px">
+                                    at block @coin.NodeSupplyHeight!.Value.ToString("N0", usd)
+                                    · CoinGecko: @coin.CirculatingSupply.ToString("N0", usd) XMR
+                                </div>
+                            }
+                            else
+                            {
+                                <text>@coin.CirculatingSupply.ToString("N0", usd) XMR</text>
+                            }
+                        </td>
                     </tr>
                     <tr>
                         <td style="color:var(--xmr-text-muted)">Max Supply</td>
@@ -363,7 +406,6 @@
                             }
                             else
                             {
-
                                 <span style="color:var(--xmr-text-muted)">∞ (no cap)</span>
                             }
                         </td>

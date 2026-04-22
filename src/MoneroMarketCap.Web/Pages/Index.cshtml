@@ -1,4 +1,5 @@
 @page
+@using MoneroMarketCap.Services.Display
 @model MoneroMarketCap.Pages.IndexModel
 @{
     ViewData["Title"] = "Market Cap — Valued in Monero";
@@ -19,8 +20,14 @@
             </span>
         </div>
         <div class="xmr-stat" style="flex:1;min-width:160px;padding:1rem 1.25rem">
-            <span class="stat-label">Market Cap</span>
-            <span class="stat-value" id="xmr-mcap">@FormatLarge(xmr.MarketCapUsd)</span>
+            <span class="stat-label">
+                Market Cap
+                @if (MoneroSupplyDisplay.IsNodeVerified(xmr))
+                {
+                    <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Circulating supply verified by our full Monero node">✓ node</span>
+                }
+            </span>
+            <span class="stat-value" id="xmr-mcap">@FormatLarge(MoneroSupplyDisplay.EffectiveMarketCapUsd(xmr))</span>
             <span id="xmr-rank" class="stat-change" style="color:var(--xmr-text-muted)">Rank #@xmr.MarketCapRank</span>
         </div>
         <div class="xmr-stat" style="flex:2;min-width:320px;padding:1rem 1.25rem">
@@ -101,12 +108,19 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var coin in Model.Coins.OrderByDescending(c => c.MarketCapUsd))
+                @{
+                    var xmrEffectiveMcap = Model.Monero != null ? MoneroSupplyDisplay.EffectiveMarketCapUsd(Model.Monero) : 0m;
+                }
+                @foreach (var coin in Model.Coins.OrderByDescending(c => MoneroSupplyDisplay.EffectiveMarketCapUsd(c)))
                 {
+                    var effectiveMcap = MoneroSupplyDisplay.EffectiveMarketCapUsd(coin);
+                    var effectiveSupply = MoneroSupplyDisplay.EffectiveCirculatingSupply(coin);
+                    var isNodeVerified = MoneroSupplyDisplay.IsNodeVerified(coin);
+
                     var priceInXmr = Model.Monero != null && Model.Monero.PriceUsd > 0
                         ? coin.PriceUsd / Model.Monero.PriceUsd : 0;
-                    var mcapRatio = Model.Monero != null && Model.Monero.MarketCapUsd > 0
-                        ? coin.MarketCapUsd / Model.Monero.MarketCapUsd : 0;
+                    var mcapRatio = xmrEffectiveMcap > 0
+                        ? effectiveMcap / xmrEffectiveMcap : 0;
                     var coinsPerXmr = coin.PriceUsd > 0 && Model.Monero != null
                         ? Model.Monero.PriceUsd / coin.PriceUsd : 0;
                     // 24h change denominated in XMR: how much the coin moved relative to XMR
@@ -122,10 +136,11 @@ else
                         data-xmr-price="@priceInXmr"
                         data-change="@coin.PriceChangePercent24h"
                         data-xmr-change="@xmrChange24h"
-                        data-mcap="@coin.MarketCapUsd"
+                        data-mcap="@effectiveMcap"
                         data-ratio="@mcapRatio"
-                        data-supply="@coin.CirculatingSupply"
-                        data-buys="@coinsPerXmr">
+                        data-supply="@effectiveSupply"
+                        data-buys="@coinsPerXmr"
+                        data-node-verified="@(isNodeVerified ? "true" : "false")">
                         <td class="rank-cell cell-rank"></td>
                         <td>
                             <div class="coin-name-cell">
@@ -171,7 +186,13 @@ else
                                 @($"{(xmrChange24h >= 0 ? "▲" : "▼")} {Math.Abs(xmrChange24h).ToString("N2")}%")
                             }
                         </td>
-                        <td class="text-end mono cell-mcap">@FormatLarge(coin.MarketCapUsd)</td>
+                        <td class="text-end mono cell-mcap">
+                            @FormatLarge(effectiveMcap)
+                            @if (isNodeVerified)
+                            {
+                                <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Verified by our full node">✓</span>
+                            }
+                        </td>
                         <td class="text-end cell-ratio" style="white-space:nowrap">
                             @if (isXmr)
                             {
@@ -186,7 +207,13 @@ else
                                 <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1"))%</span>
                             }
                         </td>
-                        <td class="text-end mono cell-supply">@FormatUnits(coin.CirculatingSupply)</td>
+                        <td class="text-end mono cell-supply">
+                            @FormatUnits(effectiveSupply)
+                            @if (isNodeVerified)
+                            {
+                                <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Verified by our full node">✓</span>
+                            }
+                        </td>
                         <td class="text-end mono xmr-val cell-buys" style="white-space:nowrap">
                             @if (!isXmr)
                             {
@@ -283,6 +310,9 @@ else
             };
         }
 
+        // Badge HTML reused when preserving node-verified markers across refreshes.
+        const VERIFIED_BADGE = ' <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Verified by our full node">✓</span>';
+
         // --- Sort state ---
         let sortCol = 'mcap';
         let sortDir = 'desc';
@@ -353,6 +383,23 @@ else
                 const xmr = coins.find(c => c.symbol === 'XMR');
                 if (!xmr) return;
 
+                // Compute effective (node-verified-when-fresh) values on the client.
+                // Falls back to CoinGecko values if the API doesn't yet expose node fields.
+                const FRESHNESS_MS = 30 * 60 * 1000;
+                function isNodeFresh(c) {
+                    if (!c || !c.nodeSupply || !c.nodeSupplyUpdatedAt) return false;
+                    const age = Date.now() - new Date(c.nodeSupplyUpdatedAt).getTime();
+                    return age < FRESHNESS_MS;
+                }
+                function effectiveMcap(c) {
+                    return isNodeFresh(c) && c.priceUsd > 0 ? c.nodeSupply * c.priceUsd : c.marketCapUsd;
+                }
+                function effectiveSupply(c) {
+                    return isNodeFresh(c) ? c.nodeSupply : c.circulatingSupply;
+                }
+
+                const xmrEffectiveMcap = effectiveMcap(xmr);
+
                 const xmrChangeHelper = (id, val) => {
                     const el = document.getElementById(id);
                     if (!el) return;
@@ -369,7 +416,7 @@ else
                 const priceEl = document.getElementById('xmr-price');
                 if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);
                 const mcapEl = document.getElementById('xmr-mcap');
-                if (mcapEl) mcapEl.textContent = formatLarge(xmr.marketCapUsd);
+                if (mcapEl) mcapEl.textContent = formatLarge(xmrEffectiveMcap);
                 const rankEl = document.getElementById('xmr-rank');
                 if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
 
@@ -378,19 +425,29 @@ else
                     if (!row) return;
                     const isXmr = coin.symbol === 'XMR';
 
+                    const coinEffectiveMcap = effectiveMcap(coin);
+                    const coinEffectiveSupply = effectiveSupply(coin);
+
                     const priceInXmr = xmr.priceUsd > 0 ? coin.priceUsd / xmr.priceUsd : 0;
-                    const mcapRatio = xmr.marketCapUsd > 0 ? coin.marketCapUsd / xmr.marketCapUsd : 0;
+                    const mcapRatio = xmrEffectiveMcap > 0 ? coinEffectiveMcap / xmrEffectiveMcap : 0;
                     const coinsPerXmr = coin.priceUsd > 0 ? xmr.priceUsd / coin.priceUsd : 0;
                     const xmrChange24h = ((1 + coin.priceChangePercent24h / 100) / (1 + xmr.priceChangePercent24h / 100) - 1) * 100;
+
+                    // Keep the data-node-verified attribute current based on live freshness.
+                    // If the API doesn't return node fields yet, preserve the server-rendered value.
+                    if (coin.nodeSupply !== undefined) {
+                        row.dataset.nodeVerified = isNodeFresh(coin) ? 'true' : 'false';
+                    }
+                    const isVerified = row.dataset.nodeVerified === 'true';
 
                     // Update data attributes
                     row.dataset.price = coin.priceUsd;
                     row.dataset.xmrPrice = priceInXmr;
                     row.dataset.change = coin.priceChangePercent24h;
                     row.dataset.xmrChange = xmrChange24h;
-                    row.dataset.mcap = coin.marketCapUsd;
+                    row.dataset.mcap = coinEffectiveMcap;
                     row.dataset.ratio = mcapRatio;
-                    row.dataset.supply = coin.circulatingSupply;
+                    row.dataset.supply = coinEffectiveSupply;
                     row.dataset.buys = coinsPerXmr;
 
                     // Update display cells
@@ -419,17 +476,22 @@ else
                         }
                     }
 
+                    // Preserve the ✓ badge when node-verified.
                     const mcapCell = row.querySelector('.cell-mcap');
-                    if (mcapCell) mcapCell.textContent = formatLarge(coin.marketCapUsd);
+                    if (mcapCell) {
+                        mcapCell.innerHTML = formatLarge(coinEffectiveMcap) + (isVerified ? VERIFIED_BADGE : '');
+                    }
 
                     const ratioCell = row.querySelector('.cell-ratio');
                     if (ratioCell && !isXmr) {
-                        const r = formatRatio(coin.marketCapUsd, xmr.marketCapUsd);
+                        const r = formatRatio(coinEffectiveMcap, xmrEffectiveMcap);
                         ratioCell.innerHTML = '<span class="' + r.cls + '">' + r.text + '</span>';
                     }
 
                     const supplyCell = row.querySelector('.cell-supply');
-                    if (supplyCell) supplyCell.textContent = formatUnits(coin.circulatingSupply);
+                    if (supplyCell) {
+                        supplyCell.innerHTML = formatUnits(coinEffectiveSupply) + (isVerified ? VERIFIED_BADGE : '');
+                    }
 
                     const buysCell = row.querySelector('.cell-buys');
                     if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
