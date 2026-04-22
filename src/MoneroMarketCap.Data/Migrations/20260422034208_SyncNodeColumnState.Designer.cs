@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MoneroMarketCap.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260421184520_TotalSupplyLog")]
-    partial class TotalSupplyLog
+    [Migration("20260422034208_SyncNodeColumnState")]
+    partial class SyncNodeColumnState
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -117,16 +117,19 @@ namespace MoneroMarketCap.Data.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text"); 
+                        .HasColumnType("text");
 
                     b.Property<decimal?>("NodeSupply")
-                        .HasColumnType("numeric");
+                        .HasColumnType("numeric")
+                        .HasColumnName("NodeSupply");
 
                     b.Property<decimal?>("NodeSupplyHeight")
-                        .HasColumnType("numeric(20,0)");
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("NodeSupplyHeight");
 
                     b.Property<DateTime?>("NodeSupplyUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("NodeSupplyUpdatedAt");
 
                     b.Property<decimal>("PriceChangePercent1h")
                         .HasColumnType("numeric");

@@ -116,20 +116,17 @@ namespace MoneroMarketCap.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<decimal?>("NodeEmissionHigh64")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<decimal?>("NodeEmissionLow64")
-                        .HasColumnType("numeric(20,0)");
-
                     b.Property<decimal?>("NodeSupply")
-                        .HasColumnType("numeric");
+                        .HasColumnType("numeric")
+                        .HasColumnName("NodeSupply");
 
                     b.Property<decimal?>("NodeSupplyHeight")
-                        .HasColumnType("numeric(20,0)");
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("NodeSupplyHeight");
 
                     b.Property<DateTime?>("NodeSupplyUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("NodeSupplyUpdatedAt");
 
                     b.Property<decimal>("PriceChangePercent1h")
                         .HasColumnType("numeric");

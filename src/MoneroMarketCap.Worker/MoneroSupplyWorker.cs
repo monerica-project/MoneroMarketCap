@@ -91,9 +91,7 @@ public class MoneroSupplyWorker : BackgroundService
         monero.NodeSupply = supplyXmr;
         monero.NodeSupplyUpdatedAt = DateTime.UtcNow;
 
-        // Legacy columns from the old 128-bit design — no longer populated.
-        monero.NodeEmissionHigh64 = null;
-        monero.NodeEmissionLow64 = null;
+ 
 
         await db.SaveChangesAsync(ct);
 

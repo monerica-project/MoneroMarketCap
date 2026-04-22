@@ -11,59 +11,17 @@ namespace MoneroMarketCap.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<decimal>(
-                name: "NodeEmissionHigh64",
-                table: "Coins",
-                type: "numeric(20,0)",
-                nullable: true);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "NodeEmissionLow64",
-                table: "Coins",
-                type: "numeric(20,0)",
-                nullable: true);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "NodeSupply",
-                table: "Coins",
-                type: "numeric",
-                nullable: true);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "NodeSupplyHeight",
-                table: "Coins",
-                type: "numeric(20,0)",
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTime>(
-                name: "NodeSupplyUpdatedAt",
-                table: "Coins",
-                type: "timestamp with time zone",
-                nullable: true);
+            migrationBuilder.Sql(@"ALTER TABLE ""Coins"" ADD COLUMN IF NOT EXISTS ""NodeSupply"" numeric NULL;");
+            migrationBuilder.Sql(@"ALTER TABLE ""Coins"" ADD COLUMN IF NOT EXISTS ""NodeSupplyHeight"" numeric(20,0) NULL;");
+            migrationBuilder.Sql(@"ALTER TABLE ""Coins"" ADD COLUMN IF NOT EXISTS ""NodeSupplyUpdatedAt"" timestamp with time zone NULL;");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "NodeEmissionHigh64",
-                table: "Coins");
-
-            migrationBuilder.DropColumn(
-                name: "NodeEmissionLow64",
-                table: "Coins");
-
-            migrationBuilder.DropColumn(
-                name: "NodeSupply",
-                table: "Coins");
-
-            migrationBuilder.DropColumn(
-                name: "NodeSupplyHeight",
-                table: "Coins");
-
-            migrationBuilder.DropColumn(
-                name: "NodeSupplyUpdatedAt",
-                table: "Coins");
+            migrationBuilder.Sql(@"ALTER TABLE ""Coins"" DROP COLUMN IF EXISTS ""NodeSupply"";");
+            migrationBuilder.Sql(@"ALTER TABLE ""Coins"" DROP COLUMN IF EXISTS ""NodeSupplyHeight"";");
+            migrationBuilder.Sql(@"ALTER TABLE ""Coins"" DROP COLUMN IF EXISTS ""NodeSupplyUpdatedAt"";");
         }
     }
 }

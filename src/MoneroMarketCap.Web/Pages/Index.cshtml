@@ -99,6 +99,7 @@ else
                     <th style="cursor:pointer;user-select:none" data-sort="name">Coin <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="price">Price (USD) <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="xmr-price">Price (XMR) <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change-1h">1h % (USD) <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change">24h % (USD) <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="xmr-change">24h % (XMR) <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="mcap">Market Cap <span class="sort-indicator"></span></th>
@@ -134,6 +135,7 @@ else
                         data-name="@coin.Symbol.ToLower()"
                         data-price="@coin.PriceUsd"
                         data-xmr-price="@priceInXmr"
+                        data-change1h="@coin.PriceChangePercent1h"
                         data-change="@coin.PriceChangePercent24h"
                         data-xmr-change="@xmrChange24h"
                         data-mcap="@effectiveMcap"
@@ -172,6 +174,9 @@ else
                             {
                                 @($"{priceInXmr:N8} XMR")
                             }
+                        </td>
+                        <td class="text-end mono cell-change-1h @(coin.PriceChangePercent1h >= 0 ? "text-success" : "text-danger")">
+                            @(coin.PriceChangePercent1h >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent1h).ToString("N2")%
                         </td>
                         <td class="text-end mono cell-change @(coin.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                             @(coin.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent24h).ToString("N2")%
@@ -335,6 +340,7 @@ else
                     'price': 'price',
                     'xmr-price': 'xmrPrice',
                     'change': 'change',
+                    'change-1h': 'change1h',
                     'xmr-change': 'xmrChange',
                     'ratio': 'ratio',
                     'supply': 'supply',
@@ -443,6 +449,7 @@ else
                     // Update data attributes
                     row.dataset.price = coin.priceUsd;
                     row.dataset.xmrPrice = priceInXmr;
+                    row.dataset.change1h = coin.priceChangePercent1h;
                     row.dataset.change = coin.priceChangePercent24h;
                     row.dataset.xmrChange = xmrChange24h;
                     row.dataset.mcap = coinEffectiveMcap;
@@ -453,6 +460,13 @@ else
                     // Update display cells
                     const priceCell = row.querySelector('.cell-price');
                     if (priceCell) priceCell.textContent = formatPrice(coin.priceUsd);
+
+                    const change1hCell = row.querySelector('.cell-change-1h');
+                    if (change1hCell) {
+                        const f = formatChangeCell(coin.priceChangePercent1h);
+                        change1hCell.textContent = f.text;
+                        change1hCell.className = f.cls + ' cell-change-1h';
+                    }
 
                     const xmrPriceCell = row.querySelector('.cell-xmr-price');
                     if (xmrPriceCell) xmrPriceCell.textContent = isXmr ? '1 XMR' : formatXmrPrice(coin.priceUsd, xmr.priceUsd);
