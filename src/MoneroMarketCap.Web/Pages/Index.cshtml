@@ -97,7 +97,7 @@ else
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="xmr-price">Price (XMR) <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change-1h">1h % (USD) <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change">24h % (USD) <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="xmr-change">24h % (XMR) <span class="sort-indicator"></span></th>
+                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change-7d">7d % (USD) <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="mcap">Market Cap <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="ratio">vs XMR <span class="sort-indicator"></span></th>
                     <th class="text-end" style="cursor:pointer;user-select:none" data-sort="supply">Supply <span class="sort-indicator"></span></th>
@@ -120,10 +120,7 @@ else
                         ? effectiveMcap / xmrEffectiveMcap : 0;
                     var coinsPerXmr = coin.PriceUsd > 0 && Model.Monero != null
                         ? Model.Monero.PriceUsd / coin.PriceUsd : 0;
-                    // 24h change denominated in XMR: how much the coin moved relative to XMR
-                    var xmrChange24h = Model.Monero != null
-                        ? ((1m + coin.PriceChangePercent24h / 100m) / (1m + Model.Monero.PriceChangePercent24h / 100m) - 1m) * 100m
-                        : 0m;
+                  
                     bool isXmr = coin.Symbol.ToUpper() == "XMR";
 
                     <tr class="@(isXmr ? "xmr-row" : "")"
@@ -133,7 +130,7 @@ else
                         data-xmr-price="@priceInXmr"
                         data-change1h="@coin.PriceChangePercent1h"
                         data-change="@coin.PriceChangePercent24h"
-                        data-xmr-change="@xmrChange24h"
+                        data-change7d="@coin.PriceChangePercent7d"
                         data-mcap="@effectiveMcap"
                         data-ratio="@mcapRatio"
                         data-supply="@effectiveSupply"
@@ -177,15 +174,8 @@ else
                         <td class="text-end mono cell-change @(coin.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                             @(coin.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent24h).ToString("N2")%
                         </td>
-                        <td class="text-end mono cell-xmr-change @(isXmr ? "" : xmrChange24h >= 0 ? "text-success" : "text-danger")">
-                            @if (isXmr)
-                            {
-                                <span class="text-muted">—</span>
-                            }
-                            else
-                            {
-                                @($"{(xmrChange24h >= 0 ? "▲" : "▼")} {Math.Abs(xmrChange24h).ToString("N2")}%")
-                            }
+                        <td class="text-end mono cell-change-7d @(coin.PriceChangePercent7d >= 0 ? "text-success" : "text-danger")">
+                            @(coin.PriceChangePercent7d >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent7d).ToString("N2")%
                         </td>
                         <td class="text-end mono cell-mcap">
                             @FormatLarge(effectiveMcap)
@@ -329,7 +319,7 @@ else
                     'xmr-price': 'xmrPrice',
                     'change': 'change',
                     'change-1h': 'change1h',
-                    'xmr-change': 'xmrChange',
+                    'change-7d': 'change7d',
                     'ratio': 'ratio',
                     'supply': 'supply',
                     'buys': 'buys'
@@ -425,7 +415,6 @@ else
                     const priceInXmr = xmr.priceUsd > 0 ? coin.priceUsd / xmr.priceUsd : 0;
                     const mcapRatio = xmrEffectiveMcap > 0 ? coinEffectiveMcap / xmrEffectiveMcap : 0;
                     const coinsPerXmr = coin.priceUsd > 0 ? xmr.priceUsd / coin.priceUsd : 0;
-                    const xmrChange24h = ((1 + coin.priceChangePercent24h / 100) / (1 + xmr.priceChangePercent24h / 100) - 1) * 100;
 
                     // Keep the data-node-verified attribute current based on live freshness.
                     // If the API doesn't return node fields yet, preserve the server-rendered value.
@@ -439,7 +428,7 @@ else
                     row.dataset.xmrPrice = priceInXmr;
                     row.dataset.change1h = coin.priceChangePercent1h;
                     row.dataset.change = coin.priceChangePercent24h;
-                    row.dataset.xmrChange = xmrChange24h;
+                    row.dataset.change7d = coin.priceChangePercent7d;
                     row.dataset.mcap = coinEffectiveMcap;
                     row.dataset.ratio = mcapRatio;
                     row.dataset.supply = coinEffectiveSupply;
@@ -466,16 +455,11 @@ else
                         changeCell.className = f.cls + ' cell-change';
                     }
 
-                    const xmrChangeCell = row.querySelector('.cell-xmr-change');
-                    if (xmrChangeCell) {
-                        if (isXmr) {
-                            xmrChangeCell.textContent = '—';
-                            xmrChangeCell.className = 'text-end mono cell-xmr-change text-muted';
-                        } else {
-                            const f = formatChangeCell(xmrChange24h);
-                            xmrChangeCell.textContent = f.text;
-                            xmrChangeCell.className = f.cls + ' cell-xmr-change';
-                        }
+                    const change7dCell = row.querySelector('.cell-change-7d');
+                    if (change7dCell) {
+                        const f = formatChangeCell(coin.priceChangePercent7d);
+                        change7dCell.textContent = f.text;
+                        change7dCell.className = f.cls + ' cell-change-7d';
                     }
 
                     // Preserve the ✓ badge when node-verified.
