@@ -24,6 +24,7 @@ public class IndexModel : PageModel
     {
         Coins = await _coins.GetAllAsync();
         Monero = await _coins.GetByCoinGeckoIdAsync("monero");
-        SponsorRotateIntervalSeconds = _config.GetValue<int>("Sponsors:RotateIntervalSeconds", 30);
+        SponsorRotateIntervalSeconds = _config.GetValue<int>("Sponsors:RotateIntervalSeconds" +
+            "", 30);
     }
 }

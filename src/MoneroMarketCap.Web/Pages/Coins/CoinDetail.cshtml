@@ -24,10 +24,10 @@
 
 @if (isXmr && MoneroSupplyDisplay.IsNodeSupplyFresh(coin))
 {
-    <div class="mb-4" style="font-size:0.82rem;color:var(--xmr-text-muted)">
-        <span style="color:#1a7f3c">✓</span>
+    <div class="mb-4 node-verified-notice">
+        <span class="node-verified-check">✓</span>
         Circulating supply independently verified via our full node:
-        <span class="mono" style="color:var(--xmr-text)">
+        <span class="mono node-verified-value">
             @coin.NodeSupply!.Value.ToString("N4", usd) XMR
         </span>
         at block @coin.NodeSupplyHeight!.Value.ToString("N0", usd)
@@ -39,11 +39,11 @@
 <div class="d-flex align-items-center gap-3 mb-4">
     @if (!string.IsNullOrEmpty(coin.ImageUrl))
     {
-        <img src="@coin.ImageUrl" width="48" height="48" style="border-radius:50%" />
+        <img src="@coin.ImageUrl" width="48" height="48" class="coin-icon" />
     }
     <div>
-        <h2 class="mb-0">@coin.Name <span style="color:var(--xmr-text-muted);font-size:1rem">@coin.Symbol</span></h2>
-        <span style="color:var(--xmr-text-muted);font-size:0.82rem">Rank #@coin.MarketCapRank</span>
+        <h2 class="mb-0">@coin.Name <span class="coin-symbol-secondary">@coin.Symbol</span></h2>
+        <span class="coin-rank-label">Rank #@coin.MarketCapRank</span>
     </div>
     <div class="ms-auto text-end">
         <div class="fs-3 fw-bold">
@@ -53,12 +53,10 @@
             }
             else if (coin.PriceUsd >= 0.01m)
             {
-
                 <text>$@coin.PriceUsd.ToString("N4", usd)</text>
             }
             else
             {
-
                 <text>$@coin.PriceUsd.ToString("N8", usd)</text>
             }
         </div>
@@ -72,11 +70,10 @@
 {
     <div class="mb-4">
         <a href="https://moneropricenow.com/"
-               target="_blank"
-               rel="noopener"
-               class="btn btn-warning fw-bold"
-               style="background:var(--xmr-orange);border-color:var(--xmr-orange);color:#fff">
-            Buy Monero (XMR)
+           target="_blank"
+           rel="noopener"
+           class="btn btn-xmr-trade">
+            Trade Monero (XMR)
         </a>
     </div>
 }
@@ -113,7 +110,7 @@
             }
             else
             {
-                <span style="color:var(--xmr-text-muted)">—</span>
+                <span class="text-muted">—</span>
             }
         </span>
     </div>
@@ -126,12 +123,10 @@
             }
             else if (coin.MarketCapUsd >= 1_000_000_000m)
             {
-
                 <text>$@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B</text>
             }
             else
             {
-
                 <text>$@((coin.MarketCapUsd / 1_000_000m).ToString("N2", usd))M</text>
             }
         </span>
@@ -145,7 +140,6 @@
             }
             else
             {
-
                 <text>$@((coin.TotalVolume / 1_000_000m).ToString("N2", usd))M</text>
             }
         </span>
@@ -153,20 +147,19 @@
 </div>
 
 <!-- Price chart -->
-<div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+<div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>Price (USD) — Last 365 Days</span>
         <div class="d-flex align-items-center gap-2">
             <button id="toggle-btn"
                     onclick="toggleMode()"
-                    class="btn btn-outline-secondary btn-sm"
-                    style="display:none;font-size:0.75rem">
+                    class="btn btn-outline-secondary btn-sm chart-toggle-btn d-none">
                 Show vs XMR
             </button>
-            <span id="chart-status" style="font-size:0.78rem;color:var(--xmr-text-muted)">Loading...</span>
+            <span id="chart-status" class="chart-status">Loading...</span>
         </div>
     </div>
-    <div class="card-body" style="position:relative;height:320px">
+    <div class="card-body chart-canvas-wrap">
         <canvas id="price-chart"></canvas>
     </div>
 </div>
@@ -174,13 +167,13 @@
 <!-- vs XMR comparison -->
 @if (!isXmr && xmr != null)
 {
-    <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card mb-4">
         <div class="card-header">@coin.Symbol vs Monero (XMR)</div>
         <div class="card-body p-0">
-            <table class="table table-sm mb-0" style="font-size:0.85rem">
+            <table class="table table-sm mb-0 stats-table">
                 <tbody>
                     <tr>
-                        <td style="color:var(--xmr-text-muted);width:50%">Price in XMR</td>
+                        <td class="text-muted w-50">Price in XMR</td>
                         <td class="mono">
                             @if (priceInXmr >= 1)
                             {
@@ -188,13 +181,12 @@
                             }
                             else
                             {
-
                                 <text>@priceInXmr.ToString("N8", usd) XMR</text>
                             }
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">1 XMR buys</td>
+                        <td class="text-muted">1 XMR buys</td>
                         <td class="mono">
                             @if (coinsPerXmr >= 1)
                             {
@@ -202,13 +194,12 @@
                             }
                             else
                             {
-
                                 <text>@coinsPerXmr.ToString("N8", usd) @coin.Symbol</text>
                             }
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">Market Cap vs XMR</td>
+                        <td class="text-muted">Market Cap vs XMR</td>
                         <td class="mono">
                             @if (mcapRatio >= 1)
                             {
@@ -216,7 +207,6 @@
                             }
                             else
                             {
-
                                 <span class="ratio-smaller">@((mcapRatio * 100).ToString("N1", usd))% of XMR</span>
                             }
                         </td>
@@ -225,9 +215,9 @@
                         void RenderVsXmrRow(string label, decimal? change, string symbol)
                         {
                             <tr>
-                                <td style="color:var(--xmr-text-muted)">
+                                <td class="text-muted">
                                     vs XMR (@label)
-                                    <span style="font-size:0.75rem;color:var(--xmr-text-muted);display:block">
+                                    <span class="stats-sublabel">
                                         Holding @symbol vs holding XMR
                                     </span>
                                 </td>
@@ -238,13 +228,13 @@
                                         <span class="@(v >= 0 ? "text-success" : "text-danger")">
                                             @(v >= 0 ? "▲" : "▼") @Math.Abs(v).ToString("N1", usd)%
                                         </span>
-                                        <span style="font-size:0.8rem;color:var(--xmr-text-muted);margin-left:6px">
+                                        <span class="stats-note">
                                             @(v >= 0 ? $"{symbol} outperformed XMR" : $"XMR outperformed {symbol}")
                                         </span>
                                     }
                                     else
                                     {
-                                        <span style="color:var(--xmr-text-muted)">Insufficient history</span>
+                                        <span class="text-muted">Insufficient history</span>
                                     }
                                 </td>
                             </tr>
@@ -260,11 +250,11 @@
                         RenderVsXmrRow("1yr", Model.VsXmrChange1yr, coin.Symbol);
                     }
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">Circulating Supply</td>
+                        <td class="text-muted">Circulating Supply</td>
                         <td class="mono">@coin.CirculatingSupply.ToString("N0", usd) @coin.Symbol</td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">Max Supply</td>
+                        <td class="text-muted">Max Supply</td>
                         <td class="mono">
                             @if (coin.MaxSupply.HasValue)
                             {
@@ -272,13 +262,12 @@
                             }
                             else
                             {
-
-                                <span style="color:var(--xmr-text-muted)">∞ (no cap)</span>
+                                <span class="text-muted">∞ (no cap)</span>
                             }
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">24h High</td>
+                        <td class="text-muted">24h High</td>
                         <td class="mono">
                             @if (coin.High24h >= 1)
                             {
@@ -286,13 +275,12 @@
                             }
                             else
                             {
-
                                 <text>$@coin.High24h.ToString("N6", usd)</text>
                             }
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">24h Low</td>
+                        <td class="text-muted">24h Low</td>
                         <td class="mono">
                             @if (coin.Low24h >= 1)
                             {
@@ -300,13 +288,12 @@
                             }
                             else
                             {
-
                                 <text>$@coin.Low24h.ToString("N6", usd)</text>
                             }
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">All-Time High</td>
+                        <td class="text-muted">All-Time High</td>
                         <td class="mono">
                             @if (coin.Ath >= 1)
                             {
@@ -314,10 +301,9 @@
                             }
                             else
                             {
-
                                 <text>$@coin.Ath.ToString("N6", usd)</text>
                             }
-                            <span class="@(coin.AthChangePercentage >= 0 ? "text-success" : "text-danger")" style="font-size:0.8rem;margin-left:6px">
+                            <span class="@(coin.AthChangePercentage >= 0 ? "text-success" : "text-danger") ath-change-pct">
                                 (@coin.AthChangePercentage.ToString("N1", usd)%)
                             </span>
                         </td>
@@ -325,12 +311,12 @@
                     @if (coin.AthDate != default)
                     {
                         <tr>
-                            <td style="color:var(--xmr-text-muted)">ATH Date</td>
-                            <td class="mono" style="color:var(--xmr-text-muted)">@coin.AthDate?.ToString("yyyy-MM-dd")</td>
+                            <td class="text-muted">ATH Date</td>
+                            <td class="mono text-muted">@coin.AthDate?.ToString("yyyy-MM-dd")</td>
                         </tr>
                     }
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">Market Cap Rank</td>
+                        <td class="text-muted">Market Cap Rank</td>
                         <td class="mono">#@coin.MarketCapRank</td>
                     </tr>
                 </tbody>
@@ -341,10 +327,10 @@
 
 @if (isXmr)
 {
-    <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card mb-4">
         <div class="card-header">Monero (XMR) Stats</div>
         <div class="card-body p-0">
-            <table class="table table-sm mb-0" style="font-size:0.85rem">
+            <table class="table table-sm mb-0 stats-table">
                 <tbody>
                     @{
                         var hasNode = MoneroSupplyDisplay.IsNodeSupplyFresh(coin);
@@ -353,18 +339,18 @@
                     }
 
                     <tr>
-                        <td style="color:var(--xmr-text-muted);width:50%">
+                        <td class="text-muted w-50">
                             Market Cap
                             @if (hasNode)
                             {
-                                <span class="badge bg-success ms-1" style="font-size:0.65rem;font-weight:normal;vertical-align:middle">✓ node</span>
+                                <span class="badge bg-success ms-1 badge-node">✓ node</span>
                             }
                         </td>
                         <td class="mono">
                             @if (hasNode)
                             {
                                 <div>$@((nodeMarketCap / 1_000_000_000m).ToString("N2", usd))B</div>
-                                <div style="font-size:0.75rem;color:var(--xmr-text-muted);margin-top:2px">
+                                <div class="value-sub">
                                     CoinGecko: $@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B
                                 </div>
                             }
@@ -375,18 +361,18 @@
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">
+                        <td class="text-muted">
                             Circulating Supply
                             @if (hasNode)
                             {
-                                <span class="badge bg-success ms-1" style="font-size:0.65rem;font-weight:normal;vertical-align:middle">✓ node</span>
+                                <span class="badge bg-success ms-1 badge-node">✓ node</span>
                             }
                         </td>
                         <td class="mono">
                             @if (hasNode)
                             {
                                 <div>@nodeSupply.ToString("N0", usd) XMR</div>
-                                <div style="font-size:0.75rem;color:var(--xmr-text-muted);margin-top:2px">
+                                <div class="value-sub">
                                     at block @coin.NodeSupplyHeight!.Value.ToString("N0", usd)
                                     · CoinGecko: @coin.CirculatingSupply.ToString("N0", usd) XMR
                                 </div>
@@ -398,7 +384,7 @@
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">Max Supply</td>
+                        <td class="text-muted">Max Supply</td>
                         <td class="mono">
                             @if (coin.MaxSupply.HasValue)
                             {
@@ -406,55 +392,49 @@
                             }
                             else
                             {
-                                <span style="color:var(--xmr-text-muted)">∞ (no cap)</span>
+                                <span class="text-muted">∞ (no cap)</span>
                             }
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">24h High</td>
+                        <td class="text-muted">24h High</td>
                         <td class="mono">$@coin.High24h.ToString("N2", usd)</td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">24h Low</td>
+                        <td class="text-muted">24h Low</td>
                         <td class="mono">$@coin.Low24h.ToString("N2", usd)</td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">All-Time High</td>
+                        <td class="text-muted">All-Time High</td>
                         <td class="mono">
                             $@coin.Ath.ToString("N2", usd)
-                            <span class="@(coin.AthChangePercentage >= 0 ? "text-success" : "text-danger")" style="font-size:0.8rem;margin-left:6px">
+                            <span class="@(coin.AthChangePercentage >= 0 ? "text-success" : "text-danger") ath-change-pct">
                                 (@coin.AthChangePercentage.ToString("N1", usd)%)
                             </span>
                         </td>
                     </tr>
                     <tr>
-                        <td style="color:var(--xmr-text-muted)">Market Cap Rank</td>
+                        <td class="text-muted">Market Cap Rank</td>
                         <td class="mono">#@coin.MarketCapRank</td>
                     </tr>
                 </tbody>
             </table>
         </div>
     </div>
-}
 
-@if (isXmr)
-{
-    <div class="card mb-4" ...><!-- existing XMR stats card --></div>
-
-    <!-- NEW card below -->
-    <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card mb-4">
         <div class="card-header">How we calculate Monero's supply</div>
-        <div class="card-body" style="font-size:0.85rem;line-height:1.6">
-            <p style="margin-bottom:0.75rem">
+        <div class="card-body calc-body">
+            <p>
                 Most market cap sites pull Monero's circulating supply from an aggregator
                 (CoinGecko, CoinMarketCap), which refreshes infrequently and can lag the real
                 chain by hundreds of thousands of XMR. We compute the supply directly from the
                 current block height using Monero's published emission formula.
             </p>
 
-            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">The formula</h6>
-            <pre style="background:var(--xmr-bg);padding:0.75rem;border-radius:4px;font-size:0.8rem;overflow-x:auto;color:var(--xmr-text);margin:0"><code>supply ≈ 18,132,009 + (current_height − 2,641,623) × 0.6</code></pre>
-            <ul style="margin-top:0.75rem;margin-bottom:0.75rem;padding-left:1.25rem">
+            <h6>The formula</h6>
+            <pre class="calc-formula"><code>supply ≈ 18,132,009 + (current_height − 2,641,623) × 0.6</code></pre>
+            <ul>
                 <li><strong>18,132,009 XMR</strong> — approximate total emitted before tail emission began</li>
                 <li><strong>Block 2,641,623</strong> — the block at which tail emission activated (≈ May 2022)</li>
                 <li><strong>0.6 XMR per block</strong> — the fixed tail emission reward that continues forever</li>
@@ -462,15 +442,15 @@
 
             @if (MoneroSupplyDisplay.IsNodeSupplyFresh(coin) && coin.NodeSupplyHeight.HasValue)
             {
-                <p style="margin-bottom:0.75rem">
+                <p>
                     <strong>At block @coin.NodeSupplyHeight.Value.ToString("N0", usd):</strong>
                     18,132,009 + (@coin.NodeSupplyHeight.Value.ToString("N0", usd) − 2,641,623) × 0.6 =
                     <span class="mono">@coin.NodeSupply!.Value.ToString("N0", usd) XMR</span>
                 </p>
             }
 
-            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">How we verify the block height</h6>
-            <p style="margin-bottom:0.75rem">
+            <h6>How we verify the block height</h6>
+            <p>
                 Our backend runs a full Monero node (via our self-hosted
                 BTCPay Server)
                 that is in constant sync with the Monero network. The block height reported above
@@ -478,40 +458,40 @@
                 aggregator or block explorer.
             </p>
 
-            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">Caveats — why this is an estimate, not an exact figure</h6>
-            <p style="margin-bottom:0.5rem">
+            <h6>Caveats — why this is an estimate, not an exact figure</h6>
+            <p class="mb-2">
                 The formula above gives the supply from base block rewards only. It <em>does not</em>
                 include transaction fees, which are also added to each coinbase transaction.
                 Over 1M+ blocks since tail emission began, accumulated fees add roughly
                 10,000–20,000 XMR to the true total.
             </p>
-            <p style="margin-bottom:0">
+            <p class="mb-0">
                 For the exact total (block rewards + all tx fees, summed from genesis),
-                see <a href="https://moneroinflation.com" target="_blank" rel="noopener" style="color:var(--xmr-orange)">moneroinflation.com</a>,
+                see <a href="https://moneroinflation.com" target="_blank" rel="noopener">moneroinflation.com</a>,
                 which runs the full Monero consensus code to verify every block's emission.
                 Our number is typically within ~0.1% of theirs, and always closer to the truth
                 than CoinGecko's (which commonly lags by hundreds of thousands of XMR).
             </p>
 
-            <h6 style="margin-top:1.25rem;margin-bottom:0.5rem;color:var(--xmr-text)">Verify it yourself</h6>
-            <ul style="margin:0;padding-left:1.25rem">
+            <h6>Verify it yourself</h6>
+            <ul>
                 <li>
-                    <a href="https://www.getmonero.org/resources/moneropedia/tail-emission.html" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                    <a href="https://www.getmonero.org/resources/moneropedia/tail-emission.html" target="_blank" rel="noopener">
                         Monero's official tail emission documentation
                     </a>
                 </li>
                 <li>
-                    <a href="https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                    <a href="https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h" target="_blank" rel="noopener">
                         Emission constants in the Monero source code
                     </a>
                 </li>
                 <li>
-                    <a href="https://moneroinflation.com" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                    <a href="https://moneroinflation.com" target="_blank" rel="noopener">
                         moneroinflation.com — independent full-node supply verifier
                     </a>
                 </li>
                 <li>
-                    <a href="https://github.com/DangerousFreedom1984/monero_inflation_checker" target="_blank" rel="noopener" style="color:var(--xmr-orange)">
+                    <a href="https://github.com/DangerousFreedom1984/monero_inflation_checker" target="_blank" rel="noopener">
                         monero_inflation_checker — the tool behind moneroinflation.com
                     </a>
                 </li>
@@ -682,7 +662,7 @@
         buildChart(rawCoin, rawXmr ?? []);
 
         if (!isXmr) {
-        document.getElementById('toggle-btn').style.display = 'inline-block';
+        document.getElementById('toggle-btn').classList.remove('d-none');
         }
         } catch (e) {
         document.getElementById('chart-status').textContent = 'Chart unavailable';

@@ -168,13 +168,26 @@ body {
     }
 }
 
-/* Market table sticky header */
-.market-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: var(--xmr-surface-2);
+/* Market table sticky header + sizing */
+.market-table {
+    font-size: 0.82rem;
 }
+
+    .market-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--xmr-surface-2);
+    }
+
+        .market-table thead th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+    .market-table th.col-rank {
+        width: 2rem;
+    }
 
 /* Buttons */
 .btn-primary {
@@ -313,6 +326,12 @@ h2 {
     border: 1px solid var(--xmr-border);
 }
 
+.verified-badge {
+    font-size: 0.6rem;
+    font-weight: normal;
+    vertical-align: middle;
+}
+
 /* Links */
 a {
     color: var(--xmr-orange);
@@ -388,14 +407,11 @@ div[style*="border:1px solid green"] {
     font-family: monospace;
 }
 
-/* ── Homepage stat bar ── */
+/* ── Homepage stat bar (spaced card layout) ──────────────────────────────── */
 .xmr-stat-bar {
     display: flex;
     flex-wrap: wrap;
-    gap: 0;
-    border: 1px solid var(--xmr-border);
-    border-radius: 8px;
-    overflow: hidden;
+    gap: 1.5rem;
     margin-bottom: 1.5rem;
     width: 100%;
 }
@@ -403,16 +419,22 @@ div[style*="border:1px solid green"] {
 .xmr-stat {
     display: flex;
     flex-direction: column;
-    padding: 0.75rem 1rem;
-    border-right: 1px solid var(--xmr-border);
-    border-bottom: 1px solid var(--xmr-border);
-    flex: 1 1 140px;
-    min-width: 120px;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--xmr-border);
+    border-radius: 6px;
+    flex: 1 1 160px;
+    min-width: 160px;
 }
 
-    .xmr-stat:last-child {
-        border-right: none;
-    }
+.xmr-stat--wide {
+    flex: 2 1 320px;
+    min-width: 320px;
+}
+
+.xmr-stat--med {
+    flex: 2 1 280px;
+    min-width: 280px;
+}
 
 .stat-label {
     font-size: 0.7rem;
@@ -433,6 +455,64 @@ div[style*="border:1px solid green"] {
     font-size: 0.75rem;
     font-family: monospace;
     margin-top: 0.1rem;
+}
+
+/* Price-changes inline grid (1h / 24h / 7d / 30d / 1y) */
+.price-changes {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+}
+
+/* vs-XMR best/worst cards inside hero */
+.vs-xmr-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+}
+
+.vs-xmr-link {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+    .vs-xmr-link:hover {
+        color: inherit;
+        text-decoration: none;
+    }
+
+.vs-xmr-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.vs-xmr-label {
+    font-size: 0.7rem;
+    color: var(--xmr-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.vs-xmr-value {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.vs-xmr-symbol {
+    font-weight: 600;
+}
+
+.vs-xmr-pct {
+    font-size: 0.85rem;
 }
 
 /* ── Market table ── */
@@ -462,6 +542,31 @@ div[style*="border:1px solid green"] {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 130px;
+}
+
+/* Coin-cell link variants (override default link colors so they inherit) */
+.coin-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+    .coin-link:hover {
+        color: var(--xmr-orange);
+    }
+
+.coin-name-link {
+    color: var(--xmr-text-muted);
+    text-decoration: none;
+}
+
+    .coin-name-link:hover {
+        color: var(--xmr-orange);
+    }
+
+/* Rounded coin avatar (used in table + stat bar) */
+.coin-icon {
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
 .xmr-badge {
@@ -526,16 +631,26 @@ div[style*="border:1px solid green"] {
     opacity: 0.5;
 }
 
+/* Utilities */
+.cell-nowrap {
+    white-space: nowrap;
+}
+
+.cursor-default {
+    cursor: default;
+}
+
 /* ── Mobile ── */
 @media (max-width: 576px) {
     .xmr-stat {
-        flex: 1 1 45%;
-        padding: 0.6rem 0.75rem;
+        flex: 1 1 100%;
+        padding: 0.75rem 1rem;
     }
 
-        .xmr-stat:nth-child(even) {
-            border-right: none;
-        }
+    .xmr-stat--wide,
+    .xmr-stat--med {
+        min-width: 0;
+    }
 
     .stat-value {
         font-size: 0.9rem;
@@ -705,4 +820,133 @@ div[style*="border:1px solid green"] {
         min-width: 100%;
         max-width: 100%;
     }
+}
+
+
+/* ── Coin detail page ───────────────────────────────────────────────────── */
+
+/* Node-verified supply notice (top of XMR detail page) */
+.node-verified-notice {
+    font-size: 0.82rem;
+    color: var(--xmr-text-muted);
+}
+
+.node-verified-check {
+    color: #1a7f3c;
+}
+
+.node-verified-value {
+    color: var(--xmr-text);
+}
+
+/* Detail page header */
+.coin-symbol-secondary {
+    color: var(--xmr-text-muted);
+    font-size: 1rem;
+}
+
+.coin-rank-label {
+    color: var(--xmr-text-muted);
+    font-size: 0.82rem;
+}
+
+/* Trade Monero CTA — like btn-primary but with white text */
+.btn-xmr-trade {
+    background: var(--xmr-orange);
+    border-color: var(--xmr-orange);
+    color: #fff;
+    font-weight: 600;
+}
+
+    .btn-xmr-trade:hover,
+    .btn-xmr-trade:focus {
+        background: var(--xmr-orange-dark);
+        border-color: var(--xmr-orange-dark);
+        color: #fff;
+    }
+
+/* Chart card */
+.chart-toggle-btn {
+    font-size: 0.75rem;
+}
+
+.chart-status {
+    font-size: 0.78rem;
+    color: var(--xmr-text-muted);
+}
+
+.chart-canvas-wrap {
+    position: relative;
+    height: 320px;
+}
+
+/* Stats / vs-XMR table */
+.stats-table {
+    font-size: 0.85rem;
+}
+
+.stats-sublabel {
+    font-size: 0.75rem;
+    color: var(--xmr-text-muted);
+    display: block;
+}
+
+.stats-note {
+    font-size: 0.8rem;
+    color: var(--xmr-text-muted);
+    margin-left: 6px;
+}
+
+.ath-change-pct {
+    font-size: 0.8rem;
+    margin-left: 6px;
+}
+
+.value-sub {
+    font-size: 0.75rem;
+    color: var(--xmr-text-muted);
+    margin-top: 2px;
+}
+
+/* Node-verified inline badge inside stats table */
+.badge-node {
+    font-size: 0.65rem;
+    font-weight: normal;
+    vertical-align: middle;
+}
+
+/* "How we calculate" explanation card */
+.calc-body {
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+    .calc-body p {
+        margin-bottom: 0.75rem;
+    }
+
+    .calc-body h6 {
+        margin-top: 1.25rem;
+        margin-bottom: 0.5rem;
+        color: var(--xmr-text);
+    }
+
+    .calc-body ul {
+        margin-top: 0.75rem;
+        margin-bottom: 0.75rem;
+        padding-left: 1.25rem;
+    }
+
+        .calc-body ul:last-child {
+            margin-bottom: 0;
+        }
+
+.calc-formula {
+    background: var(--xmr-black);
+    padding: 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    overflow-x: auto;
+    color: var(--xmr-text);
+    margin: 0;
 }

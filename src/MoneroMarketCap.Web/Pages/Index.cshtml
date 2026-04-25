@@ -11,24 +11,22 @@
 @if (Model.Monero != null)
 {
     var xmr = Model.Monero;
-    <div class="xmr-stat-bar mb-4" style="display:flex;gap:1.5rem;flex-wrap:wrap">
-        <div class="xmr-stat" style="flex:1;min-width:160px;padding:1rem 1.25rem">
+    <div class="xmr-stat-bar mb-4">
+        <div class="xmr-stat">
             <span class="stat-label">XMR Price</span>
             <span class="stat-value" id="xmr-price">@FormatUsd(xmr.PriceUsd)</span>
             <span id="xmr-change-24h" class="stat-change @(xmr.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                 @(xmr.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent24h).ToString("N2")% 24h
             </span>
         </div>
-        <div class="xmr-stat" style="flex:1;min-width:160px;padding:1rem 1.25rem">
-            <span class="stat-label">
-                Market Cap
-            </span>
+        <div class="xmr-stat">
+            <span class="stat-label">Market Cap</span>
             <span class="stat-value" id="xmr-mcap">@FormatLarge(MoneroSupplyDisplay.EffectiveMarketCapUsd(xmr))</span>
-            <span id="xmr-rank" class="stat-change" style="color:var(--xmr-text-muted)">Rank #@xmr.MarketCapRank</span>
+            <span id="xmr-rank" class="stat-change text-muted">Rank #@xmr.MarketCapRank</span>
         </div>
-        <div class="xmr-stat" style="flex:2;min-width:320px;padding:1rem 1.25rem">
+        <div class="xmr-stat xmr-stat--wide">
             <span class="stat-label">Price Change</span>
-            <div class="price-changes" style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:0.35rem">
+            <div class="price-changes">
                 <span class="change-row">
                     <span class="change-label">1h</span>
                     <span id="xmr-1h" class="@(xmr.PriceChangePercent1h >= 0 ? "text-success" : "text-danger")">
@@ -61,20 +59,78 @@
                 </span>
             </div>
         </div>
+        @{
+            // Best/worst performer vs XMR over 7d, excluding XMR itself.
+            // "vs XMR" = how much the coin moved relative to XMR in the same window.
+            // A positive value means the coin outperformed XMR; negative means XMR outperformed.
+            var performers = Model.Coins
+                .Where(c => c.Symbol.ToUpper() != "XMR"
+                         && Model.Monero != null
+                         && Model.Monero.PriceChangePercent24h != -100m
+                         && c.MarketCapUsd > 100_000_000m)
+                .Select(c => new
+                {
+                    Coin = c,
+                    VsXmr = ((1m + c.PriceChangePercent24h / 100m) / (1m + Model.Monero!.PriceChangePercent24h / 100m) - 1m) * 100m
+                })
+                .ToList();
+
+            var bestVsXmr = performers.OrderByDescending(x => x.VsXmr).FirstOrDefault();
+            var worstVsXmr = performers.OrderBy(x => x.VsXmr).FirstOrDefault();
+        }
+
+        @if (bestVsXmr != null && worstVsXmr != null)
+        {
+            <div class="xmr-stat xmr-stat--med">
+                <span class="stat-label">vs XMR (7d)</span>
+                <div class="vs-xmr-row">
+                    <a href="/coins/@bestVsXmr.Coin.Symbol.ToLower()" class="vs-xmr-link">
+                        <div class="vs-xmr-body">
+                            <span class="vs-xmr-label">Best</span>
+                            <div class="vs-xmr-value">
+                                @if (!string.IsNullOrEmpty(bestVsXmr.Coin.ImageUrl))
+                                {
+                                    <img src="@bestVsXmr.Coin.ImageUrl" width="18" height="18" class="coin-icon" />
+                                }
+                                <span class="vs-xmr-symbol">@bestVsXmr.Coin.Symbol</span>
+                                <span class="text-success mono vs-xmr-pct">
+                                    ▲ @bestVsXmr.VsXmr.ToString("N2")%
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/coins/@worstVsXmr.Coin.Symbol.ToLower()" class="vs-xmr-link">
+                        <div class="vs-xmr-body">
+                            <span class="vs-xmr-label">Worst</span>
+                            <div class="vs-xmr-value">
+                                @if (!string.IsNullOrEmpty(worstVsXmr.Coin.ImageUrl))
+                                {
+                                    <img src="@worstVsXmr.Coin.ImageUrl" width="18" height="18" class="coin-icon" />
+                                }
+                                <span class="vs-xmr-symbol">@worstVsXmr.Coin.Symbol</span>
+                                <span class="text-danger mono vs-xmr-pct">
+                                    ▼ @Math.Abs(worstVsXmr.VsXmr).ToString("N2")%
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        }
     </div>
 }
 
 <div class="table-meta">
     <span>
-        <span style="color:var(--xmr-text-muted)">Data updated:</span>
+        <span class="text-muted">Data updated:</span>
         <span id="last-updated-bar"
-              title="@(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "")"
-              style="cursor:default">
+              class="cursor-default"
+              title="@(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "")">
             @(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("HH:mm:ss") + " UTC" : "pending...")
         </span>
     </span>
     <span>
-        <span style="color:var(--xmr-text-muted)">Next update in:</span>
+        <span class="text-muted">Next update in:</span>
         <span id="countdown-bar">60</span>s
     </span>
 </div>
@@ -88,20 +144,20 @@
 else
 {
     <div class="table-responsive">
-        <table class="table market-table" style="font-size:0.82rem">
+        <table class="table market-table">
             <thead>
                 <tr>
-                    <th style="width:2rem;cursor:pointer;user-select:none" data-sort="mcap"># <span class="sort-indicator">▼</span></th>
-                    <th style="cursor:pointer;user-select:none" data-sort="name">Coin <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="price">Price (USD) <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="xmr-price">Price (XMR) <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change-1h">1h % (USD) <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change">24h % (USD) <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="change-7d">7d % (USD) <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="mcap">Market Cap <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="ratio">vs XMR <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="supply">Supply <span class="sort-indicator"></span></th>
-                    <th class="text-end" style="cursor:pointer;user-select:none" data-sort="buys">1 XMR buys <span class="sort-indicator"></span></th>
+                    <th class="col-rank sortable" data-sort="mcap"># <span class="sort-indicator">▼</span></th>
+                    <th class="sortable" data-sort="name">Coin <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="price">Price (USD) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="xmr-price">Price (XMR) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="change-1h">1h % (USD) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="change">24h % (USD) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="change-7d">7d % (USD) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="mcap">Market Cap <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="ratio">vs XMR <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="supply">Supply <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="buys">1 XMR buys <span class="sort-indicator"></span></th>
                 </tr>
             </thead>
             <tbody>
@@ -120,7 +176,7 @@ else
                         ? effectiveMcap / xmrEffectiveMcap : 0;
                     var coinsPerXmr = coin.PriceUsd > 0 && Model.Monero != null
                         ? Model.Monero.PriceUsd / coin.PriceUsd : 0;
-                  
+
                     bool isXmr = coin.Symbol.ToUpper() == "XMR";
 
                     <tr class="@(isXmr ? "xmr-row" : "")"
@@ -142,11 +198,11 @@ else
                                 @if (!string.IsNullOrEmpty(coin.ImageUrl))
                                 {
                                     <a href="/coins/@coin.Symbol.ToLower()">
-                                        <img src="@coin.ImageUrl" width="20" height="20" style="border-radius:50%;flex-shrink:0" />
+                                        <img src="@coin.ImageUrl" width="20" height="20" class="coin-icon" />
                                     </a>
                                 }
-                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-symbol" style="color:inherit;text-decoration:none">@coin.Symbol</a>
-                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-name d-none d-lg-inline" style="color:var(--xmr-text-muted);text-decoration:none">@coin.Name</a>
+                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-symbol coin-link">@coin.Symbol</a>
+                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-name coin-name-link d-none d-lg-inline">@coin.Name</a>
                                 @if (isXmr)
                                 {
                                     <span class="xmr-badge">base</span>
@@ -180,7 +236,7 @@ else
                         <td class="text-end mono cell-mcap">
                             @FormatLarge(effectiveMcap)
                         </td>
-                        <td class="text-end cell-ratio" style="white-space:nowrap">
+                        <td class="text-end cell-ratio cell-nowrap">
                             @if (isXmr)
                             {
                                 <span class="ratio-base">base</span>
@@ -197,7 +253,7 @@ else
                         <td class="text-end mono cell-supply">
                             @FormatUnits(effectiveSupply)
                         </td>
-                        <td class="text-end mono xmr-val cell-buys" style="white-space:nowrap">
+                        <td class="text-end mono xmr-val cell-buys cell-nowrap">
                             @if (!isXmr)
                             {
                                 @(coinsPerXmr >= 1
@@ -294,7 +350,7 @@ else
         }
 
         // Badge HTML reused when preserving node-verified markers across refreshes.
-        const VERIFIED_BADGE = ' <span class="badge bg-success ms-1" style="font-size:0.6rem;font-weight:normal;vertical-align:middle" title="Verified by our full node">✓</span>';
+        const VERIFIED_BADGE = '';// ' <span class="badge bg-success ms-1 verified-badge" title="Verified by our full node">✓</span>';
 
         // --- Sort state ---
         let sortCol = 'mcap';
@@ -482,6 +538,42 @@ else
                     const buysCell = row.querySelector('.cell-buys');
                     if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
                 });
+
+                // Recompute best/worst vs XMR
+                if (xmr && xmr.priceChangePercent24h !== undefined) {
+                    const vsXmrList = coins
+                        .filter(c => c.symbol !== 'XMR')
+                        .map(c => ({
+                            symbol: c.symbol,
+                            name: c.name,
+                            imageUrl: c.imageUrl,
+                            vsXmr: ((1 + c.priceChangePercent24h / 100) / (1 + xmr.priceChangePercent24h / 100) - 1) * 100
+                        }))
+                        .filter(x => Number.isFinite(x.vsXmr));
+
+                    if (vsXmrList.length) {
+                        const best = vsXmrList.reduce((a, b) => b.vsXmr > a.vsXmr ? b : a);
+                        const worst = vsXmrList.reduce((a, b) => b.vsXmr < a.vsXmr ? b : a);
+
+                        const bestCard = document.getElementById('vs-xmr-best');
+                        const worstCard = document.getElementById('vs-xmr-worst');
+                        if (bestCard) {
+                            bestCard.innerHTML =
+                                (best.imageUrl ? `<img src="${best.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
+                                `<span class="vs-xmr-symbol">${best.symbol}</span>` +
+                                `<span class="text-success mono vs-xmr-pct">▲ ${best.vsXmr.toFixed(2)}%</span>`;
+                            bestCard.parentElement.parentElement.href = '/coins/' + best.symbol.toLowerCase();
+                        }
+                        if (worstCard) {
+                            worstCard.innerHTML =
+                                (worst.imageUrl ? `<img src="${worst.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
+                                `<span class="vs-xmr-symbol">${worst.symbol}</span>` +
+                                `<span class="text-danger mono vs-xmr-pct">▼ ${Math.abs(worst.vsXmr).toFixed(2)}%</span>`;
+                            worstCard.parentElement.parentElement.href = '/coins/' + worst.symbol.toLowerCase();
+                        }
+                    }
+                }
+
 
                 applySort();
             } catch (e) {
