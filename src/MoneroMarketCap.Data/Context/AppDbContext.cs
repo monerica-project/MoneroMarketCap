@@ -40,4 +40,39 @@ public class AppDbContext : DbContext
             .Property(t => t.Type)
             .HasConversion<string>();
     }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        StampTimestamps();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override int SaveChanges()
+    {
+        StampTimestamps();
+        return base.SaveChanges();
+    }
+
+    /// <summary>
+    /// Auto-stamps CreatedAt on insert and UpdatedAt on every save for any
+    /// entity inheriting from BaseEntity. CreatedAt is never modified after insert.
+    /// </summary>
+    private void StampTimestamps()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            switch (entry.State)
+            {
+                case EntityState.Added:
+                    entry.Entity.CreatedAt = now;
+                    entry.Entity.UpdatedAt = now;
+                    break;
+                case EntityState.Modified:
+                    entry.Entity.UpdatedAt = now;
+                    entry.Property(nameof(BaseEntity.CreatedAt)).IsModified = false;
+                    break;
+            }
+        }
+    }
 }
