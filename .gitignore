@@ -98,3 +98,4 @@ rcf/
 /CI/_backup-postgres-config.ps1
 /CI/_backup-postgres-config.ps1
 CI/deploy-config.sh
+CI/backup-config.sh
