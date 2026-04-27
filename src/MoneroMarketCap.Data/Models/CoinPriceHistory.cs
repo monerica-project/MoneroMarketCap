@@ -1,6 +1,6 @@
 ﻿namespace MoneroMarketCap.Data.Models;
 
-public class CoinPriceHistory : BaseEntity
+public class CoinPriceHistory : AuditableEntity
 {
     public int Id { get; set; }
     public int CoinId { get; set; }

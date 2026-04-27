@@ -55,12 +55,12 @@ public class AppDbContext : DbContext
 
     /// <summary>
     /// Auto-stamps CreatedAt on insert and UpdatedAt on every save for any
-    /// entity inheriting from BaseEntity. CreatedAt is never modified after insert.
+    /// entity inheriting from AuditableEntity. CreatedAt is never modified after insert.
     /// </summary>
     private void StampTimestamps()
     {
         var now = DateTime.UtcNow;
-        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        foreach (var entry in ChangeTracker.Entries<AuditableEntity>())
         {
             switch (entry.State)
             {
@@ -70,7 +70,7 @@ public class AppDbContext : DbContext
                     break;
                 case EntityState.Modified:
                     entry.Entity.UpdatedAt = now;
-                    entry.Property(nameof(BaseEntity.CreatedAt)).IsModified = false;
+                    entry.Property(nameof(AuditableEntity.CreatedAt)).IsModified = false;
                     break;
             }
         }
