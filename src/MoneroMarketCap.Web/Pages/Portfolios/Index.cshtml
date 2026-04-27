@@ -5,28 +5,33 @@
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
     string Mask(string v) => Model.PrivacyMode ? "••••" : v;
+    string FormatPrice(decimal v) =>
+        v >= 1m       ? $"${v.ToString("N2", usd)}" :
+        v >= 0.01m    ? $"${v.ToString("N4", usd)}" :
+        v >= 0.0001m  ? $"${v.ToString("N6", usd)}" :
+                        $"${v.ToString("N8", usd)}";
 }
 
 <meta name="format-detection" content="telephone=no" />
 
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<div class="portfolio-header d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h2 class="mb-0">My Portfolios</h2>
-    <div class="text-end">
-        <div class="fs-5">Total Net Value: <strong>@Mask($"${Model.TotalNetValue.ToString("N2", usd)}")</strong></div>
+    <div class="text-end portfolio-summary">
+        <div class="portfolio-total">Total Net Value: <strong>@Mask($"${Model.TotalNetValue.ToString("N2", usd)}")</strong></div>
         @if (Model.XmrPrice > 0)
         {
-            <div style="color:var(--xmr-text-muted);font-size:0.85rem;white-space:nowrap">
+            <div class="portfolio-xmr-equiv">
                 @Mask($"{(Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)} XMR")
             </div>
         }
-        <div class="mt-1" style="font-size:0.9rem;white-space:nowrap">
+        <div class="portfolio-pnl-line mt-1">
             Total P&amp;L:
             <strong class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
                 @Mask($"${Model.TotalPnl.ToString("N2", usd)}")
             </strong>
             @if (Model.XmrPrice > 0)
             {
-                <span class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")" style="font-size:0.82rem">
+                <span class="portfolio-pnl-xmr @(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
                     (@Mask($"{(Model.TotalPnl / Model.XmrPrice).ToString("N4", usd)} XMR"))
                 </span>
             }
@@ -45,43 +50,47 @@ else
 {
     @if (Model.Allocations.Any() && totalAlloc > 0)
     {
-        <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+        <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title mb-3">Allocation by Coin</h5>
                 <div class="row align-items-center">
                     <div class="col-md-5">
-                        <div style="position:relative;max-width:340px;margin:0 auto">
-                            <canvas id="allocationChart" style="cursor:pointer"></canvas>
+                        <div class="allocation-chart-wrap">
+                            <canvas id="allocationChart"></canvas>
                         </div>
                     </div>
                     <div class="col-md-7">
-                        <table class="table table-sm mb-0" style="color:inherit">
-                            <thead>
-                                <tr>
-                                    <th>Coin</th>
-                                    <th class="text-end">Value (USD)</th>
-                                    <th class="text-end">%</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var a in Model.Allocations)
-                                {
-                                    var pct = (double)(a.ValueUsd / totalAlloc) * 100.0;
+                        <div class="table-responsive">
+                            <table class="table table-sm allocation-table mb-0">
+                                <thead>
                                     <tr>
-                                        <td><a href="/coins/@a.Symbol.ToLower()"><strong>@a.Symbol</strong></a></td>
-                                        <td class="text-end">@Mask($"${a.ValueUsd.ToString("N2", usd)}")</td>
-                                        <td class="text-end">@pct.ToString("N2", usd)%</td>
+                                        <th>Coin</th>
+                                        <th class="text-end">Price (USD)</th>
+                                        <th class="text-end">Value (USD)</th>
+                                        <th class="text-end">%</th>
                                     </tr>
-                                }
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <th>Total</th>
-                                    <th class="text-end">@Mask($"${totalAlloc.ToString("N2", usd)}")</th>
-                                    <th class="text-end">100.00%</th>
-                                </tr>
-                            </tfoot>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    @foreach (var a in Model.Allocations)
+                                    {
+                                        var pct = (double)(a.ValueUsd / totalAlloc) * 100.0;
+                                        <tr>
+                                            <td><a href="/coins/@a.Symbol.ToLower()"><strong>@a.Symbol</strong></a></td>
+                                            <td class="text-end mono">@FormatPrice(a.PriceUsd)</td>
+                                            <td class="text-end mono">@Mask($"${a.ValueUsd.ToString("N2", usd)}")</td>
+                                            <td class="text-end mono">@pct.ToString("N2", usd)%</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="2">Total</th>
+                                        <th class="text-end mono">@Mask($"${totalAlloc.ToString("N2", usd)}")</th>
+                                        <th class="text-end mono">100.00%</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -92,7 +101,7 @@ else
         @foreach (var p in Model.Portfolios)
         {
             <div class="col-md-4 mb-3">
-                <div class="card" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+                <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">@p.Name</h5>
                         <p class="card-text mb-1">
@@ -100,11 +109,11 @@ else
                         </p>
                         @if (Model.XmrPrice > 0)
                         {
-                            <p class="card-text mb-1" style="color:var(--xmr-text-muted);font-size:0.82rem;white-space:nowrap">
+                            <p class="card-text mb-1 portfolio-card-xmr">
                                 @Mask($"{(p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)} XMR")
                             </p>
                         }
-                        <p class="card-text mb-2" style="font-size:0.85rem">
+                        <p class="card-text mb-2 portfolio-card-meta">
                             Coins: @p.PortfolioCoins.Count
                         </p>
                         <a asp-page="/Portfolios/Detail" asp-route-id="@p.Id" class="btn btn-primary btn-sm">View</a>
@@ -132,72 +141,72 @@ else
     <script src="~/js/chart.umd.min.js"></script>
     <script>
         (function() {
-        const privacyMode = @(Model.PrivacyMode ? "true" : "false");
-        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
-        const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
-        const palette = [
-        '#4a90e2', '#50c878', '#e74c3c', '#9b59b6', '#f1c40f',
-        '#1abc9c', '#e67e22', '#34495e', '#ff69b4', '#2ecc71',
-        '#8e44ad', '#3498db', '#d35400', '#16a085', '#c0392b'
-        ];
-        const xmrOrange = '#ff6600';
-        let paletteIdx = 0;
-        const colors = labels.map(label => {
-        if (label === 'XMR') return xmrOrange;
-        return palette[paletteIdx++ % palette.length];
-        });
-        const total = values.reduce((s, v) => s + v, 0);
+            const privacyMode = @(Model.PrivacyMode ? "true" : "false");
+            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
+            const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
+            const palette = [
+                '#4a90e2', '#50c878', '#e74c3c', '#9b59b6', '#f1c40f',
+                '#1abc9c', '#e67e22', '#34495e', '#ff69b4', '#2ecc71',
+                '#8e44ad', '#3498db', '#d35400', '#16a085', '#c0392b'
+            ];
+            const xmrOrange = '#ff6600';
+            let paletteIdx = 0;
+            const colors = labels.map(label => {
+                if (label === 'XMR') return xmrOrange;
+                return palette[paletteIdx++ % palette.length];
+            });
+            const total = values.reduce((s, v) => s + v, 0);
 
-        const canvas = document.getElementById('allocationChart');
-        const ctx = canvas.getContext('2d');
-        const chart = new Chart(ctx, {
-        type: 'pie',
-        data: {
-        labels: labels,
-        datasets: [{
-        data: values,
-        backgroundColor: colors,
-        borderColor: 'rgba(0,0,0,0.3)',
-        borderWidth: 1
-        }]
-        },
-        options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        onClick: function(evt, elements) {
-        if (elements && elements.length > 0) {
-        const idx = elements[0].index;
-        const sym = labels[idx];
-        if (sym) window.location.href = '/coins/' + sym.toLowerCase();
-        }
-        },
-        onHover: function(evt, elements) {
-        evt.native.target.style.cursor = (elements && elements.length > 0) ? 'pointer' : 'default';
-        },
-        plugins: {
-        legend: {
-        position: 'bottom',
-        labels: { color: getComputedStyle(document.body).color },
-        onClick: function(evt, legendItem) {
-        const sym = legendItem.text;
-        if (sym) window.location.href = '/coins/' + sym.toLowerCase();
-        }
-        },
-        tooltip: {
-        callbacks: {
-        label: function(ctx) {
-        const v = ctx.parsed;
-        const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
-        if (privacyMode) {
-        return ctx.label + ': ' + pct + '%';
-        }
-        return ctx.label + ': $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
-        }
-        }
-        }
-        }
-        }
-        });
+            const canvas = document.getElementById('allocationChart');
+            const ctx = canvas.getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: 'rgba(0,0,0,0.3)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    onClick: function(evt, elements) {
+                        if (elements && elements.length > 0) {
+                            const idx = elements[0].index;
+                            const sym = labels[idx];
+                            if (sym) window.location.href = '/coins/' + sym.toLowerCase();
+                        }
+                    },
+                    onHover: function(evt, elements) {
+                        evt.native.target.style.cursor = (elements && elements.length > 0) ? 'pointer' : 'default';
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: getComputedStyle(document.body).color },
+                            onClick: function(evt, legendItem) {
+                                const sym = legendItem.text;
+                                if (sym) window.location.href = '/coins/' + sym.toLowerCase();
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const v = ctx.parsed;
+                                    const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
+                                    if (privacyMode) {
+                                        return ctx.label + ': ' + pct + '%';
+                                    }
+                                    return ctx.label + ': $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         })();
     </script>
 }

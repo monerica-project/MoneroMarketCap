@@ -64,6 +64,7 @@ public class IndexModel : PageModel
             .Select(g => new AllocationSlice
             {
                 Symbol = g.Key,
+                PriceUsd = g.First().Coin.PriceUsd,
                 ValueUsd = g.Sum(pc => pc.TotalAmount * pc.Coin.PriceUsd)
             })
             .Where(a => a.ValueUsd > 0)
@@ -104,6 +105,7 @@ public class IndexModel : PageModel
     public class AllocationSlice
     {
         public string Symbol { get; set; } = "";
+        public decimal PriceUsd { get; set; }
         public decimal ValueUsd { get; set; }
     }
 }

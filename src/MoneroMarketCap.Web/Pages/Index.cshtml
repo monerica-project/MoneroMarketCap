@@ -415,171 +415,146 @@ else
 
         applySort();
 
-        async function refreshPrices() {
-            try {
-                const res = await fetch('/api/Prices');
-                if (!res.ok) return;
-                const coins = await res.json();
-                const xmr = coins.find(c => c.symbol === 'XMR');
-                if (!xmr) return;
+         async function refreshPrices() {
+    try {
+        const res = await fetch('/api/Prices');
+        if (!res.ok) return;
+        const coins = await res.json();
+        const xmr = coins.find(c => c.symbol === 'XMR');
+        if (!xmr) return;
 
-                // Compute effective (node-verified-when-fresh) values on the client.
-                // Falls back to CoinGecko values if the API doesn't yet expose node fields.
-                const FRESHNESS_MS = 30 * 60 * 1000;
-                function isNodeFresh(c) {
-                    if (!c || !c.nodeSupply || !c.nodeSupplyUpdatedAt) return false;
-                    const age = Date.now() - new Date(c.nodeSupplyUpdatedAt).getTime();
-                    return age < FRESHNESS_MS;
+        // Source of truth for supply is the server-rendered dataset (uses your node value).
+        // We never overwrite it from the CoinGecko payload — that was the cause of the flicker.
+        // mcap floats with price: mcap = serverSupply * livePrice.
+        const xmrRow = document.querySelector('tr[data-symbol="XMR"]');
+        const xmrSupply = xmrRow ? parseFloat(xmrRow.dataset.supply) || 0 : 0;
+        const xmrEffectiveMcap = xmrSupply * xmr.priceUsd;
+
+        const xmrChangeHelper = (id, val) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const up = val >= 0;
+            el.textContent = (up ? '▲ ' : '▼ ') + Math.abs(val).toFixed(2) + '%';
+            el.className = up ? 'text-success' : 'text-danger';
+        };
+        xmrChangeHelper('xmr-1h', xmr.priceChangePercent1h);
+        xmrChangeHelper('xmr-24h', xmr.priceChangePercent24h);
+        xmrChangeHelper('xmr-7d', xmr.priceChangePercent7d);
+        xmrChangeHelper('xmr-30d', xmr.priceChangePercent30d);
+        xmrChangeHelper('xmr-1y', xmr.priceChangePercent1y);
+
+        const priceEl = document.getElementById('xmr-price');
+        if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);
+        const mcapEl = document.getElementById('xmr-mcap');
+        if (mcapEl) mcapEl.textContent = formatLarge(xmrEffectiveMcap);
+        const rankEl = document.getElementById('xmr-rank');
+        if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
+
+        coins.forEach(coin => {
+            const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
+            if (!row) return;
+            const isXmr = coin.symbol === 'XMR';
+
+            // Preserve server-rendered supply; recompute mcap from it.
+            const coinEffectiveSupply = parseFloat(row.dataset.supply) || 0;
+            const coinEffectiveMcap = coinEffectiveSupply * coin.priceUsd;
+
+            const priceInXmr = xmr.priceUsd > 0 ? coin.priceUsd / xmr.priceUsd : 0;
+            const mcapRatio = xmrEffectiveMcap > 0 ? coinEffectiveMcap / xmrEffectiveMcap : 0;
+            const coinsPerXmr = coin.priceUsd > 0 ? xmr.priceUsd / coin.priceUsd : 0;
+
+            // Update data attributes (supply intentionally NOT overwritten)
+            row.dataset.price = coin.priceUsd;
+            row.dataset.xmrPrice = priceInXmr;
+            row.dataset.change1h = coin.priceChangePercent1h;
+            row.dataset.change = coin.priceChangePercent24h;
+            row.dataset.change7d = coin.priceChangePercent7d;
+            row.dataset.mcap = coinEffectiveMcap;
+            row.dataset.ratio = mcapRatio;
+            row.dataset.buys = coinsPerXmr;
+
+            // Update display cells
+            const priceCell = row.querySelector('.cell-price');
+            if (priceCell) priceCell.textContent = formatPrice(coin.priceUsd);
+
+            const change1hCell = row.querySelector('.cell-change-1h');
+            if (change1hCell) {
+                const f = formatChangeCell(coin.priceChangePercent1h);
+                change1hCell.textContent = f.text;
+                change1hCell.className = f.cls + ' cell-change-1h';
+            }
+
+            const xmrPriceCell = row.querySelector('.cell-xmr-price');
+            if (xmrPriceCell) xmrPriceCell.textContent = isXmr ? '1 XMR' : formatXmrPrice(coin.priceUsd, xmr.priceUsd);
+
+            const changeCell = row.querySelector('.cell-change');
+            if (changeCell) {
+                const f = formatChangeCell(coin.priceChangePercent24h);
+                changeCell.textContent = f.text;
+                changeCell.className = f.cls + ' cell-change';
+            }
+
+            const change7dCell = row.querySelector('.cell-change-7d');
+            if (change7dCell) {
+                const f = formatChangeCell(coin.priceChangePercent7d);
+                change7dCell.textContent = f.text;
+                change7dCell.className = f.cls + ' cell-change-7d';
+            }
+
+            // mcap updates with price; supply cell is left alone (server-rendered).
+            const mcapCell = row.querySelector('.cell-mcap');
+            if (mcapCell) mcapCell.textContent = formatLarge(coinEffectiveMcap);
+
+            const ratioCell = row.querySelector('.cell-ratio');
+            if (ratioCell && !isXmr) {
+                const r = formatRatio(coinEffectiveMcap, xmrEffectiveMcap);
+                ratioCell.innerHTML = '<span class="' + r.cls + '">' + r.text + '</span>';
+            }
+
+            const buysCell = row.querySelector('.cell-buys');
+            if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
+        });
+
+        // Recompute best/worst vs XMR (unchanged)
+        if (xmr && xmr.priceChangePercent24h !== undefined) {
+            const vsXmrList = coins
+                .filter(c => c.symbol !== 'XMR')
+                .map(c => ({
+                    symbol: c.symbol,
+                    name: c.name,
+                    imageUrl: c.imageUrl,
+                    vsXmr: ((1 + c.priceChangePercent24h / 100) / (1 + xmr.priceChangePercent24h / 100) - 1) * 100
+                }))
+                .filter(x => Number.isFinite(x.vsXmr));
+
+            if (vsXmrList.length) {
+                const best = vsXmrList.reduce((a, b) => b.vsXmr > a.vsXmr ? b : a);
+                const worst = vsXmrList.reduce((a, b) => b.vsXmr < a.vsXmr ? b : a);
+
+                const bestCard = document.getElementById('vs-xmr-best');
+                const worstCard = document.getElementById('vs-xmr-worst');
+                if (bestCard) {
+                    bestCard.innerHTML =
+                        (best.imageUrl ? `<img src="${best.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
+                        `<span class="vs-xmr-symbol">${best.symbol}</span>` +
+                        `<span class="text-success mono vs-xmr-pct">▲ ${best.vsXmr.toFixed(2)}%</span>`;
+                    bestCard.parentElement.parentElement.href = '/coins/' + best.symbol.toLowerCase();
                 }
-                function effectiveMcap(c) {
-                    return isNodeFresh(c) && c.priceUsd > 0 ? c.nodeSupply * c.priceUsd : c.marketCapUsd;
+                if (worstCard) {
+                    worstCard.innerHTML =
+                        (worst.imageUrl ? `<img src="${worst.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
+                        `<span class="vs-xmr-symbol">${worst.symbol}</span>` +
+                        `<span class="text-danger mono vs-xmr-pct">▼ ${Math.abs(worst.vsXmr).toFixed(2)}%</span>`;
+                    worstCard.parentElement.parentElement.href = '/coins/' + worst.symbol.toLowerCase();
                 }
-                function effectiveSupply(c) {
-                    return isNodeFresh(c) ? c.nodeSupply : c.circulatingSupply;
-                }
-
-                const xmrEffectiveMcap = effectiveMcap(xmr);
-
-                const xmrChangeHelper = (id, val) => {
-                    const el = document.getElementById(id);
-                    if (!el) return;
-                    const up = val >= 0;
-                    el.textContent = (up ? '▲ ' : '▼ ') + Math.abs(val).toFixed(2) + '%';
-                    el.className = up ? 'text-success' : 'text-danger';
-                };
-                xmrChangeHelper('xmr-1h', xmr.priceChangePercent1h);
-                xmrChangeHelper('xmr-24h', xmr.priceChangePercent24h);
-                xmrChangeHelper('xmr-7d', xmr.priceChangePercent7d);
-                xmrChangeHelper('xmr-30d', xmr.priceChangePercent30d);
-                xmrChangeHelper('xmr-1y', xmr.priceChangePercent1y);
-
-                const priceEl = document.getElementById('xmr-price');
-                if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);
-                const mcapEl = document.getElementById('xmr-mcap');
-                if (mcapEl) mcapEl.textContent = formatLarge(xmrEffectiveMcap);
-                const rankEl = document.getElementById('xmr-rank');
-                if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
-
-                coins.forEach(coin => {
-                    const row = document.querySelector('tr[data-symbol="' + coin.symbol + '"]');
-                    if (!row) return;
-                    const isXmr = coin.symbol === 'XMR';
-
-                    const coinEffectiveMcap = effectiveMcap(coin);
-                    const coinEffectiveSupply = effectiveSupply(coin);
-
-                    const priceInXmr = xmr.priceUsd > 0 ? coin.priceUsd / xmr.priceUsd : 0;
-                    const mcapRatio = xmrEffectiveMcap > 0 ? coinEffectiveMcap / xmrEffectiveMcap : 0;
-                    const coinsPerXmr = coin.priceUsd > 0 ? xmr.priceUsd / coin.priceUsd : 0;
-
-                    // Keep the data-node-verified attribute current based on live freshness.
-                    // If the API doesn't return node fields yet, preserve the server-rendered value.
-                    if (coin.nodeSupply !== undefined) {
-                        row.dataset.nodeVerified = isNodeFresh(coin) ? 'true' : 'false';
-                    }
-                    const isVerified = row.dataset.nodeVerified === 'true';
-
-                    // Update data attributes
-                    row.dataset.price = coin.priceUsd;
-                    row.dataset.xmrPrice = priceInXmr;
-                    row.dataset.change1h = coin.priceChangePercent1h;
-                    row.dataset.change = coin.priceChangePercent24h;
-                    row.dataset.change7d = coin.priceChangePercent7d;
-                    row.dataset.mcap = coinEffectiveMcap;
-                    row.dataset.ratio = mcapRatio;
-                    row.dataset.supply = coinEffectiveSupply;
-                    row.dataset.buys = coinsPerXmr;
-
-                    // Update display cells
-                    const priceCell = row.querySelector('.cell-price');
-                    if (priceCell) priceCell.textContent = formatPrice(coin.priceUsd);
-
-                    const change1hCell = row.querySelector('.cell-change-1h');
-                    if (change1hCell) {
-                        const f = formatChangeCell(coin.priceChangePercent1h);
-                        change1hCell.textContent = f.text;
-                        change1hCell.className = f.cls + ' cell-change-1h';
-                    }
-
-                    const xmrPriceCell = row.querySelector('.cell-xmr-price');
-                    if (xmrPriceCell) xmrPriceCell.textContent = isXmr ? '1 XMR' : formatXmrPrice(coin.priceUsd, xmr.priceUsd);
-
-                    const changeCell = row.querySelector('.cell-change');
-                    if (changeCell) {
-                        const f = formatChangeCell(coin.priceChangePercent24h);
-                        changeCell.textContent = f.text;
-                        changeCell.className = f.cls + ' cell-change';
-                    }
-
-                    const change7dCell = row.querySelector('.cell-change-7d');
-                    if (change7dCell) {
-                        const f = formatChangeCell(coin.priceChangePercent7d);
-                        change7dCell.textContent = f.text;
-                        change7dCell.className = f.cls + ' cell-change-7d';
-                    }
-
-                    // Preserve the ✓ badge when node-verified.
-                    const mcapCell = row.querySelector('.cell-mcap');
-                    if (mcapCell) {
-                        mcapCell.innerHTML = formatLarge(coinEffectiveMcap) + (isVerified ? VERIFIED_BADGE : '');
-                    }
-
-                    const ratioCell = row.querySelector('.cell-ratio');
-                    if (ratioCell && !isXmr) {
-                        const r = formatRatio(coinEffectiveMcap, xmrEffectiveMcap);
-                        ratioCell.innerHTML = '<span class="' + r.cls + '">' + r.text + '</span>';
-                    }
-
-                    const supplyCell = row.querySelector('.cell-supply');
-                    if (supplyCell) {
-                        supplyCell.innerHTML = formatUnits(coinEffectiveSupply) + (isVerified ? VERIFIED_BADGE : '');
-                    }
-
-                    const buysCell = row.querySelector('.cell-buys');
-                    if (buysCell) buysCell.textContent = isXmr ? '—' : formatCoinsPerXmr(coin.priceUsd, xmr.priceUsd, coin.symbol);
-                });
-
-                // Recompute best/worst vs XMR
-                if (xmr && xmr.priceChangePercent24h !== undefined) {
-                    const vsXmrList = coins
-                        .filter(c => c.symbol !== 'XMR')
-                        .map(c => ({
-                            symbol: c.symbol,
-                            name: c.name,
-                            imageUrl: c.imageUrl,
-                            vsXmr: ((1 + c.priceChangePercent24h / 100) / (1 + xmr.priceChangePercent24h / 100) - 1) * 100
-                        }))
-                        .filter(x => Number.isFinite(x.vsXmr));
-
-                    if (vsXmrList.length) {
-                        const best = vsXmrList.reduce((a, b) => b.vsXmr > a.vsXmr ? b : a);
-                        const worst = vsXmrList.reduce((a, b) => b.vsXmr < a.vsXmr ? b : a);
-
-                        const bestCard = document.getElementById('vs-xmr-best');
-                        const worstCard = document.getElementById('vs-xmr-worst');
-                        if (bestCard) {
-                            bestCard.innerHTML =
-                                (best.imageUrl ? `<img src="${best.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
-                                `<span class="vs-xmr-symbol">${best.symbol}</span>` +
-                                `<span class="text-success mono vs-xmr-pct">▲ ${best.vsXmr.toFixed(2)}%</span>`;
-                            bestCard.parentElement.parentElement.href = '/coins/' + best.symbol.toLowerCase();
-                        }
-                        if (worstCard) {
-                            worstCard.innerHTML =
-                                (worst.imageUrl ? `<img src="${worst.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
-                                `<span class="vs-xmr-symbol">${worst.symbol}</span>` +
-                                `<span class="text-danger mono vs-xmr-pct">▼ ${Math.abs(worst.vsXmr).toFixed(2)}%</span>`;
-                            worstCard.parentElement.parentElement.href = '/coins/' + worst.symbol.toLowerCase();
-                        }
-                    }
-                }
-
-
-                applySort();
-            } catch (e) {
-                console.error('Price refresh failed:', e);
             }
         }
+
+        applySort();
+    } catch (e) {
+        console.error('Price refresh failed:', e);
+    }
+}
 
         let seconds = 60;
         const countdownBar = document.getElementById('countdown-bar');

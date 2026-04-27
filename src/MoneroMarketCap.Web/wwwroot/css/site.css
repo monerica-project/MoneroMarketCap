@@ -950,3 +950,59 @@ div[style*="border:1px solid green"] {
     color: var(--xmr-text);
     margin: 0;
 }
+
+/* ── Portfolios index page ──────────────────────────────────────────────── */
+.portfolio-summary .portfolio-total {
+    font-size: 1.25rem;
+}
+
+.portfolio-xmr-equiv {
+    color: var(--xmr-text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.portfolio-pnl-line {
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.portfolio-pnl-xmr {
+    font-size: 0.82rem;
+}
+
+.portfolio-card-xmr {
+    color: var(--xmr-text-muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.portfolio-card-meta {
+    font-size: 0.85rem;
+}
+
+/* Allocation pie chart wrapper — keeps chart from getting too big on desktop,
+   centered, and provides the positioning context Chart.js wants. */
+.allocation-chart-wrap {
+    position: relative;
+    max-width: 340px;
+    margin: 0 auto;
+}
+
+    .allocation-chart-wrap canvas {
+        cursor: pointer;
+    }
+
+/* On narrow screens, stack the chart above the allocation table with breathing room. */
+@media (max-width: 768px) {
+    .allocation-chart-wrap {
+        margin-bottom: 1rem;
+    }
+}
+
+/* Allocation table — let it scroll horizontally on mobile if values get wide.
+   The .table-responsive wrapper handles the scroll; this just keeps numbers from wrapping. */
+.allocation-table th,
+.allocation-table td {
+    white-space: nowrap;
+}
