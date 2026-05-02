@@ -157,8 +157,8 @@ server {
 server {
     listen 443 ssl;
     server_name $DOMAIN www.$DOMAIN;
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate /etc/nginx/certs/$DOMAIN.crt;
+    ssl_certificate_key /etc/nginx/certs/$DOMAIN.key;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     location / {
@@ -195,8 +195,8 @@ server {
 server {
     listen 443 ssl;
     server_name $DOMAIN www.$DOMAIN;
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate /etc/nginx/certs/$DOMAIN.crt;
+    ssl_certificate_key /etc/nginx/certs/$DOMAIN.key;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
 
@@ -246,7 +246,7 @@ enable_maintenance_page() {
     ssh_run "docker cp /tmp/maintenance.html nginx:/var/www/maintenance.html"
 
     local cert_now
-    cert_now=$(ssh_query "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no")
+    cert_now=$(ssh_query "docker exec nginx test -f /etc/nginx/certs/$DOMAIN.crt && echo yes || echo no")
 
     local m_file="/tmp/$APP_NAME.maint.conf"
     if [[ "$cert_now" == "yes" ]]; then
@@ -556,10 +556,14 @@ write_step "Configuring Nginx"
 CERT_EXISTS=$(ssh_query "test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem && echo yes || echo no")
 
 if [[ "$CERT_EXISTS" == "yes" ]]; then
-    ssh_run "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem /tmp/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem /tmp/privkey.pem"
-    ssh_run "docker exec nginx mkdir -p /etc/letsencrypt/live/$DOMAIN"
-    ssh_run "docker cp /tmp/fullchain.pem nginx:/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
-    ssh_run "docker cp /tmp/privkey.pem nginx:/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+    CERTS_DIR=$(ssh_query "docker volume inspect generated_nginx_certs --format '{{ .Mountpoint }}'")
+    if [[ -z "$CERTS_DIR" ]]; then
+        write_err "Could not find generated_nginx_certs volume mountpoint"
+        exit 1
+    fi
+    ssh_run "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem $CERTS_DIR/$DOMAIN.crt"
+    ssh_run "cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem $CERTS_DIR/$DOMAIN.key"
+    ssh_run "chmod 644 $CERTS_DIR/$DOMAIN.crt && chmod 600 $CERTS_DIR/$DOMAIN.key"
 
     NGINX_CONF_FILE="/tmp/$APP_NAME.nginx.conf.local"
     write_nginx_proxy_ssl > "$NGINX_CONF_FILE"
@@ -600,10 +604,14 @@ EOF
 
     write_ok "Certificate obtained - re-running nginx config with SSL..."
 
-    ssh_run "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem /tmp/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem /tmp/privkey.pem"
-    ssh_run "docker exec nginx mkdir -p /etc/letsencrypt/live/$DOMAIN"
-    ssh_run "docker cp /tmp/fullchain.pem nginx:/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
-    ssh_run "docker cp /tmp/privkey.pem nginx:/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+    CERTS_DIR=$(ssh_query "docker volume inspect generated_nginx_certs --format '{{ .Mountpoint }}'")
+    if [[ -z "$CERTS_DIR" ]]; then
+        write_err "Could not find generated_nginx_certs volume mountpoint"
+        exit 1
+    fi
+    ssh_run "cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem $CERTS_DIR/$DOMAIN.crt"
+    ssh_run "cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem $CERTS_DIR/$DOMAIN.key"
+    ssh_run "chmod 644 $CERTS_DIR/$DOMAIN.crt && chmod 600 $CERTS_DIR/$DOMAIN.key"
 
     NGINX_SSL_FILE="/tmp/$APP_NAME.ssl.nginx.conf.local"
     write_nginx_proxy_ssl > "$NGINX_SSL_FILE"
