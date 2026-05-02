@@ -45,8 +45,12 @@ public class DetailModel : PageModel
             .OrderBy(h => h.RecordedAt)
             .FirstOrDefaultAsync();
 
-        if (coinHistory1yr != null && coinHistory1yr.PriceUsd > 0 && Coin.PriceUsd > 0)
+        if (coinHistory1yr != null
+            && coinHistory1yr.PriceUsd > 0
+            && Coin.PriceUsd > 0)
+        {
             PriceChange1yr = ((Coin.PriceUsd - coinHistory1yr.PriceUsd) / coinHistory1yr.PriceUsd) * 100;
+        }
 
         // vs XMR comparisons
         if (Monero != null && Coin.Symbol.ToUpper() != "XMR")

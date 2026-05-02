@@ -8,9 +8,17 @@
     var coin = Model.Coin!;
     var xmr = Model.Monero;
     var priceInXmr = xmr != null && xmr.PriceUsd > 0 ? coin.PriceUsd / xmr.PriceUsd : 0;
-    var mcapRatio = xmr != null && xmr.MarketCapUsd > 0 ? coin.MarketCapUsd / xmr.MarketCapUsd : 0;
+    
     var coinsPerXmr = coin.PriceUsd > 0 && xmr != null ? xmr.PriceUsd / coin.PriceUsd : 0;
     bool isXmr = coin.Symbol.ToUpper() == "XMR";
+
+    // Prefer node-verified values when available; falls back to CoinGecko for non-XMR coins.
+    var displayMarketCap = MoneroSupplyDisplay.EffectiveMarketCapUsd(coin);
+    var displaySupply    = MoneroSupplyDisplay.EffectiveCirculatingSupply(coin);
+    var xmrMarketCap     = xmr != null ? MoneroSupplyDisplay.EffectiveMarketCapUsd(xmr) : 0m;
+    var hasNodeData      = MoneroSupplyDisplay.IsNodeSupplyFresh(coin);
+
+    var mcapRatio = xmrMarketCap > 0 ? displayMarketCap / xmrMarketCap : 0;
 }
 
 <meta name="format-detection" content="telephone=no" />
@@ -114,23 +122,26 @@
             }
         </span>
     </div>
-    <div class="xmr-stat">
-        <span class="stat-label">Market Cap</span>
-        <span class="stat-value">
-            @if (coin.MarketCapUsd >= 1_000_000_000_000m)
-            {
-                <text>$@((coin.MarketCapUsd / 1_000_000_000_000m).ToString("N2", usd))T</text>
-            }
-            else if (coin.MarketCapUsd >= 1_000_000_000m)
-            {
-                <text>$@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B</text>
-            }
-            else
-            {
-                <text>$@((coin.MarketCapUsd / 1_000_000m).ToString("N2", usd))M</text>
-            }
-        </span>
-    </div>
+<div class="xmr-stat">
+    <span class="stat-label">
+        Market Cap
+       
+    </span>
+    <span class="stat-value">
+        @if (displayMarketCap >= 1_000_000_000_000m)
+        {
+            <text>$@((displayMarketCap / 1_000_000_000_000m).ToString("N2", usd))T</text>
+        }
+        else if (displayMarketCap >= 1_000_000_000m)
+        {
+            <text>$@((displayMarketCap / 1_000_000_000m).ToString("N2", usd))B</text>
+        }
+        else
+        {
+            <text>$@((displayMarketCap / 1_000_000m).ToString("N2", usd))M</text>
+        }
+    </span>
+</div>
     <div class="xmr-stat">
         <span class="stat-label">24h Volume</span>
         <span class="stat-value">
@@ -144,6 +155,18 @@
             }
         </span>
     </div>
+    @if (isXmr)
+{
+    <div class="xmr-stat">
+        <span class="stat-label">
+            Circulating Supply
+ 
+        </span>
+        <span class="stat-value">
+            @((displaySupply / 1_000_000m).ToString("N3", usd))M XMR
+        </span>
+    </div>
+}
 </div>
 
 <!-- Price chart -->
@@ -341,10 +364,7 @@
                     <tr>
                         <td class="text-muted w-50">
                             Market Cap
-                            @if (hasNode)
-                            {
-                                <span class="badge bg-success ms-1 badge-node">✓ node</span>
-                            }
+                           
                         </td>
                         <td class="mono">
                             @if (hasNode)
@@ -363,10 +383,7 @@
                     <tr>
                         <td class="text-muted">
                             Circulating Supply
-                            @if (hasNode)
-                            {
-                                <span class="badge bg-success ms-1 badge-node">✓ node</span>
-                            }
+                            
                         </td>
                         <td class="mono">
                             @if (hasNode)
