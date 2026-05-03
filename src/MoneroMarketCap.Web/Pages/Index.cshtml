@@ -63,17 +63,18 @@
             // Best/worst performer vs XMR over 7d, excluding XMR itself.
             // "vs XMR" = how much the coin moved relative to XMR in the same window.
             // A positive value means the coin outperformed XMR; negative means XMR outperformed.
-            var performers = Model.Coins
-                .Where(c => c.Symbol.ToUpper() != "XMR"
-                         && Model.Monero != null
-                         && Model.Monero.PriceChangePercent24h != -100m
-                         && c.MarketCapUsd > 100_000_000m)
-                .Select(c => new
-                {
-                    Coin = c,
-                    VsXmr = ((1m + c.PriceChangePercent24h / 100m) / (1m + Model.Monero!.PriceChangePercent24h / 100m) - 1m) * 100m
-                })
-                .ToList();
+var performers = Model.Coins
+    .Where(c => c.Symbol.ToUpper() != "XMR"
+             && Model.Monero != null
+             && Model.Monero.PriceChangePercent7d != -100m
+             && c.MarketCapUsd > 100_000_000m)
+    .Select(c => new
+    {
+        Coin = c,
+        VsXmr = ((1m + c.PriceChangePercent7d / 100m)
+               / (1m + Model.Monero!.PriceChangePercent7d / 100m) - 1m) * 100m
+    })
+    .ToList();
 
             var bestVsXmr = performers.OrderByDescending(x => x.VsXmr).FirstOrDefault();
             var worstVsXmr = performers.OrderBy(x => x.VsXmr).FirstOrDefault();
@@ -516,16 +517,17 @@ else
         });
 
         // Recompute best/worst vs XMR (unchanged)
-        if (xmr && xmr.priceChangePercent24h !== undefined) {
-            const vsXmrList = coins
-                .filter(c => c.symbol !== 'XMR')
-                .map(c => ({
-                    symbol: c.symbol,
-                    name: c.name,
-                    imageUrl: c.imageUrl,
-                    vsXmr: ((1 + c.priceChangePercent24h / 100) / (1 + xmr.priceChangePercent24h / 100) - 1) * 100
-                }))
-                .filter(x => Number.isFinite(x.vsXmr));
+if (xmr && xmr.priceChangePercent7d !== undefined) {
+    const vsXmrList = coins
+        .filter(c => c.symbol !== 'XMR')
+        .map(c => ({
+            symbol: c.symbol,
+            name: c.name,
+            imageUrl: c.imageUrl,
+            vsXmr: ((1 + c.priceChangePercent7d / 100)
+                  / (1 + xmr.priceChangePercent7d / 100) - 1) * 100
+        }))
+        .filter(x => Number.isFinite(x.vsXmr));
 
             if (vsXmrList.length) {
                 const best = vsXmrList.reduce((a, b) => b.vsXmr > a.vsXmr ? b : a);
