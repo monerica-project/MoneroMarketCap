@@ -17,6 +17,7 @@ public class DetailModel : PageModel
 
     public decimal? PriceChange1yr { get; set; }
 
+    public decimal? VsXmrChange24h { get; set; }
     public decimal? VsXmrChange7d { get; set; }
     public decimal? VsXmrChange30d { get; set; }
     public decimal? VsXmrChange1yr { get; set; }
@@ -55,6 +56,13 @@ public class DetailModel : PageModel
         // vs XMR comparisons
         if (Monero != null && Coin.Symbol.ToUpper() != "XMR")
         {
+            // 24h vs XMR — computed from live values, no history lookup needed
+            if (Monero.PriceChangePercent24h != -100m)
+            {
+                VsXmrChange24h = ((1m + Coin.PriceChangePercent24h / 100m)
+                                / (1m + Monero.PriceChangePercent24h / 100m) - 1m) * 100m;
+            }
+
             var xmrHistory1yr = await _db.CoinPriceHistories
                 .Where(h => h.Coin.Symbol == "XMR" && h.Interval == "1d" && h.RecordedAt >= oneYearAgo)
                 .OrderBy(h => h.RecordedAt)

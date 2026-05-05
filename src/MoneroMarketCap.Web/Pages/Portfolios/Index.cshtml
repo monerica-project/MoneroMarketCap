@@ -10,6 +10,10 @@
         v >= 0.01m    ? $"${v.ToString("N4", usd)}" :
         v >= 0.0001m  ? $"${v.ToString("N6", usd)}" :
                         $"${v.ToString("N8", usd)}";
+    string FormatAmount(decimal v, string sym) =>
+        v >= 1m
+            ? $"{v.ToString("N4", usd)} {sym}"
+            : $"{v.ToString("N8", usd)} {sym}";
 }
 
 <meta name="format-detection" content="telephone=no" />
@@ -66,6 +70,7 @@ else
                                     <tr>
                                         <th>Coin</th>
                                         <th class="text-end">Price (USD)</th>
+                                        <th class="text-end">Total Held</th>
                                         <th class="text-end">Value (USD)</th>
                                         <th class="text-end">%</th>
                                     </tr>
@@ -77,6 +82,7 @@ else
                                         <tr>
                                             <td><a href="/coins/@a.Symbol.ToLower()"><strong>@a.Symbol</strong></a></td>
                                             <td class="text-end mono">@FormatPrice(a.PriceUsd)</td>
+                                            <td class="text-end mono">@Mask(FormatAmount(a.TotalAmount, a.Symbol))</td>
                                             <td class="text-end mono">@Mask($"${a.ValueUsd.ToString("N2", usd)}")</td>
                                             <td class="text-end mono">@pct.ToString("N2", usd)%</td>
                                         </tr>
@@ -84,7 +90,7 @@ else
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th colspan="2">Total</th>
+                                        <th colspan="3">Total</th>
                                         <th class="text-end mono">@Mask($"${totalAlloc.ToString("N2", usd)}")</th>
                                         <th class="text-end mono">100.00%</th>
                                     </tr>

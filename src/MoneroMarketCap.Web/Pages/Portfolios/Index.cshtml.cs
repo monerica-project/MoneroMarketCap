@@ -65,6 +65,7 @@ public class IndexModel : PageModel
             {
                 Symbol = g.Key,
                 PriceUsd = g.First().Coin.PriceUsd,
+                TotalAmount = g.Sum(pc => pc.TotalAmount),
                 ValueUsd = g.Sum(pc => pc.TotalAmount * pc.Coin.PriceUsd)
             })
             .Where(a => a.ValueUsd > 0)
@@ -106,6 +107,7 @@ public class IndexModel : PageModel
     {
         public string Symbol { get; set; } = "";
         public decimal PriceUsd { get; set; }
+        public decimal TotalAmount { get; set; }
         public decimal ValueUsd { get; set; }
     }
 }
