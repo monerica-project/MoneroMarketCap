@@ -6,6 +6,8 @@ using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace MoneroMarketCap.Pages.Portfolios;
 
@@ -25,6 +27,7 @@ public class IndexModel : PageModel
     public decimal XmrPrice { get; set; }
     public bool PrivacyMode { get; set; }
     public bool AtPortfolioLimit => Portfolios.Count >= MaxPortfoliosPerUser;
+    public string DataVersion { get; set; } = "";
 
     public IReadOnlyList<AllocationSlice> Allocations { get; set; } = new List<AllocationSlice>();
 
@@ -79,6 +82,36 @@ public class IndexModel : PageModel
         TotalPnl = Portfolios
             .SelectMany(p => p.PortfolioCoins)
             .Sum(pc => pc.UnrealizedPnl);
+
+        DataVersion = ComputeVersion(
+            Portfolios,
+            TotalNetValue,
+            TotalPnl,
+            Allocations.Select(a => (a.Symbol, a.PriceUsd, a.TotalAmount)));
+    }
+
+    public async Task<IActionResult> OnGetSnapshotAsync()
+    {
+        var userId = GetUserId();
+
+        var portfolios = await _portfolios.GetByUserIdAsync(userId);
+        var totalNetValue = await _portfolios.GetUserTotalValueUsdAsync(userId);
+        var totalPnl = portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .Sum(pc => pc.UnrealizedPnl);
+
+        var allocations = portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .GroupBy(pc => pc.Coin.Symbol.ToUpper())
+            .Select(g => (
+                Symbol: g.Key,
+                PriceUsd: g.First().Coin.PriceUsd,
+                TotalAmount: g.Sum(pc => pc.TotalAmount)
+            ))
+            .ToList();
+
+        var version = ComputeVersion(portfolios, totalNetValue, totalPnl, allocations);
+        return new JsonResult(new { version });
     }
 
     public async Task<IActionResult> OnPostCreateAsync()
@@ -101,6 +134,32 @@ public class IndexModel : PageModel
         await _portfolios.SaveChangesAsync();
 
         return RedirectToPage();
+    }
+
+    private static string ComputeVersion(
+        IEnumerable<Portfolio> portfolios,
+        decimal totalNetValue,
+        decimal totalPnl,
+        IEnumerable<(string Symbol, decimal PriceUsd, decimal TotalAmount)> allocations)
+    {
+        var sb = new StringBuilder();
+        sb.Append(totalNetValue.ToString("F8")).Append('|');
+        sb.Append(totalPnl.ToString("F8"));
+
+        foreach (var a in allocations.OrderBy(x => x.Symbol, StringComparer.Ordinal))
+        {
+            sb.Append('|').Append(a.Symbol).Append(':')
+              .Append(a.PriceUsd.ToString("F8")).Append(':')
+              .Append(a.TotalAmount.ToString("F8"));
+        }
+        foreach (var p in portfolios.OrderBy(x => x.Id))
+        {
+            sb.Append('|').Append(p.Id).Append(':')
+              .Append(p.TotalValueUsd.ToString("F8"));
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+        return Convert.ToHexString(hash);
     }
 
     public class AllocationSlice

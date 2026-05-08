@@ -43,6 +43,9 @@
         <div class="mt-2">
             <partial name="_PrivacyToggle" />
         </div>
+        <div class="portfolio-refresh-meta mt-1 small text-muted">
+            Next check: <span id="refreshCountdown">60</span>s
+        </div>
     </div>
 </div>
 
@@ -216,3 +219,57 @@ else
         })();
     </script>
 }
+
+<script>
+    window.__PORTFOLIO_VERSION__ = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DataVersion));
+</script>
+<script>
+    (function () {
+        const CHECK_SECONDS = 60;
+        const initialVersion = window.__PORTFOLIO_VERSION__ || '';
+        let remaining = CHECK_SECONDS;
+        let checking = false;
+        const countdownEl = document.getElementById('refreshCountdown');
+
+        function isUserBusy() {
+            const a = document.activeElement;
+            if (!a) return false;
+            const tag = a.tagName;
+            return tag === 'INPUT' || tag === 'TEXTAREA' || a.isContentEditable;
+        }
+
+        async function check() {
+            if (checking) return;
+            checking = true;
+            try {
+                const resp = await fetch('?handler=Snapshot', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (data && data.version && data.version !== initialVersion) {
+                    if (isUserBusy()) return;
+                    window.location.reload();
+                }
+            } catch (e) {
+                // network blip, try again next tick
+            } finally {
+                checking = false;
+            }
+        }
+
+        function tick() {
+            if (document.hidden) return;
+            remaining--;
+            if (countdownEl) countdownEl.textContent = remaining;
+            if (remaining <= 0) {
+                remaining = CHECK_SECONDS;
+                check();
+            }
+        }
+
+        setInterval(tick, 1000);
+    })();
+</script>
