@@ -64,6 +64,13 @@
     </div>
 </div>
 
+@if (!string.IsNullOrEmpty(Model.FlashMessage))
+{
+    <div class="alert @(Model.FlashSuccess ? "alert-success" : "alert-danger") mb-3" role="alert">
+        @Model.FlashMessage
+    </div>
+}
+
 @if (!Model.Portfolios.Any())
 {
     <p class="text-muted">No portfolios yet. Create one below.</p>
@@ -124,6 +131,17 @@ else
     <div class="row mb-4">
         @foreach (var p in Model.Portfolios)
         {
+            var pPnl = p.PortfolioCoins.Sum(pc => pc.UnrealizedPnl);
+            var pBasis = p.PortfolioCoins.Sum(pc => pc.TotalCostBasis);
+            string pPctText = "";
+            if (pBasis > 0)
+            {
+                var pPct = (pPnl / pBasis) * 100m;
+                var pSign = pPct >= 0 ? "+" : "";
+                pPctText = pSign + pPct.ToString("N2", usd) + "%";
+            }
+            string pPnlClass = pPnl >= 0 ? "text-success" : "text-danger";
+
             <div class="col-md-4 mb-3">
                 <div class="card">
                     <div class="card-body">
@@ -137,6 +155,14 @@ else
                                 @Mask($"{(p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)} XMR")
                             </p>
                         }
+                        <p class="card-text mb-1">
+                            P&amp;L:
+                            <strong class="@pPnlClass">@Mask($"${pPnl.ToString("N2", usd)}")</strong>
+                            @if (!string.IsNullOrEmpty(pPctText))
+                            {
+                                <span class="@pPnlClass">(@pPctText)</span>
+                            }
+                        </p>
                         <p class="card-text mb-2 portfolio-card-meta">
                             Coins: @p.PortfolioCoins.Count
                         </p>
