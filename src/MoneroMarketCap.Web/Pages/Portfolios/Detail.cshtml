@@ -215,6 +215,7 @@ else
                 @{
                     var totalPnl = Model.Portfolio.PortfolioCoins.Sum(p => p.UnrealizedPnl);
                     var totalBasis = Model.Portfolio.PortfolioCoins.Sum(p => p.TotalCostBasis);
+                    var totalPnlPct = totalBasis > 0 ? (totalPnl / totalBasis) * 100m : 0m;
                 }
                 <tr style="border-top:2px solid var(--xmr-border);font-weight:600">
                     <td colspan="3">Total</td>
@@ -226,6 +227,12 @@ else
                     <td class="text-end mono">@Mask($"${totalBasis.ToString("N2", usd)}")</td>
                     <td class="text-end mono @(totalPnl >= 0 ? "text-success" : "text-danger")">
                         @Mask($"${totalPnl.ToString("N2", usd)}")
+                        @if (totalBasis > 0)
+                        {
+                            <div style="font-size:0.85em;font-weight:normal">
+                                @(totalPnlPct >= 0 ? "+" : "")@totalPnlPct.ToString("N2", usd)%
+                            </div>
+                        }
                     </td>
                     @if (Model.XmrPrice > 0)
                     {

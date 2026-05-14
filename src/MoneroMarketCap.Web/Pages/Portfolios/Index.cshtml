@@ -4,6 +4,15 @@
     ViewData["Title"] = "My Portfolios";
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
+
+    string totalPnlPctText = "";
+    if (Model.TotalCostBasis > 0)
+    {
+        var pct = (Model.TotalPnl / Model.TotalCostBasis) * 100m;
+        var sign = pct >= 0 ? "+" : "";
+        totalPnlPctText = sign + pct.ToString("N2", usd) + "%";
+    }
+
     string Mask(string v) => Model.PrivacyMode ? "••••" : v;
     string FormatPrice(decimal v) =>
         v >= 1m       ? $"${v.ToString("N2", usd)}" :
@@ -33,6 +42,12 @@
             <strong class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
                 @Mask($"${Model.TotalPnl.ToString("N2", usd)}")
             </strong>
+            @if (!string.IsNullOrEmpty(totalPnlPctText))
+            {
+                <span class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
+                    (@totalPnlPctText)
+                </span>
+            }
             @if (Model.XmrPrice > 0)
             {
                 <span class="portfolio-pnl-xmr @(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
