@@ -47,71 +47,46 @@ public class IndexModel : PageModel
 
     public async Task OnGetAsync()
     {
-        var userId = GetUserId();
+        var snapshot = await BuildSnapshotAsync(GetUserId());
 
-        PrivacyMode = await _db.Users
-            .Where(u => u.Id == userId)
-            .Select(u => u.PrivacyMode)
-            .FirstOrDefaultAsync();
-
-        Portfolios = await _portfolios.GetByUserIdAsync(userId);
-        TotalNetValue = await _portfolios.GetUserTotalValueUsdAsync(userId);
-
-        var allCoins = await _coins.GetAllAsync();
-        var xmr = allCoins.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
-        XmrPrice = xmr?.PriceUsd ?? 0;
-
-        Allocations = Portfolios
-            .SelectMany(p => p.PortfolioCoins)
-            .GroupBy(pc => pc.Coin.Symbol.ToUpper())
-            .Select(g => new AllocationSlice
-            {
-                Symbol = g.Key,
-                PriceUsd = g.First().Coin.PriceUsd,
-                TotalAmount = g.Sum(pc => pc.TotalAmount),
-                ValueUsd = g.Sum(pc => pc.TotalAmount * pc.Coin.PriceUsd)
-            })
-            .Where(a => a.ValueUsd > 0)
-            .OrderByDescending(a => a.ValueUsd)
-            .ToList();
-
-        TotalCostBasis = Portfolios
-            .SelectMany(p => p.PortfolioCoins)
-            .Sum(pc => pc.TotalCostBasis);
-
-        TotalPnl = Portfolios
-            .SelectMany(p => p.PortfolioCoins)
-            .Sum(pc => pc.UnrealizedPnl);
-
-        DataVersion = ComputeVersion(
-            Portfolios,
-            TotalNetValue,
-            TotalPnl,
-            Allocations.Select(a => (a.Symbol, a.PriceUsd, a.TotalAmount)));
+        PrivacyMode = snapshot.PrivacyMode;
+        Portfolios = snapshot.Portfolios;
+        TotalNetValue = snapshot.TotalNetValue;
+        XmrPrice = snapshot.XmrPrice;
+        Allocations = snapshot.Allocations;
+        TotalCostBasis = snapshot.TotalCostBasis;
+        TotalPnl = snapshot.TotalPnl;
+        DataVersion = snapshot.Version;
     }
 
     public async Task<IActionResult> OnGetSnapshotAsync()
     {
-        var userId = GetUserId();
+        var snapshot = await BuildSnapshotAsync(GetUserId());
 
-        var portfolios = await _portfolios.GetByUserIdAsync(userId);
-        var totalNetValue = await _portfolios.GetUserTotalValueUsdAsync(userId);
-        var totalPnl = portfolios
-            .SelectMany(p => p.PortfolioCoins)
-            .Sum(pc => pc.UnrealizedPnl);
-
-        var allocations = portfolios
-            .SelectMany(p => p.PortfolioCoins)
-            .GroupBy(pc => pc.Coin.Symbol.ToUpper())
-            .Select(g => (
-                Symbol: g.Key,
-                PriceUsd: g.First().Coin.PriceUsd,
-                TotalAmount: g.Sum(pc => pc.TotalAmount)
-            ))
-            .ToList();
-
-        var version = ComputeVersion(portfolios, totalNetValue, totalPnl, allocations);
-        return new JsonResult(new { version });
+        return new JsonResult(new
+        {
+            version = snapshot.Version,
+            privacyMode = snapshot.PrivacyMode,
+            xmrPrice = snapshot.XmrPrice,
+            totalNetValue = snapshot.TotalNetValue,
+            totalPnl = snapshot.TotalPnl,
+            totalCostBasis = snapshot.TotalCostBasis,
+            allocations = snapshot.Allocations.Select(a => new
+            {
+                symbol = a.Symbol,
+                priceUsd = a.PriceUsd,
+                totalAmount = a.TotalAmount,
+                valueUsd = a.ValueUsd
+            }),
+            portfolios = snapshot.Portfolios.Select(p => new
+            {
+                id = p.Id,
+                totalValueUsd = p.TotalValueUsd,
+                pnl = p.PortfolioCoins.Sum(pc => pc.UnrealizedPnl),
+                costBasis = p.PortfolioCoins.Sum(pc => pc.TotalCostBasis),
+                coinCount = p.PortfolioCoins.Count
+            })
+        });
     }
 
     public async Task<IActionResult> OnPostCreateAsync()
@@ -134,6 +109,61 @@ public class IndexModel : PageModel
         await _portfolios.SaveChangesAsync();
 
         return RedirectToPage();
+    }
+
+    private async Task<SnapshotData> BuildSnapshotAsync(int userId)
+    {
+        var privacyMode = await _db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.PrivacyMode)
+            .FirstOrDefaultAsync();
+
+        var portfolios = await _portfolios.GetByUserIdAsync(userId);
+        var totalNetValue = await _portfolios.GetUserTotalValueUsdAsync(userId);
+
+        var allCoins = await _coins.GetAllAsync();
+        var xmr = allCoins.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
+        var xmrPrice = xmr?.PriceUsd ?? 0;
+
+        var allocations = portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .GroupBy(pc => pc.Coin.Symbol.ToUpper())
+            .Select(g => new AllocationSlice
+            {
+                Symbol = g.Key,
+                PriceUsd = g.First().Coin.PriceUsd,
+                TotalAmount = g.Sum(pc => pc.TotalAmount),
+                ValueUsd = g.Sum(pc => pc.TotalAmount * pc.Coin.PriceUsd)
+            })
+            .Where(a => a.ValueUsd > 0)
+            .OrderByDescending(a => a.ValueUsd)
+            .ToList();
+
+        var totalCostBasis = portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .Sum(pc => pc.TotalCostBasis);
+
+        var totalPnl = portfolios
+            .SelectMany(p => p.PortfolioCoins)
+            .Sum(pc => pc.UnrealizedPnl);
+
+        var version = ComputeVersion(
+            portfolios,
+            totalNetValue,
+            totalPnl,
+            allocations.Select(a => (a.Symbol, a.PriceUsd, a.TotalAmount)));
+
+        return new SnapshotData
+        {
+            PrivacyMode = privacyMode,
+            Portfolios = portfolios,
+            TotalNetValue = totalNetValue,
+            XmrPrice = xmrPrice,
+            Allocations = allocations,
+            TotalCostBasis = totalCostBasis,
+            TotalPnl = totalPnl,
+            Version = version
+        };
     }
 
     private static string ComputeVersion(
@@ -160,6 +190,18 @@ public class IndexModel : PageModel
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
         return Convert.ToHexString(hash);
+    }
+
+    private class SnapshotData
+    {
+        public bool PrivacyMode { get; set; }
+        public IReadOnlyList<Portfolio> Portfolios { get; set; } = new List<Portfolio>();
+        public decimal TotalNetValue { get; set; }
+        public decimal XmrPrice { get; set; }
+        public IReadOnlyList<AllocationSlice> Allocations { get; set; } = new List<AllocationSlice>();
+        public decimal TotalCostBasis { get; set; }
+        public decimal TotalPnl { get; set; }
+        public string Version { get; set; } = "";
     }
 
     public class AllocationSlice

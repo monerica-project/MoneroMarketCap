@@ -6,14 +6,16 @@
     var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
 
     string totalPnlPctText = "";
+    decimal totalPnlPctVal = 0m;
     if (Model.TotalCostBasis > 0)
     {
-        var pct = (Model.TotalPnl / Model.TotalCostBasis) * 100m;
-        var sign = pct >= 0 ? "+" : "";
-        totalPnlPctText = sign + pct.ToString("N2", usd) + "%";
+        totalPnlPctVal = (Model.TotalPnl / Model.TotalCostBasis) * 100m;
+        var sign = totalPnlPctVal >= 0 ? "+" : "";
+        totalPnlPctText = sign + totalPnlPctVal.ToString("N2", usd) + "%";
     }
 
     string Mask(string v) => Model.PrivacyMode ? "••••" : v;
+    string MaskedAttr() => Model.PrivacyMode ? "true" : "false";
     string FormatPrice(decimal v) =>
         v >= 1m       ? $"${v.ToString("N2", usd)}" :
         v >= 0.01m    ? $"${v.ToString("N4", usd)}" :
@@ -27,30 +29,42 @@
 
 <meta name="format-detection" content="telephone=no" />
 
+<style>
+    @@keyframes valueFlashUp {
+        0%   { background-color: rgba(76, 175, 80, 0.35); }
+        100% { background-color: transparent; }
+    }
+    @@keyframes valueFlashDown {
+        0%   { background-color: rgba(244, 67, 54, 0.35); }
+        100% { background-color: transparent; }
+    }
+    .value-up   { animation: valueFlashUp   1.2s ease-out; border-radius: 3px; padding: 0 2px; }
+    .value-down { animation: valueFlashDown 1.2s ease-out; border-radius: 3px; padding: 0 2px; }
+</style>
+
 <div class="portfolio-header d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h2 class="mb-0">My Portfolios</h2>
     <div class="text-end portfolio-summary">
-        <div class="portfolio-total">Total Net Value: <strong>@Mask($"${Model.TotalNetValue.ToString("N2", usd)}")</strong></div>
+        <div class="portfolio-total">
+            Total Net Value:
+            <strong data-anim="totalNetValue" data-value="@Model.TotalNetValue" data-masked="@MaskedAttr()">@Mask($"${Model.TotalNetValue.ToString("N2", usd)}")</strong>
+        </div>
         @if (Model.XmrPrice > 0)
         {
             <div class="portfolio-xmr-equiv">
-                @Mask($"{(Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)} XMR")
+                <span data-anim="totalNetValueXmr" data-value="@(Model.TotalNetValue / Model.XmrPrice)" data-masked="@MaskedAttr()">@Mask($"{(Model.TotalNetValue / Model.XmrPrice).ToString("N4", usd)} XMR")</span>
             </div>
         }
         <div class="portfolio-pnl-line mt-1">
             Total P&amp;L:
-            <strong class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
-                @Mask($"${Model.TotalPnl.ToString("N2", usd)}")
-            </strong>
+            <strong data-anim="totalPnl" data-value="@Model.TotalPnl" data-masked="@MaskedAttr()" class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">@Mask($"${Model.TotalPnl.ToString("N2", usd)}")</strong>
             @if (!string.IsNullOrEmpty(totalPnlPctText))
             {
-                <span class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
-                    (@totalPnlPctText)
-                </span>
+                <span data-anim="totalPnlPct" data-value="@totalPnlPctVal" data-masked="false" class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">(@totalPnlPctText)</span>
             }
             @if (Model.XmrPrice > 0)
             {
-                <span class="portfolio-pnl-xmr @(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">
+                <span class="portfolio-pnl-xmr @(Model.TotalPnl >= 0 ? "text-success" : "text-danger")" data-anim="totalPnlXmr" data-value="@(Model.TotalPnl / Model.XmrPrice)" data-masked="@MaskedAttr()">
                     (@Mask($"{(Model.TotalPnl / Model.XmrPrice).ToString("N4", usd)} XMR"))
                 </span>
             }
@@ -103,20 +117,20 @@ else
                                 <tbody>
                                     @foreach (var a in Model.Allocations)
                                     {
-                                        var pct = (double)(a.ValueUsd / totalAlloc) * 100.0;
+                                        var pct = (a.ValueUsd / totalAlloc) * 100m;
                                         <tr>
                                             <td><a href="/coins/@a.Symbol.ToLower()"><strong>@a.Symbol</strong></a></td>
-                                            <td class="text-end mono">@FormatPrice(a.PriceUsd)</td>
-                                            <td class="text-end mono">@Mask(FormatAmount(a.TotalAmount, a.Symbol))</td>
-                                            <td class="text-end mono">@Mask($"${a.ValueUsd.ToString("N2", usd)}")</td>
-                                            <td class="text-end mono">@pct.ToString("N2", usd)%</td>
+                                            <td class="text-end mono"><span data-coin="@a.Symbol" data-field="price" data-value="@a.PriceUsd" data-masked="false">@FormatPrice(a.PriceUsd)</span></td>
+                                            <td class="text-end mono"><span data-coin="@a.Symbol" data-field="amount" data-sym="@a.Symbol" data-value="@a.TotalAmount" data-masked="@MaskedAttr()">@Mask(FormatAmount(a.TotalAmount, a.Symbol))</span></td>
+                                            <td class="text-end mono"><span data-coin="@a.Symbol" data-field="value" data-value="@a.ValueUsd" data-masked="@MaskedAttr()">@Mask($"${a.ValueUsd.ToString("N2", usd)}")</span></td>
+                                            <td class="text-end mono"><span data-coin="@a.Symbol" data-field="pct" data-value="@pct" data-masked="false">@pct.ToString("N2", usd)%</span></td>
                                         </tr>
                                     }
                                 </tbody>
                                 <tfoot>
                                     <tr>
                                         <th colspan="3">Total</th>
-                                        <th class="text-end mono">@Mask($"${totalAlloc.ToString("N2", usd)}")</th>
+                                        <th class="text-end mono"><span data-anim="allocTotal" data-value="@totalAlloc" data-masked="@MaskedAttr()">@Mask($"${totalAlloc.ToString("N2", usd)}")</span></th>
                                         <th class="text-end mono">100.00%</th>
                                     </tr>
                                 </tfoot>
@@ -134,11 +148,12 @@ else
             var pPnl = p.PortfolioCoins.Sum(pc => pc.UnrealizedPnl);
             var pBasis = p.PortfolioCoins.Sum(pc => pc.TotalCostBasis);
             string pPctText = "";
+            decimal pPctVal = 0m;
             if (pBasis > 0)
             {
-                var pPct = (pPnl / pBasis) * 100m;
-                var pSign = pPct >= 0 ? "+" : "";
-                pPctText = pSign + pPct.ToString("N2", usd) + "%";
+                pPctVal = (pPnl / pBasis) * 100m;
+                var pSign = pPctVal >= 0 ? "+" : "";
+                pPctText = pSign + pPctVal.ToString("N2", usd) + "%";
             }
             string pPnlClass = pPnl >= 0 ? "text-success" : "text-danger";
 
@@ -147,20 +162,20 @@ else
                     <div class="card-body">
                         <h5 class="card-title">@p.Name</h5>
                         <p class="card-text mb-1">
-                            Value: <strong>@Mask($"${p.TotalValueUsd.ToString("N2", usd)}")</strong>
+                            Value: <strong data-portfolio="@p.Id" data-field="value" data-value="@p.TotalValueUsd" data-masked="@MaskedAttr()">@Mask($"${p.TotalValueUsd.ToString("N2", usd)}")</strong>
                         </p>
                         @if (Model.XmrPrice > 0)
                         {
                             <p class="card-text mb-1 portfolio-card-xmr">
-                                @Mask($"{(p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)} XMR")
+                                <span data-portfolio="@p.Id" data-field="valueXmr" data-value="@(p.TotalValueUsd / Model.XmrPrice)" data-masked="@MaskedAttr()">@Mask($"{(p.TotalValueUsd / Model.XmrPrice).ToString("N4", usd)} XMR")</span>
                             </p>
                         }
                         <p class="card-text mb-1">
                             P&amp;L:
-                            <strong class="@pPnlClass">@Mask($"${pPnl.ToString("N2", usd)}")</strong>
+                            <strong data-portfolio="@p.Id" data-field="pnl" data-value="@pPnl" data-masked="@MaskedAttr()" class="@pPnlClass">@Mask($"${pPnl.ToString("N2", usd)}")</strong>
                             @if (!string.IsNullOrEmpty(pPctText))
                             {
-                                <span class="@pPnlClass">(@pPctText)</span>
+                                <span data-portfolio="@p.Id" data-field="pnlPct" data-value="@pPctVal" data-masked="false" class="@pPnlClass">(@pPctText)</span>
                             }
                         </p>
                         <p class="card-text mb-2 portfolio-card-meta">
@@ -205,7 +220,6 @@ else
                 if (label === 'XMR') return xmrOrange;
                 return palette[paletteIdx++ % palette.length];
             });
-            const total = values.reduce((s, v) => s + v, 0);
 
             const canvas = document.getElementById('allocationChart');
             const ctx = canvas.getContext('2d');
@@ -246,7 +260,8 @@ else
                             callbacks: {
                                 label: function(ctx) {
                                     const v = ctx.parsed;
-                                    const pct = total > 0 ? (v / total * 100).toFixed(2) : '0.00';
+                                    const datasetTotal = ctx.dataset.data.reduce((s, x) => s + x, 0);
+                                    const pct = datasetTotal > 0 ? (v / datasetTotal * 100).toFixed(2) : '0.00';
                                     if (privacyMode) {
                                         return ctx.label + ': ' + pct + '%';
                                     }
@@ -257,6 +272,7 @@ else
                     }
                 }
             });
+            window.__allocationChart = chart;
         })();
     </script>
 }
@@ -267,10 +283,185 @@ else
 <script>
     (function () {
         const CHECK_SECONDS = 60;
-        const initialVersion = window.__PORTFOLIO_VERSION__ || '';
+        const EPSILON = 1e-9;
+        let lastVersion = window.__PORTFOLIO_VERSION__ || '';
         let remaining = CHECK_SECONDS;
         let checking = false;
         const countdownEl = document.getElementById('refreshCountdown');
+
+        const usdFmt = (n, min, max) => n.toLocaleString('en-US', { minimumFractionDigits: min, maximumFractionDigits: max });
+
+        function formatCurrency(v)     { return '$' + usdFmt(v, 2, 2); }
+        function formatXmr(v)          { return usdFmt(v, 4, 4) + ' XMR'; }
+        function formatPctSigned(v)    { return (v >= 0 ? '+' : '') + usdFmt(v, 2, 2) + '%'; }
+        function formatPctPlain(v)     { return usdFmt(v, 2, 2) + '%'; }
+        function formatPrice(v) {
+            if (v >= 1)      return '$' + usdFmt(v, 2, 2);
+            if (v >= 0.01)   return '$' + usdFmt(v, 4, 4);
+            if (v >= 0.0001) return '$' + usdFmt(v, 6, 6);
+            return '$' + usdFmt(v, 8, 8);
+        }
+        function formatAmount(v, sym) {
+            if (v >= 1) return usdFmt(v, 4, 4) + ' ' + sym;
+            return usdFmt(v, 8, 8) + ' ' + sym;
+        }
+
+        // Wraps signed-currency display: P&L formatter just delegates to currency,
+        // since C# uses "$" + N2 which yields "$-12.34" for negatives.
+        function formatPnlUsd(v) { return '$' + usdFmt(v, 2, 2); }
+
+        function animateNumber(el, fromVal, toVal, formatFn) {
+            const masked = el.dataset.masked === 'true';
+            el.setAttribute('data-value', toVal);
+            // Mask shows ••••, so no in-place number tween. Stored value still updates.
+            if (masked) return;
+
+            const duration = 700;
+            const start = performance.now();
+            function frame(now) {
+                const t = Math.min(1, (now - start) / duration);
+                const eased = 1 - Math.pow(1 - t, 3);
+                const cur = fromVal + (toVal - fromVal) * eased;
+                el.textContent = formatFn(cur);
+                if (t < 1) requestAnimationFrame(frame);
+                else el.textContent = formatFn(toVal);
+            }
+            requestAnimationFrame(frame);
+
+            // Flash
+            el.classList.remove('value-up', 'value-down');
+            void el.offsetWidth; // restart animation
+            el.classList.add(toVal > fromVal ? 'value-up' : 'value-down');
+        }
+
+        function updateValue(el, newVal, formatFn) {
+            if (!el) return;
+            const oldVal = parseFloat(el.getAttribute('data-value'));
+            if (isNaN(oldVal)) {
+                el.setAttribute('data-value', newVal);
+                if (el.dataset.masked !== 'true') el.textContent = formatFn(newVal);
+                return;
+            }
+            if (Math.abs(oldVal - newVal) < EPSILON) return; // unchanged → no animation
+            animateNumber(el, oldVal, newVal, formatFn);
+        }
+
+        function setPnlClass(el, isPositive) {
+            if (!el) return;
+            el.classList.remove('text-success', 'text-danger');
+            el.classList.add(isPositive ? 'text-success' : 'text-danger');
+        }
+
+        function applySnapshot(data) {
+            // Structure check: if the set of coins or portfolios changed, full reload
+            const allocEls = document.querySelectorAll('[data-coin][data-field="value"]');
+            const existingCoins = new Set([...allocEls].map(e => e.getAttribute('data-coin')));
+            const incomingCoins = new Set((data.allocations || []).map(a => a.symbol));
+            if (existingCoins.size !== incomingCoins.size ||
+                [...existingCoins].some(c => !incomingCoins.has(c))) {
+                window.location.reload();
+                return;
+            }
+
+            const portfolioEls = document.querySelectorAll('[data-portfolio][data-field="value"]');
+            const existingPids = new Set([...portfolioEls].map(e => e.getAttribute('data-portfolio')));
+            const incomingPids = new Set((data.portfolios || []).map(p => String(p.id)));
+            if (existingPids.size !== incomingPids.size ||
+                [...existingPids].some(p => !incomingPids.has(p))) {
+                window.location.reload();
+                return;
+            }
+
+            // Totals
+            updateValue(document.querySelector('[data-anim="totalNetValue"]'),
+                        data.totalNetValue, formatCurrency);
+
+            if (data.xmrPrice > 0) {
+                updateValue(document.querySelector('[data-anim="totalNetValueXmr"]'),
+                            data.totalNetValue / data.xmrPrice, formatXmr);
+            }
+
+            const pnlEl = document.querySelector('[data-anim="totalPnl"]');
+            updateValue(pnlEl, data.totalPnl, formatPnlUsd);
+            setPnlClass(pnlEl, data.totalPnl >= 0);
+
+            if (data.totalCostBasis > 0) {
+                const pct = (data.totalPnl / data.totalCostBasis) * 100;
+                const pctEl = document.querySelector('[data-anim="totalPnlPct"]');
+                // pnlPct is rendered with surrounding parens — wrap the formatter
+                updateValue(pctEl, pct, v => '(' + formatPctSigned(v) + ')');
+                setPnlClass(pctEl, data.totalPnl >= 0);
+            }
+
+            if (data.xmrPrice > 0) {
+                const xmrEl = document.querySelector('[data-anim="totalPnlXmr"]');
+                updateValue(xmrEl, data.totalPnl / data.xmrPrice, v => '(' + formatXmr(v) + ')');
+                setPnlClass(xmrEl, data.totalPnl >= 0);
+            }
+
+            // Allocations
+            let totalAlloc = 0;
+            (data.allocations || []).forEach(a => totalAlloc += a.valueUsd);
+
+            (data.allocations || []).forEach(a => {
+                const base = `[data-coin="${a.symbol}"]`;
+                updateValue(document.querySelector(`${base}[data-field="price"]`),
+                            a.priceUsd, formatPrice);
+                updateValue(document.querySelector(`${base}[data-field="amount"]`),
+                            a.totalAmount, v => formatAmount(v, a.symbol));
+                updateValue(document.querySelector(`${base}[data-field="value"]`),
+                            a.valueUsd, formatCurrency);
+                const pct = totalAlloc > 0 ? (a.valueUsd / totalAlloc) * 100 : 0;
+                updateValue(document.querySelector(`${base}[data-field="pct"]`),
+                            pct, formatPctPlain);
+            });
+            updateValue(document.querySelector('[data-anim="allocTotal"]'),
+                        totalAlloc, formatCurrency);
+
+            // Portfolios
+            (data.portfolios || []).forEach(p => {
+                const base = `[data-portfolio="${p.id}"]`;
+                updateValue(document.querySelector(`${base}[data-field="value"]`),
+                            p.totalValueUsd, formatCurrency);
+                if (data.xmrPrice > 0) {
+                    updateValue(document.querySelector(`${base}[data-field="valueXmr"]`),
+                                p.totalValueUsd / data.xmrPrice, formatXmr);
+                }
+                const pPnlEl = document.querySelector(`${base}[data-field="pnl"]`);
+                updateValue(pPnlEl, p.pnl, formatPnlUsd);
+                setPnlClass(pPnlEl, p.pnl >= 0);
+
+                if (p.costBasis > 0) {
+                    const pct = (p.pnl / p.costBasis) * 100;
+                    const pPctEl = document.querySelector(`${base}[data-field="pnlPct"]`);
+                    updateValue(pPctEl, pct, v => '(' + formatPctSigned(v) + ')');
+                    setPnlClass(pPctEl, p.pnl >= 0);
+                }
+            });
+
+            // Chart: only call update() if any allocation value actually changed
+            const chart = window.__allocationChart;
+            if (chart) {
+                const newSeries = (data.allocations || []).map(a => {
+                    const idx = chart.data.labels.indexOf(a.symbol);
+                    return { idx, val: a.valueUsd };
+                });
+                const oldData = chart.data.datasets[0].data;
+                let changed = false;
+                const updatedData = oldData.slice();
+                newSeries.forEach(({ idx, val }) => {
+                    if (idx < 0) return;
+                    if (Math.abs(oldData[idx] - val) > EPSILON) {
+                        updatedData[idx] = val;
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    chart.data.datasets[0].data = updatedData;
+                    chart.update(); // default Chart.js animation
+                }
+            }
+        }
 
         function isUserBusy() {
             const a = document.activeElement;
@@ -290,10 +481,15 @@ else
                 });
                 if (!resp.ok) return;
                 const data = await resp.json();
-                if (data && data.version && data.version !== initialVersion) {
-                    if (isUserBusy()) return;
-                    window.location.reload();
-                }
+                if (!data) return;
+
+                // Fast path: version unchanged → nothing to do, no animation
+                if (data.version && data.version === lastVersion) return;
+
+                if (isUserBusy()) return;
+
+                applySnapshot(data);
+                lastVersion = data.version || lastVersion;
             } catch (e) {
                 // network blip, try again next tick
             } finally {
