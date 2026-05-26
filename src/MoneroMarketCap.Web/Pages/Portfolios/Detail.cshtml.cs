@@ -6,6 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
+using MoneroMarketCap.Services.Interfaces;
+using MoneroMarketCap.Services.Models;
+using MoneroMarketCap.Web.Helpers;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text;
@@ -18,11 +21,15 @@ public class DetailModel : PageModel
     private readonly IPortfolioRepository _portfolios;
     private readonly ICoinRepository _coins;
     private readonly AppDbContext _db;
+    private readonly IFiatRateService _fxRates;
 
     public Portfolio? Portfolio { get; set; }
     public List<SelectListItem> CoinOptions { get; set; } = new();
     public Dictionary<int, decimal> CoinPrices { get; set; } = new();
     public decimal XmrPrice { get; set; }
+
+    public CurrencyInfo Currency { get; set; } = CurrencyCatalog.Default;
+    public decimal RatePerUsd { get; set; } = 1m;
 
     public IReadOnlyList<AllocationSlice> Allocations { get; set; } = new List<AllocationSlice>();
     public IReadOnlyList<PnlPoint> PnlSeries { get; set; } = new List<PnlPoint>();
@@ -41,11 +48,16 @@ public class DetailModel : PageModel
 
     public bool PrivacyMode { get; set; }
 
-    public DetailModel(IPortfolioRepository portfolios, ICoinRepository coins, AppDbContext db)
+    public DetailModel(
+        IPortfolioRepository portfolios,
+        ICoinRepository coins,
+        AppDbContext db,
+        IFiatRateService fxRates)
     {
         _portfolios = portfolios;
         _coins = coins;
         _db = db;
+        _fxRates = fxRates;
     }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -122,6 +134,10 @@ public class DetailModel : PageModel
 
         await LoadPrivacyModeAsync();
         await LoadCoinOptions();
+
+        Currency = CurrencyResolver.Resolve(HttpContext);
+        var rates = await _fxRates.GetRatesAsync(HttpContext.RequestAborted);
+        RatePerUsd = rates.TryGetValue(Currency.Code, out var r) && r > 0 ? r : 1m;
 
         var coins = await _coins.GetAllAsync();
         var xmr = coins.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");

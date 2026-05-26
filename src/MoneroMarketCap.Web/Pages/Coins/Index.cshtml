@@ -1,7 +1,10 @@
 ﻿@page
+@using MoneroMarketCap.Web.Helpers
 @model MoneroMarketCap.Pages.Coins.IndexModel
 @{
     ViewData["Title"] = "Coins";
+    var cur = Model.Currency;
+    var rate = Model.RatePerUsd;
 }
 
 <h2>Coins</h2>
@@ -17,8 +20,8 @@ else
             <tr>
                 <th>Symbol</th>
                 <th>Name</th>
-                <th>Price (USD)</th>
-                <th>Market Cap</th>
+                <th>Price (@cur.Code)</th>
+                <th>Market Cap (@cur.Code)</th>
                 <th>Circulating Supply</th>
                 <th>Updated</th>
             </tr>
@@ -29,8 +32,8 @@ else
                 <tr>
                     <td><strong>@coin.Symbol</strong></td>
                     <td>@coin.Name</td>
-                    <td>@coin.PriceUsd.ToString("C")</td>
-                    <td>@coin.MarketCapUsd.ToString("N0")</td>
+                    <td>@MoneyFormatter.FormatPrice(coin.PriceUsd, cur, rate)</td>
+                    <td>@MoneyFormatter.FormatLarge(coin.MarketCapUsd, cur, rate)</td>
                     <td>@coin.CirculatingSupply.ToString("N0")</td>
                     <td>@coin.UpdatedAt.ToShortDateString()</td>
                 </tr>

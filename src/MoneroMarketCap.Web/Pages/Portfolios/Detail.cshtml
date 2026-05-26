@@ -1,9 +1,12 @@
 @page "{id:int}"
 @model MoneroMarketCap.Pages.Portfolios.DetailModel
 @using MoneroMarketCap.Data.Models
+@using MoneroMarketCap.Web.Helpers
 @{
     ViewData["Title"] = Model.Portfolio?.Name ?? "Portfolio";
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    var cur = Model.Currency;
+    var rate = Model.RatePerUsd;
     decimal xmrVal(decimal v) => Model.XmrPrice > 0 ? v / Model.XmrPrice : 0;
     var totalAlloc = Model.Allocations.Sum(a => a.ValueUsd);
     string Mask(string v) => Model.PrivacyMode ? "••••" : v;
@@ -20,7 +23,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h2 class="mb-0">@Model.Portfolio.Name</h2>
     <div class="text-end">
-        <div class="fs-5">Total Value: <strong>@Mask($"${Model.Portfolio.TotalValueUsd.ToString("N2", usd)}")</strong></div>
+        <div class="fs-5">Total Value: <strong>@Mask(MoneyFormatter.FormatPrice(Model.Portfolio.TotalValueUsd, cur, rate))</strong></div>
         @if (Model.XmrPrice > 0)
         {
             <div style="color:var(--xmr-text-muted);font-size:0.85rem;white-space:nowrap">
@@ -107,7 +110,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="card-title mb-0">P&amp;L Over Time</h5>
                             <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-primary active" id="pnl-toggle-usd">USD</button>
+                                <button type="button" class="btn btn-outline-primary active" id="pnl-toggle-usd">@cur.Code</button>
                                 <button type="button" class="btn btn-outline-primary" id="pnl-toggle-xmr">XMR</button>
                             </div>
                         </div>
@@ -133,14 +136,14 @@ else
                 <tr>
                     <th>Coin</th>
                     <th class="text-end">Amount</th>
-                    <th class="text-end">Price</th>
-                    <th class="text-end">Value (USD)</th>
+                    <th class="text-end">Price (@cur.Code)</th>
+                    <th class="text-end">Value (@cur.Code)</th>
                     @if (Model.XmrPrice > 0)
                     {
                         <th class="text-end">Value (XMR)</th>
                     }
-                    <th class="text-end">Basis</th>
-                    <th class="text-end">P&amp;L</th>
+                    <th class="text-end">Basis (@cur.Code)</th>
+                    <th class="text-end">P&amp;L (@cur.Code)</th>
                     @if (Model.XmrPrice > 0)
                     {
                         <th class="text-end">P&amp;L (XMR)</th>
@@ -170,8 +173,8 @@ else
                             </div>
                         </td>
                         <td class="text-end mono">@Mask(pc.TotalAmount.ToString("N8", usd))</td>
-                        <td class="text-end mono">$@pc.Coin.PriceUsd.ToString("N2", usd)</td>
-                        <td class="text-end mono">@Mask($"${pc.TotalValueUsd.ToString("N2", usd)}")</td>
+                        <td class="text-end mono">@MoneyFormatter.FormatPrice(pc.Coin.PriceUsd, cur, rate)</td>
+                        <td class="text-end mono">@Mask(MoneyFormatter.FormatPrice(pc.TotalValueUsd, cur, rate))</td>
                         @if (Model.XmrPrice > 0)
                         {
                             <td class="text-end mono xmr-val">
@@ -185,9 +188,9 @@ else
                                 }
                             </td>
                         }
-                        <td class="text-end mono">@Mask($"${pc.TotalCostBasis.ToString("N2", usd)}")</td>
+                        <td class="text-end mono">@Mask(MoneyFormatter.FormatPrice(pc.TotalCostBasis, cur, rate))</td>
                         <td class="text-end mono @(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
-                            @Mask($"${pc.UnrealizedPnl.ToString("N2", usd)}")
+                            @Mask(MoneyFormatter.FormatPrice(pc.UnrealizedPnl, cur, rate))
                         </td>
                         @if (Model.XmrPrice > 0)
                         {
@@ -219,14 +222,14 @@ else
                 }
                 <tr style="border-top:2px solid var(--xmr-border);font-weight:600">
                     <td colspan="3">Total</td>
-                    <td class="text-end mono">@Mask($"${Model.Portfolio.TotalValueUsd.ToString("N2", usd)}")</td>
+                    <td class="text-end mono">@Mask(MoneyFormatter.FormatPrice(Model.Portfolio.TotalValueUsd, cur, rate))</td>
                     @if (Model.XmrPrice > 0)
                     {
                         <td class="text-end mono xmr-val">@Mask($"{xmrVal(Model.Portfolio.TotalValueUsd).ToString("N4", usd)} XMR")</td>
                     }
-                    <td class="text-end mono">@Mask($"${totalBasis.ToString("N2", usd)}")</td>
+                    <td class="text-end mono">@Mask(MoneyFormatter.FormatPrice(totalBasis, cur, rate))</td>
                     <td class="text-end mono @(totalPnl >= 0 ? "text-success" : "text-danger")">
-                        @Mask($"${totalPnl.ToString("N2", usd)}")
+                        @Mask(MoneyFormatter.FormatPrice(totalPnl, cur, rate))
                         @if (totalBasis > 0)
                         {
                             <div style="font-size:0.85em;font-weight:normal">
@@ -302,8 +305,17 @@ else
 
         // ─── Allocation pie ─────────────────────────────────────
         (function() {
+        const C = {
+            code:     @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Code)),
+            symbol:   @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Symbol)),
+            before:   @(cur.SymbolBefore ? "true" : "false"),
+            decimals: @cur.Decimals,
+            rate:     @rate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
         const allocLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => a.Symbol)));
-        const allocValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
+        // Values are USD-canonical from the server; multiply for display.
+        const allocValuesUsd = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations.Select(a => (double)a.ValueUsd)));
+        const allocValues = allocValuesUsd.map(v => v * C.rate);
         if (allocLabels.length === 0) return;
 
         const palette = [
@@ -360,6 +372,18 @@ else
         (function() {
         if (privacyMode) return;
 
+        // Currency context — values stored as PnlUsd, multiplied for display.
+        const C = {
+            code:     @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Code)),
+            symbol:   @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Symbol)),
+            before:   @(cur.SymbolBefore ? "true" : "false"),
+            decimals: @cur.Decimals,
+            rate:     @rate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+        function wrapMoney(numberPart) {
+            return C.before ? C.symbol + numberPart : numberPart + ' ' + C.symbol;
+        }
+
         const pnlSeries = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
                     Model.PnlSeries,
                     new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }
@@ -369,18 +393,22 @@ else
         const canvas = document.getElementById('pnlChart');
         if (!canvas) return;
 
-        let mode = 'usd';
+        // Modes: 'fiat' (display currency) or 'xmr'. Kept old 'usd' id for backwards compat.
+        let mode = 'fiat';
         const labels = pnlSeries.map(p => new Date(p.timestampMs).toISOString().slice(0, 10));
 
-        function dataFor(m) { return pnlSeries.map(p => m === 'usd' ? p.pnlUsd : p.pnlXmr); }
+        function dataFor(m) {
+            // pnlUsd is canonical from server; multiply by FX rate for display currency.
+            return pnlSeries.map(p => m === 'fiat' ? p.pnlUsd * C.rate : p.pnlXmr);
+        }
 
         const chart = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
         labels: labels,
         datasets: [{
-        label: 'P&L (USD)',
-        data: dataFor('usd'),
+        label: 'P&L (' + C.code + ')',
+        data: dataFor('fiat'),
         borderColor: '#ff6600',
         backgroundColor: 'rgba(255, 102, 0, 0.1)',
         borderWidth: 2,
@@ -403,7 +431,7 @@ else
         ticks: {
         color: getComputedStyle(document.body).color,
         callback: function(val) {
-        if (mode === 'usd') return '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        if (mode === 'fiat') return wrapMoney(val.toLocaleString('en-US', { maximumFractionDigits: 0 }));
         return val.toFixed(4) + ' XMR';
         }
         },
@@ -416,7 +444,7 @@ else
         callbacks: {
         label: function(c) {
         const v = c.parsed.y;
-        if (mode === 'usd') return 'P&L: $' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (mode === 'fiat') return 'P&L: ' + wrapMoney(v.toLocaleString('en-US', { minimumFractionDigits: C.decimals, maximumFractionDigits: C.decimals }));
         return 'P&L: ' + v.toFixed(4) + ' XMR';
         }
         }
@@ -427,13 +455,13 @@ else
 
         function setMode(newMode) {
         mode = newMode;
-        chart.data.datasets[0].label = 'P&L (' + (mode === 'usd' ? 'USD' : 'XMR') + ')';
+        chart.data.datasets[0].label = 'P&L (' + (mode === 'fiat' ? C.code : 'XMR') + ')';
         chart.data.datasets[0].data = dataFor(mode);
         chart.update();
-        document.getElementById('pnl-toggle-usd').classList.toggle('active', mode === 'usd');
+        document.getElementById('pnl-toggle-usd').classList.toggle('active', mode === 'fiat');
         document.getElementById('pnl-toggle-xmr').classList.toggle('active', mode === 'xmr');
         }
-        document.getElementById('pnl-toggle-usd').addEventListener('click', () => setMode('usd'));
+        document.getElementById('pnl-toggle-usd').addEventListener('click', () => setMode('fiat'));
         document.getElementById('pnl-toggle-xmr').addEventListener('click', () => setMode('xmr'));
         })();
 

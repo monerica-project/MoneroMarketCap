@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
+using MoneroMarketCap.Services.Interfaces;
+using MoneroMarketCap.Services.Models;
+using MoneroMarketCap.Web.Helpers;
 
 namespace MoneroMarketCap.Pages.Coins;
 
@@ -11,6 +14,7 @@ public class DetailModel : PageModel
 {
     private readonly ICoinRepository _coins;
     private readonly AppDbContext _db;
+    private readonly IFiatRateService _fxRates;
 
     public Coin? Coin { get; set; }
     public Coin? Monero { get; set; }
@@ -22,10 +26,14 @@ public class DetailModel : PageModel
     public decimal? VsXmrChange30d { get; set; }
     public decimal? VsXmrChange1yr { get; set; }
 
-    public DetailModel(ICoinRepository coins, AppDbContext db)
+    public CurrencyInfo Currency { get; set; } = CurrencyCatalog.Default;
+    public decimal RatePerUsd { get; set; } = 1m;
+
+    public DetailModel(ICoinRepository coins, AppDbContext db, IFiatRateService fxRates)
     {
         _coins = coins;
         _db = db;
+        _fxRates = fxRates;
     }
 
     public async Task<IActionResult> OnGetAsync(string symbol)
@@ -35,6 +43,10 @@ public class DetailModel : PageModel
         Monero = all.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
 
         if (Coin == null) return NotFound();
+
+        Currency = CurrencyResolver.Resolve(HttpContext);
+        var rates = await _fxRates.GetRatesAsync(HttpContext.RequestAborted);
+        RatePerUsd = rates.TryGetValue(Currency.Code, out var r) && r > 0 ? r : 1m;
 
         var oneYearAgo  = DateTime.UtcNow.Date.AddDays(-365);
         var thirtyDaysAgo = DateTime.UtcNow.Date.AddDays(-30);

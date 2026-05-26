@@ -5,6 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
+using MoneroMarketCap.Services.Interfaces;
+using MoneroMarketCap.Services.Models;
+using MoneroMarketCap.Web.Helpers;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,6 +22,7 @@ public class IndexModel : PageModel
     private readonly IPortfolioRepository _portfolios;
     private readonly ICoinRepository _coins;
     private readonly AppDbContext _db;
+    private readonly IFiatRateService _fxRates;
 
     public IReadOnlyList<Portfolio> Portfolios { get; set; } = new List<Portfolio>();
     public decimal TotalNetValue { get; set; }
@@ -29,6 +33,9 @@ public class IndexModel : PageModel
     public bool AtPortfolioLimit => Portfolios.Count >= MaxPortfoliosPerUser;
     public string DataVersion { get; set; } = "";
 
+    public CurrencyInfo Currency { get; set; } = CurrencyCatalog.Default;
+    public decimal RatePerUsd { get; set; } = 1m;
+
     public IReadOnlyList<AllocationSlice> Allocations { get; set; } = new List<AllocationSlice>();
 
     [BindProperty] public string PortfolioName { get; set; } = "My Portfolio";
@@ -36,17 +43,24 @@ public class IndexModel : PageModel
     [TempData] public string? FlashMessage { get; set; }
     [TempData] public bool FlashSuccess { get; set; }
 
-    public IndexModel(IPortfolioRepository portfolios, ICoinRepository coins, AppDbContext db)
+    public IndexModel(
+        IPortfolioRepository portfolios,
+        ICoinRepository coins,
+        AppDbContext db,
+        IFiatRateService fxRates)
     {
         _portfolios = portfolios;
         _coins = coins;
         _db = db;
+        _fxRates = fxRates;
     }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     public async Task OnGetAsync()
     {
+        await ResolveCurrencyAsync();
+
         var snapshot = await BuildSnapshotAsync(GetUserId());
 
         PrivacyMode = snapshot.PrivacyMode;
@@ -61,6 +75,7 @@ public class IndexModel : PageModel
 
     public async Task<IActionResult> OnGetSnapshotAsync()
     {
+        await ResolveCurrencyAsync();
         var snapshot = await BuildSnapshotAsync(GetUserId());
 
         return new JsonResult(new
@@ -68,9 +83,18 @@ public class IndexModel : PageModel
             version = snapshot.Version,
             privacyMode = snapshot.PrivacyMode,
             xmrPrice = snapshot.XmrPrice,
+            // All *Usd values stay USD-canonical; client multiplies by ratePerUsd for display.
             totalNetValue = snapshot.TotalNetValue,
             totalPnl = snapshot.TotalPnl,
             totalCostBasis = snapshot.TotalCostBasis,
+            currency = new
+            {
+                code = Currency.Code,
+                symbol = Currency.Symbol,
+                before = Currency.SymbolBefore,
+                decimals = Currency.Decimals,
+                ratePerUsd = RatePerUsd,
+            },
             allocations = snapshot.Allocations.Select(a => new
             {
                 symbol = a.Symbol,
@@ -109,6 +133,13 @@ public class IndexModel : PageModel
         await _portfolios.SaveChangesAsync();
 
         return RedirectToPage();
+    }
+
+    private async Task ResolveCurrencyAsync()
+    {
+        Currency = CurrencyResolver.Resolve(HttpContext);
+        var rates = await _fxRates.GetRatesAsync(HttpContext.RequestAborted);
+        RatePerUsd = rates.TryGetValue(Currency.Code, out var r) && r > 0 ? r : 1m;
     }
 
     private async Task<SnapshotData> BuildSnapshotAsync(int userId)

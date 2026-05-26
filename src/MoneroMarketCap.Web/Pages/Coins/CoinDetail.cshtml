@@ -1,14 +1,17 @@
 @page "/coins/{symbol}"
 @model MoneroMarketCap.Pages.Coins.DetailModel
 @using MoneroMarketCap.Services.Display
+@using MoneroMarketCap.Web.Helpers
 @{
     ViewData["Title"] = Model.Coin?.Symbol + " — " + Model.Coin?.Name;
     ViewBag.SponsorRotateIntervalSeconds = 30;
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+    var cur = Model.Currency;
+    var rate = Model.RatePerUsd;
     var coin = Model.Coin!;
     var xmr = Model.Monero;
     var priceInXmr = xmr != null && xmr.PriceUsd > 0 ? coin.PriceUsd / xmr.PriceUsd : 0;
-    
+
     var coinsPerXmr = coin.PriceUsd > 0 && xmr != null ? xmr.PriceUsd / coin.PriceUsd : 0;
     bool isXmr = coin.Symbol.ToUpper() == "XMR";
 
@@ -55,18 +58,7 @@
     </div>
     <div class="ms-auto text-end">
         <div class="fs-3 fw-bold">
-            @if (coin.PriceUsd >= 1)
-            {
-                <text>$@coin.PriceUsd.ToString("N2", usd)</text>
-            }
-            else if (coin.PriceUsd >= 0.01m)
-            {
-                <text>$@coin.PriceUsd.ToString("N4", usd)</text>
-            }
-            else
-            {
-                <text>$@coin.PriceUsd.ToString("N8", usd)</text>
-            }
+            @MoneyFormatter.FormatPrice(coin.PriceUsd, cur, rate)
         </div>
         <div class="@(coin.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
             @(coin.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent24h).ToString("N2", usd)% 24h
@@ -125,34 +117,15 @@
 <div class="xmr-stat">
     <span class="stat-label">
         Market Cap
-       
     </span>
     <span class="stat-value">
-        @if (displayMarketCap >= 1_000_000_000_000m)
-        {
-            <text>$@((displayMarketCap / 1_000_000_000_000m).ToString("N2", usd))T</text>
-        }
-        else if (displayMarketCap >= 1_000_000_000m)
-        {
-            <text>$@((displayMarketCap / 1_000_000_000m).ToString("N2", usd))B</text>
-        }
-        else
-        {
-            <text>$@((displayMarketCap / 1_000_000m).ToString("N2", usd))M</text>
-        }
+        @MoneyFormatter.FormatLarge(displayMarketCap, cur, rate)
     </span>
 </div>
     <div class="xmr-stat">
         <span class="stat-label">24h Volume</span>
         <span class="stat-value">
-            @if (coin.TotalVolume >= 1_000_000_000m)
-            {
-                <text>$@((coin.TotalVolume / 1_000_000_000m).ToString("N2", usd))B</text>
-            }
-            else
-            {
-                <text>$@((coin.TotalVolume / 1_000_000m).ToString("N2", usd))M</text>
-            }
+            @MoneyFormatter.FormatLarge(coin.TotalVolume, cur, rate)
         </span>
     </div>
     @if (isXmr)
@@ -160,7 +133,7 @@
     <div class="xmr-stat">
         <span class="stat-label">
             Circulating Supply
- 
+
         </span>
         <span class="stat-value">
             @((displaySupply / 1_000_000m).ToString("N3", usd))M XMR
@@ -172,7 +145,7 @@
 <!-- Price chart -->
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Price (USD) — Last 365 Days</span>
+        <span>Price (@cur.Code) — Last 365 Days</span>
         <div class="d-flex align-items-center gap-2">
             <button id="toggle-btn"
                     onclick="toggleMode()"
@@ -295,40 +268,19 @@
                     <tr>
                         <td class="text-muted">24h High</td>
                         <td class="mono">
-                            @if (coin.High24h >= 1)
-                            {
-                                <text>$@coin.High24h.ToString("N2", usd)</text>
-                            }
-                            else
-                            {
-                                <text>$@coin.High24h.ToString("N6", usd)</text>
-                            }
+                            @MoneyFormatter.FormatPrice(coin.High24h, cur, rate)
                         </td>
                     </tr>
                     <tr>
                         <td class="text-muted">24h Low</td>
                         <td class="mono">
-                            @if (coin.Low24h >= 1)
-                            {
-                                <text>$@coin.Low24h.ToString("N2", usd)</text>
-                            }
-                            else
-                            {
-                                <text>$@coin.Low24h.ToString("N6", usd)</text>
-                            }
+                            @MoneyFormatter.FormatPrice(coin.Low24h, cur, rate)
                         </td>
                     </tr>
                     <tr>
                         <td class="text-muted">All-Time High</td>
                         <td class="mono">
-                            @if (coin.Ath >= 1)
-                            {
-                                <text>$@coin.Ath.ToString("N2", usd)</text>
-                            }
-                            else
-                            {
-                                <text>$@coin.Ath.ToString("N6", usd)</text>
-                            }
+                            @MoneyFormatter.FormatPrice(coin.Ath, cur, rate)
                             <span class="@(coin.AthChangePercentage >= 0 ? "text-success" : "text-danger") ath-change-pct">
                                 (@coin.AthChangePercentage.ToString("N1", usd)%)
                             </span>
@@ -367,26 +319,26 @@
                     <tr>
                         <td class="text-muted w-50">
                             Market Cap
-                           
+
                         </td>
                         <td class="mono">
                             @if (hasNode)
                             {
-                                <div>$@((nodeMarketCap / 1_000_000_000m).ToString("N2", usd))B</div>
+                                <div>@MoneyFormatter.FormatLarge(nodeMarketCap, cur, rate)</div>
                                 <div class="value-sub">
-                                    CoinGecko: $@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B
+                                    CoinGecko: @MoneyFormatter.FormatLarge(coin.MarketCapUsd, cur, rate)
                                 </div>
                             }
                             else
                             {
-                                <text>$@((coin.MarketCapUsd / 1_000_000_000m).ToString("N2", usd))B</text>
+                                @MoneyFormatter.FormatLarge(coin.MarketCapUsd, cur, rate)
                             }
                         </td>
                     </tr>
                     <tr>
                         <td class="text-muted">
                             Circulating Supply
-                            
+
                         </td>
                         <td class="mono">
                             @if (hasNode)
@@ -418,16 +370,16 @@
                     </tr>
                     <tr>
                         <td class="text-muted">24h High</td>
-                        <td class="mono">$@coin.High24h.ToString("N2", usd)</td>
+                        <td class="mono">@MoneyFormatter.FormatPrice(coin.High24h, cur, rate)</td>
                     </tr>
                     <tr>
                         <td class="text-muted">24h Low</td>
-                        <td class="mono">$@coin.Low24h.ToString("N2", usd)</td>
+                        <td class="mono">@MoneyFormatter.FormatPrice(coin.Low24h, cur, rate)</td>
                     </tr>
                     <tr>
                         <td class="text-muted">All-Time High</td>
                         <td class="mono">
-                            $@coin.Ath.ToString("N2", usd)
+                            @MoneyFormatter.FormatPrice(coin.Ath, cur, rate)
                             <span class="@(coin.AthChangePercentage >= 0 ? "text-success" : "text-danger") ath-change-pct">
                                 (@coin.AthChangePercentage.ToString("N1", usd)%)
                             </span>
@@ -527,16 +479,51 @@
         const coinSymbol = '@coin.Symbol';
         const isXmr = coinSymbol === 'XMR';
 
+        // ─── Currency context (server-rendered, drives chart formatting) ──────────
+        const CURRENCY = {
+            code: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Code)),
+            symbol: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Symbol)),
+            before: @(cur.SymbolBefore ? "true" : "false"),
+            decimals: @cur.Decimals,
+            rate: @rate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+
         let chartInstance = null;
         let rawCoin = null;
         let rawXmr = null;
         let mode = 'price'; // 'price' | 'vs'
 
-        function formatPrice(v) {
-        if (v >= 1000) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        if (v >= 1) return '$' + v.toFixed(2);
-        if (v >= 0.01) return '$' + v.toFixed(4);
-        return '$' + v.toFixed(8);
+        function wrapMoney(numberPart) {
+            return CURRENCY.before
+                ? CURRENCY.symbol + numberPart
+                : numberPart + ' ' + CURRENCY.symbol;
+        }
+
+        function formatPrice(vUsd) {
+            const v = vUsd * CURRENCY.rate;
+            let n;
+            if (CURRENCY.decimals === 0) {
+                n = v >= 1
+                    ? v.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                    : v.toFixed(2);
+            } else if (v >= 1000) {
+                n = v.toLocaleString('en-US', { minimumFractionDigits: CURRENCY.decimals, maximumFractionDigits: CURRENCY.decimals });
+            } else if (v >= 1) {
+                n = v.toFixed(CURRENCY.decimals);
+            } else if (v >= 0.01) {
+                n = v.toFixed(4);
+            } else {
+                n = v.toFixed(8);
+            }
+            return wrapMoney(n);
+        }
+
+        function formatAxisPrice(vUsd) {
+            const v = vUsd * CURRENCY.rate;
+            if (v >= 1000) return wrapMoney((v / 1000).toFixed(1) + 'k');
+            if (v >= 1) return wrapMoney(v.toFixed(CURRENCY.decimals || 2));
+            if (v >= 0.01) return wrapMoney(v.toFixed(4));
+            return wrapMoney(v.toFixed(6));
         }
 
         function normalize(series) {
@@ -566,10 +553,11 @@
         let datasets;
 
         if (mode === 'price' || isXmr) {
-        // Price mode — XMR page orange, all other coins blue
+        // Price mode — convert USD points to the selected display currency.
+        // XMR page orange, all other coins blue.
         datasets = [{
-        label: coinSymbol + ' Price (USD)',
-        data: coinData.map(p => p[1]),
+        label: coinSymbol + ' Price (' + CURRENCY.code + ')',
+        data: coinData.map(p => p[1] * CURRENCY.rate),
         borderColor: isXmr ? '#FF6600' : '#4a9eff',
         backgroundColor: isXmr ? 'rgba(255,102,0,0.08)' : 'rgba(74,158,255,0.08)',
         borderWidth: 1.5,
@@ -580,7 +568,7 @@
         yAxisID: 'y'
         }];
         } else {
-        // vs XMR mode — XMR always orange, coin always blue
+        // vs XMR mode — % change is currency-invariant.
         const normCoin = normalize(coinData);
         const xmrAligned = alignSeries(coinData, xmrData);
 
@@ -629,7 +617,8 @@
         const v = ctx.parsed.y;
         if (v === null) return null;
         if (isVsMode) return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
-        return formatPrice(v);
+        // Price-mode data is already in target currency; divide back out to reuse formatter.
+        return formatPrice(v / CURRENCY.rate);
         }
         }
         }
@@ -644,10 +633,7 @@
         color: '#888',
         callback: v => isVsMode
         ? (v >= 0 ? '+' : '') + v.toFixed(0) + '%'
-        : (v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k'
-        : v >= 1 ? '$' + v.toFixed(2)
-        : v >= 0.01 ? '$' + v.toFixed(4)
-        : '$' + v.toFixed(6))
+        : formatAxisPrice(v / CURRENCY.rate)
         },
         grid: { color: 'rgba(255,255,255,0.05)' }
         }
@@ -692,7 +678,7 @@
         function toggleMode() {
         mode = mode === 'price' ? 'vs' : 'price';
         const btn = document.getElementById('toggle-btn');
-        btn.textContent = mode === 'vs' ? 'Show Price (USD)' : 'Show vs XMR';
+        btn.textContent = mode === 'vs' ? 'Show Price (' + CURRENCY.code + ')' : 'Show vs XMR';
         buildChart(rawCoin, rawXmr ?? []);
         }
 
