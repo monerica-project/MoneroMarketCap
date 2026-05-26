@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<PortfolioCoin> PortfolioCoins { get; set; }
     public DbSet<CoinTransaction> CoinTransactions { get; set; }
     public DbSet<CoinPriceHistory> CoinPriceHistories { get; set; }
+    public DbSet<FiatRate> FiatRates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -39,6 +40,10 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<CoinTransaction>()
             .Property(t => t.Type)
             .HasConversion<string>();
+
+        modelBuilder.Entity<FiatRate>()
+            .Property(f => f.RatePerUsd)
+            .HasColumnType("numeric(20, 10)");
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

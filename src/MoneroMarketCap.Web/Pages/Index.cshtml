@@ -1,9 +1,13 @@
 @page
 @using MoneroMarketCap.Services.Display
+@using MoneroMarketCap.Services.Models
+@using MoneroMarketCap.Web.Helpers
 @model MoneroMarketCap.Pages.IndexModel
 @{
-    ViewData["Title"] = "Market Cap — Valued in Monero";
+    ViewData["Title"] = $"Market Cap — Valued in Monero ({Model.Currency.Code})";
     ViewBag.SponsorRotateIntervalSeconds = Model.SponsorRotateIntervalSeconds;
+    var cur = Model.Currency;
+    var rate = Model.RatePerUsd;
 }
 
 <partial name="_SponsorBanner" />
@@ -14,14 +18,14 @@
     <div class="xmr-stat-bar mb-4">
         <div class="xmr-stat">
             <span class="stat-label">XMR Price</span>
-            <span class="stat-value" id="xmr-price">@FormatUsd(xmr.PriceUsd)</span>
+            <span class="stat-value" id="xmr-price">@MoneyFormatter.FormatPrice(xmr.PriceUsd, cur, rate)</span>
             <span id="xmr-change-24h" class="stat-change @(xmr.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                 @(xmr.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent24h).ToString("N2")% 24h
             </span>
         </div>
         <div class="xmr-stat">
             <span class="stat-label">Market Cap</span>
-            <span class="stat-value" id="xmr-mcap">@FormatLarge(MoneroSupplyDisplay.EffectiveMarketCapUsd(xmr))</span>
+            <span class="stat-value" id="xmr-mcap">@MoneyFormatter.FormatLarge(MoneroSupplyDisplay.EffectiveMarketCapUsd(xmr), cur, rate)</span>
             <span id="xmr-rank" class="stat-change text-muted">Rank #@xmr.MarketCapRank</span>
         </div>
         <div class="xmr-stat xmr-stat--wide">
@@ -61,6 +65,7 @@
         </div>
         @{
             // Best/worst performer vs XMR over 7d, excluding XMR itself.
+            // Currency-independent: percentages don't change with FX.
             var performers = Model.Coins
                 .Where(c => c.Symbol.ToUpper() != "XMR"
                          && Model.Monero != null
@@ -86,7 +91,7 @@
                     <a href="/coins/@bestVsXmr.Coin.Symbol.ToLower()" class="vs-xmr-link">
                         <div class="vs-xmr-body">
                             <span class="vs-xmr-label">Best</span>
-                            <div class="vs-xmr-value">
+                            <div class="vs-xmr-value" id="vs-xmr-best">
                                 @if (!string.IsNullOrEmpty(bestVsXmr.Coin.ImageUrl))
                                 {
                                     <img src="@bestVsXmr.Coin.ImageUrl" width="18" height="18" class="coin-icon" />
@@ -101,7 +106,7 @@
                     <a href="/coins/@worstVsXmr.Coin.Symbol.ToLower()" class="vs-xmr-link">
                         <div class="vs-xmr-body">
                             <span class="vs-xmr-label">Worst</span>
-                            <div class="vs-xmr-value">
+                            <div class="vs-xmr-value" id="vs-xmr-worst">
                                 @if (!string.IsNullOrEmpty(worstVsXmr.Coin.ImageUrl))
                                 {
                                     <img src="@worstVsXmr.Coin.ImageUrl" width="18" height="18" class="coin-icon" />
@@ -142,17 +147,23 @@
 }
 else
 {
-    <div class="table-responsive">
+    <div class="table-responsive"
+         data-currency-code="@cur.Code"
+         data-currency-symbol="@cur.Symbol"
+         data-currency-before="@(cur.SymbolBefore ? "1" : "0")"
+         data-currency-decimals="@cur.Decimals"
+         data-currency-culture="@cur.Culture"
+         data-rate-per-usd="@(rate.ToString(System.Globalization.CultureInfo.InvariantCulture))">
         <table class="table market-table">
             <thead>
                 <tr>
                     <th class="col-rank sortable" data-sort="mcap"># <span class="sort-indicator">▼</span></th>
                     <th class="sortable" data-sort="name">Coin <span class="sort-indicator"></span></th>
-                    <th class="text-end sortable" data-sort="price">Price (USD) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="price">Price (@cur.Code) <span class="sort-indicator"></span></th>
                     <th class="text-end sortable" data-sort="xmr-price">Price (XMR) <span class="sort-indicator"></span></th>
-                    <th class="text-end sortable" data-sort="change-1h">1h % (USD) <span class="sort-indicator"></span></th>
-                    <th class="text-end sortable" data-sort="change">24h % (USD) <span class="sort-indicator"></span></th>
-                    <th class="text-end sortable" data-sort="change-7d">7d % (USD) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="change-1h">1h % <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="change">24h % <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="change-7d">7d % <span class="sort-indicator"></span></th>
                     <th class="text-end sortable" data-sort="mcap">Market Cap <span class="sort-indicator"></span></th>
                     <th class="text-end sortable" data-sort="volume">24h Volume <span class="sort-indicator"></span></th>
                     <th class="text-end sortable" data-sort="supply">Supply <span class="sort-indicator"></span></th>
@@ -199,7 +210,7 @@ else
                                 }
                             </div>
                         </td>
-                        <td class="text-end mono cell-price">@FormatUsd(coin.PriceUsd)</td>
+                        <td class="text-end mono cell-price">@MoneyFormatter.FormatPrice(coin.PriceUsd, cur, rate)</td>
                         <td class="text-end mono xmr-val cell-xmr-price">
                             @if (isXmr)
                             {
@@ -224,10 +235,10 @@ else
                             @(coin.PriceChangePercent7d >= 0 ? "▲" : "▼") @Math.Abs(coin.PriceChangePercent7d).ToString("N2")%
                         </td>
                         <td class="text-end mono cell-mcap">
-                            @FormatLarge(effectiveMcap)
+                            @MoneyFormatter.FormatLarge(effectiveMcap, cur, rate)
                         </td>
                         <td class="text-end mono cell-volume">
-                            @FormatLarge(coin.TotalVolume)
+                            @MoneyFormatter.FormatLarge(coin.TotalVolume, cur, rate)
                         </td>
                         <td class="text-end mono cell-supply">
                             @FormatUnits(effectiveSupply)
@@ -244,42 +255,47 @@ else
 
 
 @functions {
-    static readonly System.Globalization.CultureInfo _usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
-
-    string FormatUsd(decimal value)
-    {
-        if (value >= 1) return "$" + value.ToString("N2", _usd);
-        if (value >= 0.01m) return "$" + value.ToString("N4", _usd);
-        if (value >= 0.0001m) return "$" + value.ToString("N6", _usd);
-        return "$" + value.ToString("N8", _usd);
-    }
-
-    string FormatLarge(decimal value) => value switch
-    {
-        >= 1_000_000_000_000m => "$" + (value / 1_000_000_000_000m).ToString("N2", _usd) + "T",
-        >= 1_000_000_000m => "$" + (value / 1_000_000_000m).ToString("N2", _usd) + "B",
-        >= 1_000_000m => "$" + (value / 1_000_000m).ToString("N2", _usd) + "M",
-        >= 1_000m => "$" + (value / 1_000m).ToString("N2", _usd) + "K",
-        _ => "$" + value.ToString("N2", _usd)
-    };
+    static readonly System.Globalization.CultureInfo _en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
 
     string FormatUnits(decimal value) => value switch
     {
-        >= 1_000_000_000m => (value / 1_000_000_000m).ToString("N2", _usd) + "B",
-        >= 1_000_000m => (value / 1_000_000m).ToString("N2", _usd) + "M",
-        >= 1_000m => (value / 1_000m).ToString("N2", _usd) + "K",
-        _ => value.ToString("N0", _usd)
+        >= 1_000_000_000m => (value / 1_000_000_000m).ToString("N2", _en) + "B",
+        >= 1_000_000m => (value / 1_000_000m).ToString("N2", _en) + "M",
+        >= 1_000m => (value / 1_000m).ToString("N2", _en) + "K",
+        _ => value.ToString("N0", _en)
     };
 }
 
 @section Scripts {
     <script>
-        function formatLarge(v) {
-            if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
-            if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
-            if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
-            if (v >= 1e3) return '$' + (v / 1e3).toFixed(2) + 'K';
-            return '$' + v.toFixed(2);
+        // ─── Currency context: read from the table-responsive wrapper ───────────
+        // Server-rendered with the current cookie/query selection. The /api/Prices
+        // endpoint will ALSO return its own currency block so we stay in sync if
+        // the user changes currency in another tab.
+        const _tableWrap = document.querySelector('.table-responsive[data-rate-per-usd]');
+        let CURRENCY = _tableWrap ? {
+            code:     _tableWrap.dataset.currencyCode,
+            symbol:   _tableWrap.dataset.currencySymbol,
+            before:   _tableWrap.dataset.currencyBefore === '1',
+            decimals: parseInt(_tableWrap.dataset.currencyDecimals, 10) || 2,
+            rate:     parseFloat(_tableWrap.dataset.ratePerUsd) || 1
+        } : { code: 'USD', symbol: '$', before: true, decimals: 2, rate: 1 };
+
+        function wrapMoney(numberPart) {
+            return CURRENCY.before
+                ? CURRENCY.symbol + numberPart
+                : numberPart + ' ' + CURRENCY.symbol;
+        }
+
+        function formatLarge(vUsd) {
+            const v = vUsd * CURRENCY.rate;
+            let n;
+            if (v >= 1e12) n = (v / 1e12).toFixed(2) + 'T';
+            else if (v >= 1e9) n = (v / 1e9).toFixed(2) + 'B';
+            else if (v >= 1e6) n = (v / 1e6).toFixed(2) + 'M';
+            else if (v >= 1e3) n = (v / 1e3).toFixed(2) + 'K';
+            else n = v.toFixed(2);
+            return wrapMoney(n);
         }
         function formatUnits(v) {
             if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
@@ -287,15 +303,30 @@ else
             if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
             return Math.round(v).toLocaleString();
         }
-        function formatPrice(v) {
-            if (v >= 1) return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            if (v >= 0.01) return '$' + v.toFixed(4);
-            if (v >= 0.0001) return '$' + v.toFixed(6);
-            return '$' + v.toFixed(8);
+        function formatPrice(vUsd) {
+            const v = vUsd * CURRENCY.rate;
+            let n;
+            if (CURRENCY.decimals === 0) {
+                n = v >= 1
+                    ? v.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                    : v.toFixed(2);
+            } else if (v >= 1) {
+                n = v.toLocaleString('en-US', {
+                    minimumFractionDigits: CURRENCY.decimals,
+                    maximumFractionDigits: CURRENCY.decimals
+                });
+            } else if (v >= 0.01) {
+                n = v.toFixed(4);
+            } else if (v >= 0.0001) {
+                n = v.toFixed(6);
+            } else {
+                n = v.toFixed(8);
+            }
+            return wrapMoney(n);
         }
-        function formatXmrPrice(price, xmrPrice) {
-            if (!xmrPrice) return '—';
-            const r = price / xmrPrice;
+        function formatXmrPrice(priceUsd, xmrPriceUsd) {
+            if (!xmrPriceUsd) return '—';
+            const r = priceUsd / xmrPriceUsd;
             return r >= 1 ? r.toFixed(4) + ' XMR' : r.toFixed(8) + ' XMR';
         }
         function formatChangeCell(val) {
@@ -305,8 +336,6 @@ else
                 cls: 'text-end mono ' + (up ? 'text-success' : 'text-danger')
             };
         }
-
-        const VERIFIED_BADGE = '';
 
         // --- Sort state ---
         let sortCol = 'mcap';
@@ -373,13 +402,26 @@ else
             try {
                 const res = await fetch('/api/Prices');
                 if (!res.ok) return;
-                const coins = await res.json();
+                const payload = await res.json();
+                // Backwards compat: payload may be either the new object form
+                // ({ currency, coins }) or the old flat array form.
+                const coins = Array.isArray(payload) ? payload : payload.coins;
+                if (payload && payload.currency) {
+                    CURRENCY = {
+                        code:     payload.currency.code,
+                        symbol:   payload.currency.symbol,
+                        before:   payload.currency.before,
+                        decimals: payload.currency.decimals,
+                        rate:     payload.currency.ratePerUsd
+                    };
+                }
+                if (!coins) return;
                 const xmr = coins.find(c => c.symbol === 'XMR');
                 if (!xmr) return;
 
                 const xmrRow = document.querySelector('tr[data-symbol="XMR"]');
                 const xmrSupply = xmrRow ? parseFloat(xmrRow.dataset.supply) || 0 : 0;
-                const xmrEffectiveMcap = xmrSupply * xmr.priceUsd;
+                const xmrEffectiveMcapUsd = xmrSupply * xmr.priceUsd;
 
                 const xmrChangeHelper = (id, val) => {
                     const el = document.getElementById(id);
@@ -397,7 +439,7 @@ else
                 const priceEl = document.getElementById('xmr-price');
                 if (priceEl) priceEl.textContent = formatPrice(xmr.priceUsd);
                 const mcapEl = document.getElementById('xmr-mcap');
-                if (mcapEl) mcapEl.textContent = formatLarge(xmrEffectiveMcap);
+                if (mcapEl) mcapEl.textContent = formatLarge(xmrEffectiveMcapUsd);
                 const rankEl = document.getElementById('xmr-rank');
                 if (rankEl) rankEl.textContent = 'Rank #' + xmr.marketCapRank;
 
@@ -407,7 +449,7 @@ else
                     const isXmr = coin.symbol === 'XMR';
 
                     const coinEffectiveSupply = parseFloat(row.dataset.supply) || 0;
-                    const coinEffectiveMcap = coinEffectiveSupply * coin.priceUsd;
+                    const coinEffectiveMcapUsd = coinEffectiveSupply * coin.priceUsd;
                     const priceInXmr = xmr.priceUsd > 0 ? coin.priceUsd / xmr.priceUsd : 0;
 
                     row.dataset.price = coin.priceUsd;
@@ -415,7 +457,7 @@ else
                     row.dataset.change1h = coin.priceChangePercent1h;
                     row.dataset.change = coin.priceChangePercent24h;
                     row.dataset.change7d = coin.priceChangePercent7d;
-                    row.dataset.mcap = coinEffectiveMcap;
+                    row.dataset.mcap = coinEffectiveMcapUsd;
                     row.dataset.volume = coin.totalVolume;
 
                     const priceCell = row.querySelector('.cell-price');
@@ -446,13 +488,13 @@ else
                     }
 
                     const mcapCell = row.querySelector('.cell-mcap');
-                    if (mcapCell) mcapCell.textContent = formatLarge(coinEffectiveMcap);
+                    if (mcapCell) mcapCell.textContent = formatLarge(coinEffectiveMcapUsd);
 
                     const volumeCell = row.querySelector('.cell-volume');
                     if (volumeCell) volumeCell.textContent = formatLarge(coin.totalVolume);
                 });
 
-                // Recompute best/worst vs XMR (top stat bar)
+                // Recompute best/worst vs XMR (top stat bar) — currency-invariant.
                 if (xmr && xmr.priceChangePercent7d !== undefined) {
                     const vsXmrList = coins
                         .filter(c => c.symbol !== 'XMR')

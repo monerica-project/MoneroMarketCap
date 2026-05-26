@@ -1,4 +1,4 @@
-using MoneroMarketCap.Data;
+ using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Implementations;
 using MoneroMarketCap.Services.Interfaces;
@@ -33,6 +33,32 @@ builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>()
             return new NetworkStream(socket, ownsSocket: true);
         }
     });
+
+// ── Fiat exchange rates (open.er-api.com) ────────────────────────────────
+// Single source for USD-based FX. Refreshed by FiatRateUpdateWorker on the
+// configured interval (default 15 min). Does not touch CoinGecko quota.
+//
+// Same SocketsHttpHandler trick as the CoinGecko client above: force IPv4
+// (AddressFamily.InterNetwork) so we don't hang on this VPS's broken IPv6
+// connectivity. Without this, the HttpClient picks IPv6, can't connect, and
+// every refresh times out after 20s.
+builder.Services.AddHttpClient<IFiatRateService, FiatRateService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        ConnectTimeout = TimeSpan.FromSeconds(10),
+        EnableMultipleHttp2Connections = false,
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            await socket.ConnectAsync(context.DnsEndPoint.Host, context.DnsEndPoint.Port, cancellationToken);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+    });
+builder.Services.AddHostedService<FiatRateUpdateWorker>();
 
 // ── Coin price + history workers ─────────────────────────────────────────
 // Backfill runs once on startup to fill any gap in daily history for active coins.

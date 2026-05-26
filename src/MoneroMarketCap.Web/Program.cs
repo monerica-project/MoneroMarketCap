@@ -41,6 +41,11 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>();
 
+// FX rates: the Web app only READS rates from the DB. The actual upstream refresh
+// runs in the Worker process. We still register the typed HttpClient here because
+// the service signature requires it (read paths never use it).
+builder.Services.AddHttpClient<IFiatRateService, FiatRateService>();
+
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>
     {
