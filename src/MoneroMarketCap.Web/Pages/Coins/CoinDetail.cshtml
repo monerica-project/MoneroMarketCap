@@ -132,6 +132,17 @@
 }
 </div>
 
+<!-- Last updated -->
+<div class="table-meta mb-3">
+    <span>
+        <span class="text-muted">Data updated:</span>
+        <span class="cursor-default"
+              title="@coin.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC">
+            @coin.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC
+        </span>
+    </span>
+</div>
+
 <!-- Price chart -->
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -148,6 +159,13 @@
     <div class="card-body chart-canvas-wrap">
         <canvas id="price-chart"></canvas>
     </div>
+    @if (cur.Code != "USD")
+    {
+        <div class="card-footer text-muted small">
+            Historical prices are converted from USD using today's @cur.Code/USD rate.
+            The line shape reflects @coin.Symbol's USD performance, not @cur.Code-native price history.
+        </div>
+    }
 </div>
 
 <!-- vs XMR comparison -->
@@ -470,18 +488,23 @@
         const isXmr = coinSymbol === 'XMR';
 
         // ─── Currency context (server-rendered, drives chart formatting) ──────────
+        // rate = how many units of CURRENCY.code equal 1 USD.
+        // If rate is missing/zero we coerce to 1 so the chart still renders (in USD).
         const CURRENCY = {
             code: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Code)),
             symbol: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Symbol)),
             before: @(cur.SymbolBefore ? "true" : "false"),
             decimals: @cur.Decimals,
-            rate: @rate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            rate: Number(@rate.ToString(System.Globalization.CultureInfo.InvariantCulture)) || 1
         };
 
         let chartInstance = null;
-        let rawCoin = null;
-        let rawXmr = null;
-        let mode = 'price'; // 'price' | 'vs'
+        let rawCoin = null;   // [[ts, priceInTargetCurrency], ...]
+        let rawXmr  = null;
+        let mode = 'price';   // 'price' | 'vs'
+
+        // ── Formatting helpers ────────────────────────────────────────────────────
+        // All values passed in here are ALREADY in CURRENCY (no conversion done).
 
         function wrapMoney(numberPart) {
             return CURRENCY.before
@@ -489,15 +512,18 @@
                 : numberPart + ' ' + CURRENCY.symbol;
         }
 
-        function formatPrice(vUsd) {
-            const v = vUsd * CURRENCY.rate;
+        function formatPrice(v) {
             let n;
             if (CURRENCY.decimals === 0) {
+                // High-rate currencies like JPY — no fractional units.
                 n = v >= 1
                     ? v.toLocaleString('en-US', { maximumFractionDigits: 0 })
                     : v.toFixed(2);
             } else if (v >= 1000) {
-                n = v.toLocaleString('en-US', { minimumFractionDigits: CURRENCY.decimals, maximumFractionDigits: CURRENCY.decimals });
+                n = v.toLocaleString('en-US', {
+                    minimumFractionDigits: CURRENCY.decimals,
+                    maximumFractionDigits: CURRENCY.decimals
+                });
             } else if (v >= 1) {
                 n = v.toFixed(CURRENCY.decimals);
             } else if (v >= 0.01) {
@@ -508,168 +534,175 @@
             return wrapMoney(n);
         }
 
-        function formatAxisPrice(vUsd) {
-            const v = vUsd * CURRENCY.rate;
+        function formatAxisPrice(v) {
             if (v >= 1000) return wrapMoney((v / 1000).toFixed(1) + 'k');
-            if (v >= 1) return wrapMoney(v.toFixed(CURRENCY.decimals || 2));
+            if (v >= 1)    return wrapMoney(v.toFixed(CURRENCY.decimals || 2));
             if (v >= 0.01) return wrapMoney(v.toFixed(4));
             return wrapMoney(v.toFixed(6));
         }
 
+        // ── Pure series helpers (% change is currency-invariant) ─────────────────
         function normalize(series) {
-        if (!series.length) return [];
-        const base = series[0][1];
-        if (!base) return series.map(p => [p[0], 0]);
-        return series.map(p => [p[0], ((p[1] / base) - 1) * 100]);
+            if (!series.length) return [];
+            const base = series[0][1];
+            if (!base) return series.map(p => [p[0], 0]);
+            return series.map(p => [p[0], ((p[1] / base) - 1) * 100]);
         }
 
         function alignSeries(a, b) {
-        const bMap = new Map(b.map(p => [new Date(p[0]).toDateString(), p[1]]));
-        return a.map(p => {
-        const key = new Date(p[0]).toDateString();
-        return [p[0], bMap.get(key) ?? null];
-        });
+            const bMap = new Map(b.map(p => [new Date(p[0]).toDateString(), p[1]]));
+            return a.map(p => {
+                const key = new Date(p[0]).toDateString();
+                return [p[0], bMap.get(key) ?? null];
+            });
         }
 
         function buildChart(coinData, xmrData) {
-        const ctx = document.getElementById('price-chart').getContext('2d');
-        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+            const ctx = document.getElementById('price-chart').getContext('2d');
+            if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
-        const labels = coinData.map(p => {
-        const d = new Date(p[0]);
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        });
+            const labels = coinData.map(p => {
+                const d = new Date(p[0]);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
 
-        let datasets;
+            const isVsMode = mode === 'vs' && !isXmr;
+            let datasets;
 
-        if (mode === 'price' || isXmr) {
-        // Price mode — convert USD points to the selected display currency.
-        // XMR page orange, all other coins blue.
-        datasets = [{
-        label: coinSymbol + ' Price (' + CURRENCY.code + ')',
-        data: coinData.map(p => p[1] * CURRENCY.rate),
-        borderColor: isXmr ? '#FF6600' : '#4a9eff',
-        backgroundColor: isXmr ? 'rgba(255,102,0,0.08)' : 'rgba(74,158,255,0.08)',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.2,
-        fill: true,
-        yAxisID: 'y'
-        }];
-        } else {
-        // vs XMR mode — % change is currency-invariant.
-        const normCoin = normalize(coinData);
-        const xmrAligned = alignSeries(coinData, xmrData);
+            if (!isVsMode) {
+                // Price mode — data is already in target currency, plot directly.
+                // XMR page = orange, all other coins = blue.
+                datasets = [{
+                    label: coinSymbol + ' Price (' + CURRENCY.code + ')',
+                    data: coinData.map(p => p[1]),
+                    borderColor: isXmr ? '#FF6600' : '#4a9eff',
+                    backgroundColor: isXmr ? 'rgba(255,102,0,0.08)' : 'rgba(74,158,255,0.08)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    tension: 0.2,
+                    fill: true,
+                    yAxisID: 'y'
+                }];
+            } else {
+                // vs XMR mode — % change is currency-invariant.
+                const normCoin = normalize(coinData);
+                const xmrAligned = alignSeries(coinData, xmrData);
 
-        datasets = [
-        {
-        label: coinSymbol + ' % change',
-        data: normCoin.map(p => p[1]),
-        borderColor: '#4a9eff',
-        backgroundColor: 'rgba(74,158,255,0.06)',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.2,
-        fill: false,
-        yAxisID: 'y'
-        },
-        {
-        label: 'XMR % change',
-        data: normalize(xmrAligned).map(p => p[1]),
-        borderColor: '#FF6600',
-        backgroundColor: 'rgba(255,102,0,0.06)',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.2,
-        fill: false,
-        yAxisID: 'y'
-        }
-        ];
+                datasets = [
+                    {
+                        label: coinSymbol + ' % change',
+                        data: normCoin.map(p => p[1]),
+                        borderColor: '#4a9eff',
+                        backgroundColor: 'rgba(74,158,255,0.06)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.2,
+                        fill: false,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'XMR % change',
+                        data: normalize(xmrAligned).map(p => p[1]),
+                        borderColor: '#FF6600',
+                        backgroundColor: 'rgba(255,102,0,0.06)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.2,
+                        fill: false,
+                        yAxisID: 'y'
+                    }
+                ];
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: isVsMode, labels: { color: '#aaa', boxWidth: 12 } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    const v = ctx.parsed.y;
+                                    if (v === null) return null;
+                                    if (isVsMode) {
+                                        return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+                                    }
+                                    // Data is already in target currency — format directly.
+                                    return formatPrice(v);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#888',
+                                callback: v => isVsMode
+                                    ? (v >= 0 ? '+' : '') + v.toFixed(0) + '%'
+                                    : formatAxisPrice(v)
+                            },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    }
+                }
+            });
         }
 
-        const isVsMode = mode === 'vs' && !isXmr;
-
-        chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: { labels, datasets },
-        options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-        legend: { display: isVsMode, labels: { color: '#aaa', boxWidth: 12 } },
-        tooltip: {
-        callbacks: {
-        label: ctx => {
-        const v = ctx.parsed.y;
-        if (v === null) return null;
-        if (isVsMode) return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
-        // Price-mode data is already in target currency; divide back out to reuse formatter.
-        return formatPrice(v / CURRENCY.rate);
-        }
-        }
-        }
-        },
-        scales: {
-        x: {
-        ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 },
-        grid: { color: 'rgba(255,255,255,0.05)' }
-        },
-        y: {
-        ticks: {
-        color: '#888',
-        callback: v => isVsMode
-        ? (v >= 0 ? '+' : '') + v.toFixed(0) + '%'
-        : formatAxisPrice(v / CURRENCY.rate)
-        },
-        grid: { color: 'rgba(255,255,255,0.05)' }
-        }
-        }
-        }
-        });
-        }
-
+        // ── Fetch + convert once at the source ───────────────────────────────────
         async function loadChart() {
-        document.getElementById('chart-status').textContent = 'Loading...';
-        try {
-        const [coinRes, xmrRes] = await Promise.all([
-        fetch('/api/coin/' + coinGeckoId + '/chart'),
-        isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart')
-        ]);
+            document.getElementById('chart-status').textContent = 'Loading...';
+            try {
+                const [coinRes, xmrRes] = await Promise.all([
+                    fetch('/api/coin/' + coinGeckoId + '/chart'),
+                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart')
+                ]);
 
-        if (!coinRes.ok) throw new Error('fetch failed');
-        const coinJson = await coinRes.json();
-        rawCoin = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
+                if (!coinRes.ok) throw new Error('fetch failed');
+                const coinJson = await coinRes.json();
+                const coinUsd = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
 
-        if (xmrRes) {
-        const xmrJson = await xmrRes.json();
-        rawXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
-        }
+                // Convert USD → target currency ONCE, then store. Every downstream
+                // function operates on the already-converted values.
+                rawCoin = coinUsd.map(p => [p[0], p[1] * CURRENCY.rate]);
 
-        if (!rawCoin.length) {
-        document.getElementById('chart-status').textContent = 'No data available';
-        return;
-        }
+                if (xmrRes) {
+                    const xmrJson = await xmrRes.json();
+                    const xmrUsd = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
+                    rawXmr = xmrUsd.map(p => [p[0], p[1] * CURRENCY.rate]);
+                }
 
-        document.getElementById('chart-status').textContent = rawCoin.length + ' days';
-        buildChart(rawCoin, rawXmr ?? []);
+                if (!rawCoin.length) {
+                    document.getElementById('chart-status').textContent = 'No data available';
+                    return;
+                }
 
-        if (!isXmr) {
-        document.getElementById('toggle-btn').classList.remove('d-none');
-        }
-        } catch (e) {
-        document.getElementById('chart-status').textContent = 'Chart unavailable';
-        }
+                document.getElementById('chart-status').textContent = rawCoin.length + ' days';
+                buildChart(rawCoin, rawXmr ?? []);
+
+                if (!isXmr) {
+                    document.getElementById('toggle-btn').classList.remove('d-none');
+                }
+            } catch (e) {
+                document.getElementById('chart-status').textContent = 'Chart unavailable';
+            }
         }
 
         function toggleMode() {
-        mode = mode === 'price' ? 'vs' : 'price';
-        const btn = document.getElementById('toggle-btn');
-        btn.textContent = mode === 'vs' ? 'Show Price (' + CURRENCY.code + ')' : 'Show vs XMR';
-        buildChart(rawCoin, rawXmr ?? []);
+            mode = mode === 'price' ? 'vs' : 'price';
+            const btn = document.getElementById('toggle-btn');
+            btn.textContent = mode === 'vs' ? 'Show Price (' + CURRENCY.code + ')' : 'Show vs XMR';
+            buildChart(rawCoin, rawXmr ?? []);
         }
 
         loadChart();
