@@ -148,6 +148,47 @@ var _sponsorCacheTtl = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
 var _sponsorLock = new SemaphoreSlim(1, 1);
 
+// ── Sitemap (/sitemap.xml) ───────────────────────────────────────────────────
+app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
+{
+    const string baseUrl = "https://moneromarketcap.com";
+    const int topCoinCount = 100;
+
+    var all = await coins.GetAllAsync();
+    var topCoins = all
+        .Where(c => !string.IsNullOrWhiteSpace(c.Symbol) && c.MarketCapUsd > 0)
+        .OrderByDescending(c => c.MarketCapUsd)
+        .Take(topCoinCount)
+        .ToList();
+
+    var lastMod = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    var sb = new System.Text.StringBuilder();
+
+    sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    sb.AppendLine("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
+
+    sb.AppendLine("  <url>");
+    sb.AppendLine($"    <loc>{baseUrl}/</loc>");
+    sb.AppendLine($"    <lastmod>{lastMod}</lastmod>");
+    sb.AppendLine("    <changefreq>hourly</changefreq>");
+    sb.AppendLine("    <priority>1.0</priority>");
+    sb.AppendLine("  </url>");
+
+    foreach (var coin in topCoins)
+    {
+        var slug = coin.Symbol.Trim().ToLowerInvariant();
+        sb.AppendLine("  <url>");
+        sb.AppendLine($"    <loc>{baseUrl}/coins/{slug}</loc>");
+        sb.AppendLine($"    <lastmod>{lastMod}</lastmod>");
+        sb.AppendLine("    <changefreq>hourly</changefreq>");
+        sb.AppendLine("    <priority>0.8</priority>");
+        sb.AppendLine("  </url>");
+    }
+
+    sb.AppendLine("</urlset>");
+    return Results.Content(sb.ToString(), "application/xml");
+});
+
 app.MapGet("/api/sponsors", async (HttpContext ctx, IHttpClientFactory httpFactory, CancellationToken cancel) =>
 {
     ctx.Response.Headers["Cache-Control"] = "public, max-age=300";
