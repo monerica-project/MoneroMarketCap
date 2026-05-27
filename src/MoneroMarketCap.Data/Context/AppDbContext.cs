@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<CoinTransaction> CoinTransactions { get; set; }
     public DbSet<CoinPriceHistory> CoinPriceHistories { get; set; }
     public DbSet<FiatRate> FiatRates { get; set; }
+    public DbSet<FiatRateHistory> FiatRateHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,6 +45,15 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<FiatRate>()
             .Property(f => f.RatePerUsd)
             .HasColumnType("numeric(20, 10)");
+
+        modelBuilder.Entity<FiatRateHistory>(b =>
+        {
+            b.Property(f => f.RatePerUsd).HasColumnType("numeric(20, 10)");
+            // One row per currency per day. Also doubles as the lookup index used by
+            // the chart endpoint when joining CoinPriceHistories on Date + Code.
+            b.HasIndex(f => new { f.Code, f.Date }).IsUnique();
+            b.HasIndex(f => f.Date);
+        });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

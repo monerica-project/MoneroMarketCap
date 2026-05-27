@@ -60,6 +60,31 @@ builder.Services.AddHttpClient<IFiatRateService, FiatRateService>()
     });
 builder.Services.AddHostedService<FiatRateUpdateWorker>();
 
+// ── Historical FX rates (frankfurter.app, ECB reference rates) ───────────
+// Daily snapshots stored in FiatRateHistory, used by the chart endpoint to
+// render non-USD price history accurately (FX rates as they were on each day,
+// not just today's rate applied across the board).
+//
+// Same IPv4-forcing handler as above for the VPS's IPv6 quirk.
+// Free, no API key, no rate limit at this volume. Does NOT touch CoinGecko quota.
+builder.Services.AddHttpClient<IFiatRateHistoryService, FiatRateHistoryService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        ConnectTimeout = TimeSpan.FromSeconds(15),
+        EnableMultipleHttp2Connections = false,
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            await socket.ConnectAsync(context.DnsEndPoint.Host, context.DnsEndPoint.Port, cancellationToken);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+    });
+builder.Services.AddHostedService<FiatRateHistoryWorker>();
+
 // ── Coin price + history workers ─────────────────────────────────────────
 // Backfill runs once on startup to fill any gap in daily history for active coins.
 builder.Services.AddSingleton<CoinHistoryBackfillService>();
