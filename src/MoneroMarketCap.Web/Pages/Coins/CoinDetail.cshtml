@@ -159,13 +159,6 @@
     <div class="card-body chart-canvas-wrap">
         <canvas id="price-chart"></canvas>
     </div>
-    @if (cur.Code != "USD")
-    {
-        <div class="card-footer text-muted small">
-            Historical prices are converted from USD using today's @cur.Code/USD rate.
-            The line shape reflects @coin.Symbol's USD performance, not @cur.Code-native price history.
-        </div>
-    }
 </div>
 
 <!-- vs XMR comparison -->
@@ -488,23 +481,23 @@
         const isXmr = coinSymbol === 'XMR';
 
         // ─── Currency context (server-rendered, drives chart formatting) ──────────
-        // rate = how many units of CURRENCY.code equal 1 USD.
-        // If rate is missing/zero we coerce to 1 so the chart still renders (in USD).
+        // Server now returns chart data ALREADY in the target currency (joined
+        // against FiatRateHistory at render time), so no client-side conversion
+        // happens. We keep `rate` only so older fallback paths still work in dev.
         const CURRENCY = {
             code: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Code)),
             symbol: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Symbol)),
             before: @(cur.SymbolBefore ? "true" : "false"),
-            decimals: @cur.Decimals,
-            rate: Number(@rate.ToString(System.Globalization.CultureInfo.InvariantCulture)) || 1
+            decimals: @cur.Decimals
         };
 
         let chartInstance = null;
-        let rawCoin = null;   // [[ts, priceInTargetCurrency], ...]
+        let rawCoin = null;   // [[ts, priceInTargetCurrency], ...]  (from server)
         let rawXmr  = null;
         let mode = 'price';   // 'price' | 'vs'
 
         // ── Formatting helpers ────────────────────────────────────────────────────
-        // All values passed in here are ALREADY in CURRENCY (no conversion done).
+        // All values passed in here are already in CURRENCY.
 
         function wrapMoney(numberPart) {
             return CURRENCY.before
@@ -515,7 +508,6 @@
         function formatPrice(v) {
             let n;
             if (CURRENCY.decimals === 0) {
-                // High-rate currencies like JPY — no fractional units.
                 n = v >= 1
                     ? v.toLocaleString('en-US', { maximumFractionDigits: 0 })
                     : v.toFixed(2);
@@ -634,7 +626,6 @@
                                     if (isVsMode) {
                                         return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
                                     }
-                                    // Data is already in target currency — format directly.
                                     return formatPrice(v);
                                 }
                             }
@@ -659,27 +650,26 @@
             });
         }
 
-        // ── Fetch + convert once at the source ───────────────────────────────────
+        // ── Fetch chart data ─────────────────────────────────────────────────────
+        // Pass the currency code so the server can join against FiatRateHistory
+        // and return prices already converted to the selected currency. The XMR
+        // overlay (vs-XMR mode) uses the same currency for consistency.
         async function loadChart() {
             document.getElementById('chart-status').textContent = 'Loading...';
             try {
+                const qs = '?currency=' + encodeURIComponent(CURRENCY.code);
                 const [coinRes, xmrRes] = await Promise.all([
-                    fetch('/api/coin/' + coinGeckoId + '/chart'),
-                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart')
+                    fetch('/api/coin/' + coinGeckoId + '/chart' + qs),
+                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart' + qs)
                 ]);
 
                 if (!coinRes.ok) throw new Error('fetch failed');
                 const coinJson = await coinRes.json();
-                const coinUsd = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
-
-                // Convert USD → target currency ONCE, then store. Every downstream
-                // function operates on the already-converted values.
-                rawCoin = coinUsd.map(p => [p[0], p[1] * CURRENCY.rate]);
+                rawCoin = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
 
                 if (xmrRes) {
                     const xmrJson = await xmrRes.json();
-                    const xmrUsd = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
-                    rawXmr = xmrUsd.map(p => [p[0], p[1] * CURRENCY.rate]);
+                    rawXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
                 }
 
                 if (!rawCoin.length) {

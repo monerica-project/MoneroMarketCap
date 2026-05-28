@@ -6,6 +6,7 @@ using MoneroMarketCap.Data.Constants;
 using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Implementations;
 using MoneroMarketCap.Services.Interfaces;
+using MoneroMarketCap.Services.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,6 +46,10 @@ builder.Services.AddHttpClient<ICoinGeckoService, CoinGeckoService>();
 // runs in the Worker process. We still register the typed HttpClient here because
 // the service signature requires it (read paths never use it).
 builder.Services.AddHttpClient<IFiatRateService, FiatRateService>();
+
+// Historical FX: same deal. The Worker fetches from frankfurter.app and writes
+// to FiatRateHistory; the Web app only joins that table at chart-render time.
+builder.Services.AddHttpClient<IFiatRateHistoryService, FiatRateHistoryService>();
 
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>
@@ -101,12 +106,26 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ── Chart endpoint — served from DB (worker handles writes) ──────────────────
+// Currency-aware: for USD requests, returns CoinPriceHistories straight. For
+// any other supported currency, joins each day's USD price against the FX rate
+// from FiatRateHistory for that exact date — so chart shapes actually differ
+// between currencies (CAD/USD movement over time is visible in the CAD chart,
+// not flattened out by today's-rate-only conversion).
+//
+// Cache key includes the currency so we don't cross-contaminate.
 app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     string coinGeckoId,
+    string? currency,
     IServiceScopeFactory scopeFactory,
+    IFiatRateHistoryService fxHistory,
     IMemoryCache cache) =>
 {
-    var cacheKey = $"chart_{coinGeckoId}";
+    // Normalize and validate the currency. Anything we don't display → USD.
+    var currencyCode = (currency ?? "USD").Trim().ToUpperInvariant();
+    if (!CurrencyCatalog.IsSupported(currencyCode))
+        currencyCode = "USD";
+
+    var cacheKey = $"chart_{coinGeckoId}_{currencyCode}";
     if (cache.TryGetValue(cacheKey, out string? cached))
         return Results.Content(cached!, "application/json");
 
@@ -128,11 +147,39 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
         .OrderBy(x => x.Date)
         .ToListAsync();
 
+    // Date → rate map for the requested currency. USD short-circuits inside
+    // the service to a synthetic all-1.0 map (no DB hit), so the USD path
+    // stays as fast as before.
+    var fxMap = await fxHistory.GetSeriesAsync(
+        currencyCode, cutoff, DateTime.UtcNow.Date);
+
     var result = history
-        .Select(x => new double[]
+        .Select(x =>
         {
-            new DateTimeOffset(x.Date, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            (double)x.Price
+            // Look up that exact day's FX rate. If the row is missing — which
+            // shouldn't happen because the worker forward-fills weekends on
+            // insert — walk backward up to 14 days to find the nearest preceding
+            // rate. Final fallback is 1.0 (USD-equivalent) so the chart still
+            // draws rather than dropping the point or showing zero.
+            if (!fxMap.TryGetValue(x.Date, out var fx))
+            {
+                fx = 0m;
+                for (int back = 1; back <= 14; back++)
+                {
+                    if (fxMap.TryGetValue(x.Date.AddDays(-back), out var prev))
+                    {
+                        fx = prev;
+                        break;
+                    }
+                }
+                if (fx == 0m) fx = 1m;
+            }
+
+            return new double[]
+            {
+                new DateTimeOffset(x.Date, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                (double)(x.Price * fx)
+            };
         })
         .ToList();
 
