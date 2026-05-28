@@ -45,7 +45,7 @@
     <div class="text-end portfolio-summary">
         <div class="portfolio-total">
             Total Net Value:
-            <strong data-anim="totalNetValue" data-value="@Model.TotalNetValue" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatPrice(Model.TotalNetValue, cur, rate))</strong>
+            <strong data-anim="totalNetValue" data-value="@Model.TotalNetValue" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatValue(Model.TotalNetValue, cur, rate))</strong>
         </div>
         @if (Model.XmrPrice > 0)
         {
@@ -55,7 +55,7 @@
         }
         <div class="portfolio-pnl-line mt-1">
             Total P&amp;L:
-            <strong data-anim="totalPnl" data-value="@Model.TotalPnl" data-masked="@MaskedAttr()" class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">@Mask(MoneyFormatter.FormatPrice(Model.TotalPnl, cur, rate))</strong>
+            <strong data-anim="totalPnl" data-value="@Model.TotalPnl" data-masked="@MaskedAttr()" class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">@Mask(MoneyFormatter.FormatSigned(Model.TotalPnl, cur, rate))</strong>
             @if (!string.IsNullOrEmpty(totalPnlPctText))
             {
                 <span data-anim="totalPnlPct" data-value="@totalPnlPctVal" data-masked="false" class="@(Model.TotalPnl >= 0 ? "text-success" : "text-danger")">(@totalPnlPctText)</span>
@@ -120,7 +120,7 @@ else
                                             <td><a href="/coins/@a.Symbol.ToLower()"><strong>@a.Symbol</strong></a></td>
                                             <td class="text-end mono"><span data-coin="@a.Symbol" data-field="price" data-value="@a.PriceUsd" data-masked="false">@MoneyFormatter.FormatPrice(a.PriceUsd, cur, rate)</span></td>
                                             <td class="text-end mono"><span data-coin="@a.Symbol" data-field="amount" data-sym="@a.Symbol" data-value="@a.TotalAmount" data-masked="@MaskedAttr()">@Mask(FormatAmount(a.TotalAmount, a.Symbol))</span></td>
-                                            <td class="text-end mono"><span data-coin="@a.Symbol" data-field="value" data-value="@a.ValueUsd" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatPrice(a.ValueUsd, cur, rate))</span></td>
+                                            <td class="text-end mono"><span data-coin="@a.Symbol" data-field="value" data-value="@a.ValueUsd" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatValue(a.ValueUsd, cur, rate))</span></td>
                                             <td class="text-end mono"><span data-coin="@a.Symbol" data-field="pct" data-value="@pct" data-masked="false">@pct.ToString("N2", usd)%</span></td>
                                         </tr>
                                     }
@@ -128,7 +128,7 @@ else
                                 <tfoot>
                                     <tr>
                                         <th colspan="3">Total</th>
-                                        <th class="text-end mono"><span data-anim="allocTotal" data-value="@totalAlloc" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatPrice(totalAlloc, cur, rate))</span></th>
+                                        <th class="text-end mono"><span data-anim="allocTotal" data-value="@totalAlloc" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatValue(totalAlloc, cur, rate))</span></th>
                                         <th class="text-end mono">100.00%</th>
                                     </tr>
                                 </tfoot>
@@ -160,7 +160,7 @@ else
                     <div class="card-body">
                         <h5 class="card-title">@p.Name</h5>
                         <p class="card-text mb-1">
-                            Value: <strong data-portfolio="@p.Id" data-field="value" data-value="@p.TotalValueUsd" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatPrice(p.TotalValueUsd, cur, rate))</strong>
+                            Value: <strong data-portfolio="@p.Id" data-field="value" data-value="@p.TotalValueUsd" data-masked="@MaskedAttr()">@Mask(MoneyFormatter.FormatValue(p.TotalValueUsd, cur, rate))</strong>
                         </p>
                         @if (Model.XmrPrice > 0)
                         {
@@ -170,7 +170,7 @@ else
                         }
                         <p class="card-text mb-1">
                             P&amp;L:
-                            <strong data-portfolio="@p.Id" data-field="pnl" data-value="@pPnl" data-masked="@MaskedAttr()" class="@pPnlClass">@Mask(MoneyFormatter.FormatPrice(pPnl, cur, rate))</strong>
+                            <strong data-portfolio="@p.Id" data-field="pnl" data-value="@pPnl" data-masked="@MaskedAttr()" class="@pPnlClass">@Mask(MoneyFormatter.FormatSigned(pPnl, cur, rate))</strong>
                             @if (!string.IsNullOrEmpty(pPctText))
                             {
                                 <span data-portfolio="@p.Id" data-field="pnlPct" data-value="@pPctVal" data-masked="false" class="@pPnlClass">(@pPctText)</span>
@@ -339,8 +339,27 @@ else
             return numFmt(v, 8, 8) + ' ' + sym;
         }
 
-        // P&L uses the same formatter as currency (signed).
-        function formatPnlUsd(vUsd) { return formatCurrency(vUsd); }
+        // P&L keeps sub-$1 precision (tiered on magnitude) and re-attaches the sign,
+        // mirroring MoneyFormatter.FormatSigned. Plain prices/values are NOT used here:
+        // a small gain/loss must stay visible (e.g. +$0.0234) instead of rounding to $0.02.
+        function formatPnlUsd(vUsd) {
+            const v = vUsd * C.rate;
+            const sign = v < 0 ? '-' : '';
+            const a = Math.abs(v);
+            let n;
+            if (C.decimals === 0) {
+                n = a >= 1 ? numFmt(a, 0, 0) : a.toFixed(2);
+            } else if (a >= 1) {
+                n = numFmt(a, C.decimals, C.decimals);
+            } else if (a >= 0.01) {
+                n = numFmt(a, 4, 4);
+            } else if (a >= 0.0001) {
+                n = numFmt(a, 6, 6);
+            } else {
+                n = numFmt(a, 8, 8);
+            }
+            return sign + wrapMoney(n);
+        }
 
         function animateNumber(el, fromVal, toVal, formatFn) {
             const masked = el.dataset.masked === 'true';

@@ -53,6 +53,59 @@ public static class MoneyFormatter
     }
 
     /// <summary>
+    /// Formats a money amount (portfolio value, total, cost basis) in the chosen currency,
+    /// always using the currency's fixed decimal count (2 for USD, 0 for JPY/KRW). Unlike
+    /// <see cref="FormatPrice"/> this never adds sub-unit precision, so a $0.47 total renders
+    /// as "$0.47" rather than "$0.4659". Use for dollar amounts that are NOT per-coin prices.
+    /// </summary>
+    public static string FormatValue(decimal valueUsd, CurrencyInfo currency, decimal ratePerUsd)
+    {
+        var v = Convert(valueUsd, ratePerUsd);
+        var culture = SafeCulture(currency.Culture);
+        var numberPart = v.ToString($"N{currency.Decimals}", culture);
+        return Wrap(numberPart, currency);
+    }
+
+    /// <summary>
+    /// Formats a signed money amount (P&amp;L) in the chosen currency. Like <see cref="FormatPrice"/>
+    /// it keeps sub-unit precision for small magnitudes so a tiny gain/loss isn't rounded to zero,
+    /// but it applies the precision tiers to the magnitude and re-attaches the sign. This avoids
+    /// the bug where a plain price formatter forces 8 decimals onto any negative value
+    /// (e.g. a -$50 loss rendering as "-50.00000000").
+    /// </summary>
+    public static string FormatSigned(decimal valueUsd, CurrencyInfo currency, decimal ratePerUsd)
+    {
+        var v = Convert(valueUsd, ratePerUsd);
+        var culture = SafeCulture(currency.Culture);
+        var sign = v < 0 ? "-" : "";
+        var a = Math.Abs(v);
+
+        string numberPart;
+        if (currency.Decimals == 0)
+        {
+            numberPart = a >= 1m ? a.ToString("N0", culture) : a.ToString("N2", culture);
+        }
+        else if (a >= 1m)
+        {
+            numberPart = a.ToString($"N{currency.Decimals}", culture);
+        }
+        else if (a >= 0.01m)
+        {
+            numberPart = a.ToString("N4", culture);
+        }
+        else if (a >= 0.0001m)
+        {
+            numberPart = a.ToString("N6", culture);
+        }
+        else
+        {
+            numberPart = a.ToString("N8", culture);
+        }
+
+        return sign + Wrap(numberPart, currency);
+    }
+
+    /// <summary>
     /// Formats a large value (market cap, volume) with K/M/B/T suffix in the chosen currency.
     /// </summary>
     public static string FormatLarge(decimal valueUsd, CurrencyInfo currency, decimal ratePerUsd)
