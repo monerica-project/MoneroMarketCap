@@ -26,6 +26,59 @@
 
 <meta name="format-detection" content="telephone=no" />
 
+<style>
+    /* Chart view switcher — each view is one click, active is highlighted */
+    .chart-mode-switch {
+        flex-wrap: wrap;
+    }
+    .chart-mode-btn {
+        font-size: .78rem;
+        line-height: 1.4;
+    }
+    .chart-mode-btn.active {
+        background: color-mix(in srgb, #FF6600 16%, transparent);
+        border-color: #FF6600;
+        color: #fff;
+        box-shadow: 0 0 6px rgba(255, 102, 0, .35);
+    }
+
+    /* Moving-average overlay toolbar (price mode only) */
+    .ma-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        margin-bottom: .6rem;
+    }
+    .ma-chip {
+        --ma-color: #888;
+        border-color: rgba(255, 255, 255, .15);
+        color: #aab;
+        font-size: .78rem;
+        line-height: 1.4;
+        padding: .15rem .55rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+    }
+    .ma-chip::before {
+        content: "";
+        width: 10px;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--ma-color);
+        opacity: .4;
+    }
+    .ma-chip.active {
+        border-color: var(--ma-color);
+        color: #fff;
+        background: color-mix(in srgb, var(--ma-color) 14%, transparent);
+    }
+    .ma-chip.active::before {
+        opacity: 1;
+        box-shadow: 0 0 6px var(--ma-color);
+    }
+</style>
+
 <partial name="_SponsorBanner" />
 
 <div class="mb-3">
@@ -146,17 +199,14 @@
 <!-- Price chart -->
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Price (@cur.Code) — Last 365 Days</span>
+        <span id="chart-title">Price (@cur.Code) — Last 365 Days</span>
         <div class="d-flex align-items-center gap-2">
-            <button id="toggle-btn"
-                    onclick="toggleMode()"
-                    class="btn btn-outline-secondary btn-sm chart-toggle-btn d-none">
-                Show vs XMR
-            </button>
+            <div id="mode-switch" class="btn-group btn-group-sm chart-mode-switch d-none" role="group"></div>
             <span id="chart-status" class="chart-status">Loading...</span>
         </div>
     </div>
     <div class="card-body chart-canvas-wrap">
+        <div id="ma-toolbar" class="ma-toolbar d-none"></div>
         <canvas id="price-chart"></canvas>
     </div>
 </div>
@@ -481,24 +531,80 @@
         const isXmr = coinSymbol === 'XMR';
 
         // ─── Currency context (server-rendered, drives chart formatting) ──────────
-        // Server now returns chart data ALREADY in the target currency (joined
-        // against FiatRateHistory at render time), so no client-side conversion
-        // happens. We keep `rate` only so older fallback paths still work in dev.
+        // Server returns chart data ALREADY in the target currency (joined against
+        // FiatRateHistory at render time). For the "vs USD" overlay we fetch the
+        // same coin a second time with currency=USD as a baseline.
         const CURRENCY = {
             code: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Code)),
             symbol: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(cur.Symbol)),
             before: @(cur.SymbolBefore ? "true" : "false"),
             decimals: @cur.Decimals
         };
+        const isUsd = CURRENCY.code === 'USD';
 
         let chartInstance = null;
-        let rawCoin = null;   // [[ts, priceInTargetCurrency], ...]  (from server)
-        let rawXmr  = null;
-        let mode = 'price';   // 'price' | 'vs'
+        let rawCoin    = null;   // [[ts, priceInSelectedCurrency], ...]  (from server)
+        let rawXmr     = null;   // XMR in selected currency
+        let rawCoinUsd = null;   // this coin in USD (baseline for "vs USD" mode)
+
+        // Available modes depend on context:
+        //   price → coin in selected currency (absolute)
+        //   usd   → coin's % return in selected currency vs in USD  (currency effect)
+        //   vs    → coin vs XMR, both normalized from selected-currency prices
+        // Each mode gets its own one-click button in the switcher.
+        const MODES = ['price'];
+        if (!isUsd) MODES.push('usd');     // nothing to compare if we're already USD
+        if (!isXmr) MODES.push('vs');      // XMR can't be compared to itself
+        let mode = MODES[0];
+
+        // ─── Moving-average overlays (price mode only) ────────────────────────────
+        // Data is 365 daily points, so period == days. Add/remove a line here and
+        // it shows up as a toggle chip automatically. Colors are chosen to stay
+        // distinct from the blue price line (#4a9eff) and orange XMR line (#FF6600).
+        const INDICATORS = [
+            { id: 'sma50',  type: 'sma', period: 50,  label: 'SMA 50',  color: '#f5d76e' },
+            { id: 'sma200', type: 'sma', period: 200, label: 'SMA 200', color: '#b18aff' },
+            { id: 'ema21',  type: 'ema', period: 21,  label: 'EMA 21',  color: '#2ecc71' }
+        ];
+        const activeIndicators = new Set();   // ids currently displayed (persists across mode switches)
+
+        // Simple moving average. Leading (period-1) entries are null so Chart.js
+        // draws a clean gap rather than a misleading partial line.
+        function sma(values, period) {
+            const out = new Array(values.length).fill(null);
+            if (values.length < period) return out;
+            let sum = 0;
+            for (let i = 0; i < values.length; i++) {
+                sum += values[i];
+                if (i >= period) sum -= values[i - period];
+                if (i >= period - 1) out[i] = sum / period;
+            }
+            return out;
+        }
+
+        // Exponential moving average, seeded with the SMA of the first `period`
+        // points (the standard convention). Same null-padding behavior as sma().
+        function ema(values, period) {
+            const out = new Array(values.length).fill(null);
+            if (values.length < period) return out;
+            const k = 2 / (period + 1);
+            let prev;
+            for (let i = 0; i < values.length; i++) {
+                if (i < period - 1) continue;
+                if (i === period - 1) {
+                    let seed = 0;
+                    for (let j = 0; j < period; j++) seed += values[j];
+                    prev = seed / period;
+                    out[i] = prev;
+                } else {
+                    prev = values[i] * k + prev * (1 - k);
+                    out[i] = prev;
+                }
+            }
+            return out;
+        }
 
         // ── Formatting helpers ────────────────────────────────────────────────────
-        // All values passed in here are already in CURRENCY.
-
         function wrapMoney(numberPart) {
             return CURRENCY.before
                 ? CURRENCY.symbol + numberPart
@@ -533,7 +639,7 @@
             return wrapMoney(v.toFixed(6));
         }
 
-        // ── Pure series helpers (% change is currency-invariant) ─────────────────
+        // ── Pure series helpers ───────────────────────────────────────────────────
         function normalize(series) {
             if (!series.length) return [];
             const base = series[0][1];
@@ -549,24 +655,26 @@
             });
         }
 
-        function buildChart(coinData, xmrData) {
+        // ── Build the chart for the current mode ──────────────────────────────────
+        function buildChart() {
             const ctx = document.getElementById('price-chart').getContext('2d');
             if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
-            const labels = coinData.map(p => {
+            const labels = rawCoin.map(p => {
                 const d = new Date(p[0]);
                 return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             });
 
-            const isVsMode = mode === 'vs' && !isXmr;
             let datasets;
+            let isPctMode = true;
 
-            if (!isVsMode) {
-                // Price mode — data is already in target currency, plot directly.
+            if (mode === 'price') {
+                // Absolute price in the selected currency. Plot directly.
                 // XMR page = orange, all other coins = blue.
+                isPctMode = false;
                 datasets = [{
                     label: coinSymbol + ' Price (' + CURRENCY.code + ')',
-                    data: coinData.map(p => p[1]),
+                    data: rawCoin.map(p => p[1]),
                     borderColor: isXmr ? '#FF6600' : '#4a9eff',
                     backgroundColor: isXmr ? 'rgba(255,102,0,0.08)' : 'rgba(74,158,255,0.08)',
                     borderWidth: 1.5,
@@ -576,14 +684,74 @@
                     fill: true,
                     yAxisID: 'y'
                 }];
-            } else {
-                // vs XMR mode — % change is currency-invariant.
-                const normCoin = normalize(coinData);
-                const xmrAligned = alignSeries(coinData, xmrData);
+
+                // Overlay any active moving averages, computed on the same
+                // selected-currency price array so they sit directly on the line.
+                const prices = rawCoin.map(p => p[1]);
+                for (const ind of INDICATORS) {
+                    if (!activeIndicators.has(ind.id)) continue;
+                    const series = ind.type === 'ema'
+                        ? ema(prices, ind.period)
+                        : sma(prices, ind.period);
+                    datasets.push({
+                        label: ind.label,
+                        data: series,
+                        borderColor: ind.color,
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.25,
+                        pointRadius: 0,
+                        pointHoverRadius: 3,
+                        tension: 0.2,
+                        fill: false,
+                        spanGaps: false,
+                        yAxisID: 'y'
+                    });
+                }
+            } else if (mode === 'usd') {
+                // Currency effect: this coin's % return in the selected currency
+                // vs its % return in USD. The gap between the lines IS the FX
+                // contribution — a weak fiat lifts its line above USD, a strong
+                // fiat pushes it below. Both derived from server-converted prices.
+                const normSel = normalize(rawCoin);
+                const usdAligned = alignSeries(rawCoin, rawCoinUsd || []);
+                const normUsd = normalize(usdAligned);
 
                 datasets = [
                     {
-                        label: coinSymbol + ' % change',
+                        label: coinSymbol + ' in ' + CURRENCY.code + ' (% change)',
+                        data: normSel.map(p => p[1]),
+                        borderColor: '#4a9eff',
+                        backgroundColor: 'rgba(74,158,255,0.06)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.2,
+                        fill: false,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: coinSymbol + ' in USD (% change)',
+                        data: normUsd.map(p => p[1]),
+                        borderColor: '#9aa4b2',
+                        backgroundColor: 'rgba(154,164,178,0.04)',
+                        borderWidth: 1.25,
+                        borderDash: [5, 4],
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.2,
+                        fill: false,
+                        yAxisID: 'y'
+                    }
+                ];
+            } else {
+                // vs XMR: coin vs Monero, both normalized from SELECTED-currency
+                // prices, so the fiat context carries through into both lines.
+                const normCoin = normalize(rawCoin);
+                const xmrAligned = alignSeries(rawCoin, rawXmr || []);
+
+                datasets = [
+                    {
+                        label: coinSymbol + ' in ' + CURRENCY.code + ' (% change)',
                         data: normCoin.map(p => p[1]),
                         borderColor: '#4a9eff',
                         backgroundColor: 'rgba(74,158,255,0.06)',
@@ -595,7 +763,7 @@
                         yAxisID: 'y'
                     },
                     {
-                        label: 'XMR % change',
+                        label: 'XMR in ' + CURRENCY.code + ' (% change)',
                         data: normalize(xmrAligned).map(p => p[1]),
                         borderColor: '#FF6600',
                         backgroundColor: 'rgba(255,102,0,0.06)',
@@ -609,6 +777,10 @@
                 ];
             }
 
+            // Show the legend whenever there's more than one line to disambiguate:
+            // always in the % modes, and in price mode once an MA overlay is on.
+            const showLegend = isPctMode || (mode === 'price' && activeIndicators.size > 0);
+
             chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: { labels, datasets },
@@ -617,16 +789,21 @@
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { display: isVsMode, labels: { color: '#aaa', boxWidth: 12 } },
+                        legend: { display: showLegend, labels: { color: '#aaa', boxWidth: 12 } },
                         tooltip: {
                             callbacks: {
                                 label: ctx => {
                                     const v = ctx.parsed.y;
                                     if (v === null) return null;
-                                    if (isVsMode) {
+                                    if (isPctMode) {
                                         return ctx.dataset.label + ': ' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
                                     }
-                                    return formatPrice(v);
+                                    // Price mode: prefix with the line label when MA
+                                    // overlays are present so prices aren't ambiguous.
+                                    const prefix = ctx.chart.data.datasets.length > 1
+                                        ? ctx.dataset.label + ': '
+                                        : '';
+                                    return prefix + formatPrice(v);
                                 }
                             }
                         }
@@ -639,7 +816,7 @@
                         y: {
                             ticks: {
                                 color: '#888',
-                                callback: v => isVsMode
+                                callback: v => isPctMode
                                     ? (v >= 0 ? '+' : '') + v.toFixed(0) + '%'
                                     : formatAxisPrice(v)
                             },
@@ -648,19 +825,108 @@
                     }
                 }
             });
+
+            updateChartChrome();
+        }
+
+        // ── Title reflects the active mode ────────────────────────────────────────
+        function titleFor(m) {
+            if (m === 'price') return 'Price (' + CURRENCY.code + ') — Last 365 Days';
+            if (m === 'usd')   return coinSymbol + ': ' + CURRENCY.code + ' vs USD — Last 365 Days';
+            return coinSymbol + ' vs XMR (' + CURRENCY.code + ') — Last 365 Days';
+        }
+
+        // Label shown on each one-click mode button.
+        function modeLabel(m) {
+            if (m === 'price') return 'Price (' + CURRENCY.code + ')';
+            if (m === 'usd')   return 'vs USD';
+            return 'vs XMR';
+        }
+
+        // Build one button per available mode. Each switches directly to that
+        // view in a single click — no cycling. Hidden entirely when only one
+        // mode applies (e.g. the XMR page viewed in USD).
+        function initModeSwitch() {
+            const sw = document.getElementById('mode-switch');
+            if (!sw) return;
+            sw.innerHTML = '';
+            if (MODES.length <= 1) { sw.classList.add('d-none'); return; }
+            for (const m of MODES) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'btn btn-outline-secondary btn-sm chart-mode-btn';
+                b.textContent = modeLabel(m);
+                b.dataset.mode = m;
+                b.addEventListener('click', () => setMode(m));
+                sw.appendChild(b);
+            }
+            sw.classList.remove('d-none');
+        }
+
+        function setMode(m) {
+            if (!MODES.includes(m)) return;
+            mode = m;
+            buildChart();
+        }
+
+        function updateChartChrome() {
+            document.getElementById('chart-title').textContent = titleFor(mode);
+
+            // Highlight the active mode button.
+            const sw = document.getElementById('mode-switch');
+            if (sw) {
+                for (const b of sw.querySelectorAll('.chart-mode-btn')) {
+                    b.classList.toggle('active', b.dataset.mode === mode);
+                }
+            }
+
+            // MA chips are only meaningful on the absolute price chart.
+            const maBar = document.getElementById('ma-toolbar');
+            if (maBar) maBar.classList.toggle('d-none', mode !== 'price');
+        }
+
+        // Build the MA toggle chips once from the INDICATORS config. Stays hidden
+        // until updateChartChrome() reveals it in price mode.
+        function initIndicatorToolbar() {
+            const bar = document.getElementById('ma-toolbar');
+            if (!bar) return;
+            bar.innerHTML = '';
+            for (const ind of INDICATORS) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'btn btn-sm ma-chip';
+                b.textContent = ind.label;
+                b.style.setProperty('--ma-color', ind.color);
+                b.dataset.id = ind.id;
+                if (activeIndicators.has(ind.id)) b.classList.add('active');
+                b.addEventListener('click', () => {
+                    if (activeIndicators.has(ind.id)) {
+                        activeIndicators.delete(ind.id);
+                        b.classList.remove('active');
+                    } else {
+                        activeIndicators.add(ind.id);
+                        b.classList.add('active');
+                    }
+                    buildChart();
+                });
+                bar.appendChild(b);
+            }
         }
 
         // ── Fetch chart data ─────────────────────────────────────────────────────
-        // Pass the currency code so the server can join against FiatRateHistory
-        // and return prices already converted to the selected currency. The XMR
-        // overlay (vs-XMR mode) uses the same currency for consistency.
+        // Fetch the coin in the selected currency always. Additionally fetch:
+        //   - XMR in the selected currency (for vs XMR), unless this IS XMR
+        //   - the coin in USD (for vs USD), unless we're already in USD
         async function loadChart() {
             document.getElementById('chart-status').textContent = 'Loading...';
             try {
-                const qs = '?currency=' + encodeURIComponent(CURRENCY.code);
-                const [coinRes, xmrRes] = await Promise.all([
+                const qs    = '?currency=' + encodeURIComponent(CURRENCY.code);
+                const usdQs = '?currency=USD';
+
+                const [coinRes, xmrRes, coinUsdRes] = await Promise.all([
                     fetch('/api/coin/' + coinGeckoId + '/chart' + qs),
-                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart' + qs)
+                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero/chart' + qs),
+                    isUsd ? Promise.resolve(null) : fetch('/api/coin/' + coinGeckoId + '/chart' + usdQs)
                 ]);
 
                 if (!coinRes.ok) throw new Error('fetch failed');
@@ -672,27 +938,23 @@
                     rawXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
                 }
 
+                if (coinUsdRes) {
+                    const usdJson = await coinUsdRes.json();
+                    rawCoinUsd = Array.isArray(usdJson) ? usdJson : (usdJson.prices ?? []);
+                }
+
                 if (!rawCoin.length) {
                     document.getElementById('chart-status').textContent = 'No data available';
                     return;
                 }
 
                 document.getElementById('chart-status').textContent = rawCoin.length + ' days';
-                buildChart(rawCoin, rawXmr ?? []);
-
-                if (!isXmr) {
-                    document.getElementById('toggle-btn').classList.remove('d-none');
-                }
+                initModeSwitch();
+                initIndicatorToolbar();
+                buildChart();
             } catch (e) {
                 document.getElementById('chart-status').textContent = 'Chart unavailable';
             }
-        }
-
-        function toggleMode() {
-            mode = mode === 'price' ? 'vs' : 'price';
-            const btn = document.getElementById('toggle-btn');
-            btn.textContent = mode === 'vs' ? 'Show Price (' + CURRENCY.code + ')' : 'Show vs XMR';
-            buildChart(rawCoin, rawXmr ?? []);
         }
 
         loadChart();
