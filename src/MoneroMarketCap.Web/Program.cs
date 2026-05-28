@@ -112,12 +112,21 @@ using (var scope = app.Services.CreateScope())
 // between currencies (CAD/USD movement over time is visible in the CAD chart,
 // not flattened out by today's-rate-only conversion).
 //
+// Fallback chain when a specific date isn't in FiatRateHistory:
+//   1. Backward walk up to 14 days within FiatRateHistory (weekends/holidays).
+//   2. Today's live rate from IFiatRateService — used when the currency isn't
+//      tracked at all (e.g. RUB, ARS — ECB doesn't publish via frankfurter).
+//      This keeps the chart's absolute values consistent with the rest of the
+//      page (current price, market cap, etc.) instead of collapsing to USD.
+//   3. 1.0 as the ultimate safety net (only hits if both above are unavailable).
+//
 // Cache key includes the currency so we don't cross-contaminate.
 app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     string coinGeckoId,
     string? currency,
     IServiceScopeFactory scopeFactory,
     IFiatRateHistoryService fxHistory,
+    IFiatRateService fxRates,
     IMemoryCache cache) =>
 {
     // Normalize and validate the currency. Anything we don't display → USD.
@@ -153,14 +162,21 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     var fxMap = await fxHistory.GetSeriesAsync(
         currencyCode, cutoff, DateTime.UtcNow.Date);
 
+    // Today's live rate, used as the constant fallback when FiatRateHistory has
+    // nothing for this currency (RUB/ARS) or when a single date plus its 14-day
+    // backward window all happen to be missing. Without this, the chart would
+    // multiply USD prices by 1.0 and label them with the wrong currency symbol.
+    var liveRates = await fxRates.GetRatesAsync();
+    var liveFallbackRate = liveRates.TryGetValue(currencyCode, out var lr) && lr > 0 ? lr : 1m;
+
     var result = history
         .Select(x =>
         {
             // Look up that exact day's FX rate. If the row is missing — which
-            // shouldn't happen because the worker forward-fills weekends on
-            // insert — walk backward up to 14 days to find the nearest preceding
-            // rate. Final fallback is 1.0 (USD-equivalent) so the chart still
-            // draws rather than dropping the point or showing zero.
+            // shouldn't happen for tracked currencies because the worker
+            // forward-fills weekends on insert — walk backward up to 14 days
+            // to find the nearest preceding rate. Final fallback is today's
+            // live rate so the chart stays on the right scale.
             if (!fxMap.TryGetValue(x.Date, out var fx))
             {
                 fx = 0m;
@@ -172,7 +188,7 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
                         break;
                     }
                 }
-                if (fx == 0m) fx = 1m;
+                if (fx == 0m) fx = liveFallbackRate;
             }
 
             return new double[]
