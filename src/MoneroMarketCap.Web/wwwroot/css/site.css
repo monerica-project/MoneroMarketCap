@@ -1006,3 +1006,64 @@ div[style*="border:1px solid green"] {
 .allocation-table td {
     white-space: nowrap;
 }
+
+/* XMR converter */
+    .converter {
+        display: flex;
+        align-items: flex-end;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .conv-field { flex: 1 1 200px; min-width: 0; }
+    .conv-label {
+        display: block;
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #8a93a3;
+        margin-bottom: .3rem;
+    }
+    .conv-input-wrap {
+        display: flex;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, .15);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, .25);
+        overflow: hidden;
+    }
+    .conv-input-wrap:focus-within {
+        border-color: #FF6600;
+        box-shadow: 0 0 6px rgba(255, 102, 0, .3);
+    }
+    .conv-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: 0;
+        color: #fff;
+        font-size: 1.05rem;
+        padding: .55rem .7rem;
+        outline: none;
+    }
+    .conv-input::-webkit-outer-spin-button,
+    .conv-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .conv-input[type=number] { -moz-appearance: textfield; }
+    .conv-unit {
+        padding: 0 .7rem;
+        color: #FF6600;
+        font-weight: 600;
+        font-size: .85rem;
+        white-space: nowrap;
+    }
+    .conv-swap {
+        color: #8a93a3;
+        font-size: 1.4rem;
+        padding-bottom: .5rem;
+        user-select: none;
+    }
+    .conv-rate-note { color: #8a93a3; font-size: .8rem; }
+    .conv-hint { margin-top: .7rem; font-size: .75rem; color: #6c7585; }
+    @media (max-width: 520px) {
+        .converter { flex-direction: column; align-items: stretch; }
+        .conv-swap { align-self: center; padding: .2rem 0; }
+    }

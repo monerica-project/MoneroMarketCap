@@ -22,6 +22,10 @@
     var hasNodeData      = MoneroSupplyDisplay.IsNodeSupplyFresh(coin);
 
     var mcapRatio = xmrMarketCap > 0 ? displayMarketCap / xmrMarketCap : 0;
+
+    bool canConvert = isXmr
+        ? (coin.PriceUsd > 0 && rate > 0)
+        : (xmr != null && xmr.PriceUsd > 0 && coin.PriceUsd > 0);
 }
 
 <meta name="format-detection" content="telephone=no" />
@@ -77,6 +81,67 @@
         opacity: 1;
         box-shadow: 0 0 6px var(--ma-color);
     }
+
+    /* XMR converter */
+    .converter {
+        display: flex;
+        align-items: flex-end;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .conv-field { flex: 1 1 200px; min-width: 0; }
+    .conv-label {
+        display: block;
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #8a93a3;
+        margin-bottom: .3rem;
+    }
+    .conv-input-wrap {
+        display: flex;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, .15);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, .25);
+        overflow: hidden;
+    }
+    .conv-input-wrap:focus-within {
+        border-color: #FF6600;
+        box-shadow: 0 0 6px rgba(255, 102, 0, .3);
+    }
+    .conv-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: 0;
+        color: #fff;
+        font-size: 1.05rem;
+        padding: .55rem .7rem;
+        outline: none;
+    }
+    .conv-input::-webkit-outer-spin-button,
+    .conv-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .conv-input[type=number] { -moz-appearance: textfield; }
+    .conv-unit {
+        padding: 0 .7rem;
+        color: #FF6600;
+        font-weight: 600;
+        font-size: .85rem;
+        white-space: nowrap;
+    }
+    .conv-swap {
+        color: #8a93a3;
+        font-size: 1.4rem;
+        padding-bottom: .5rem;
+        user-select: none;
+    }
+    .conv-rate-note { color: #8a93a3; font-size: .8rem; }
+    .conv-hint { margin-top: .7rem; font-size: .75rem; color: #6c7585; }
+    @@media (max-width: 520px) {
+        .converter { flex-direction: column; align-items: stretch; }
+        .conv-swap { align-self: center; padding: .2rem 0; }
+    }
 </style>
 
 <partial name="_SponsorBanner" />
@@ -128,6 +193,50 @@
            class="btn btn-xmr-trade">
             Trade Monero (XMR)
         </a>
+    </div>
+}
+
+<!-- Converter -->
+@if (canConvert)
+{
+    <div class="card mb-4 converter-card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>💱 Convert XMR ⇄ @(isXmr ? cur.Code : coin.Symbol)</span>
+            <span class="conv-rate-note mono">
+                @if (isXmr)
+                {
+                    <text>1 XMR = @MoneyFormatter.FormatPrice(coin.PriceUsd, cur, rate)</text>
+                }
+                else
+                {
+                    <text>1 XMR = @coinsPerXmr.ToString(coinsPerXmr >= 1 ? "N4" : "N8", usd) @coin.Symbol</text>
+                }
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="converter">
+                <div class="conv-field">
+                    <label class="conv-label" for="conv-xmr">Monero</label>
+                    <div class="conv-input-wrap">
+                        <input id="conv-xmr" class="conv-input mono" type="number" inputmode="decimal"
+                               min="0" step="any" value="1" autocomplete="off" />
+                        <span class="conv-unit">XMR</span>
+                    </div>
+                </div>
+                <div class="conv-swap" aria-hidden="true">⇅</div>
+                <div class="conv-field">
+                    <label class="conv-label" for="conv-other">@(isXmr ? cur.Code : coin.Name)</label>
+                    <div class="conv-input-wrap">
+                        <input id="conv-other" class="conv-input mono" type="number" inputmode="decimal"
+                               min="0" step="any" autocomplete="off" />
+                        <span class="conv-unit">@(isXmr ? cur.Code : coin.Symbol)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="conv-hint">
+                Type in either field to convert both ways. Rates reflect the current spot price and refresh with the page.
+            </div>
+        </div>
     </div>
 }
 
@@ -958,5 +1067,49 @@
         }
 
         loadChart();
+
+        // ─── XMR ⇄ converter ──────────────────────────────────────────────────────
+        // perXmr = how many units of the "other" side equal 1 XMR.
+        //   XMR page  → other side is the selected fiat currency (coin.PriceUsd × rate)
+        //   alt coins → other side is this coin                  (coinsPerXmr)
+        // Server-rendered at the current spot price; refreshes with the page.
+        (function () {
+            const xmrInput   = document.getElementById('conv-xmr');
+            const otherInput = document.getElementById('conv-other');
+            if (!xmrInput || !otherInput) return;
+
+            const perXmr    = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(isXmr ? (coin.PriceUsd * rate) : coinsPerXmr));
+            const otherFiat = isXmr;
+
+            const strip = s => s.indexOf('.') === -1 ? s : s.replace(/0+$/, '').replace(/\.$/, '');
+
+            function fmtCrypto(v) {
+                if (!isFinite(v) || v < 0) return '';
+                if (v === 0) return '0';
+                const a = Math.abs(v);
+                const dec = a >= 1000 ? 4 : a >= 1 ? 6 : a >= 0.0001 ? 8 : 10;
+                return strip(v.toFixed(dec));
+            }
+            function fmtFiat(v) {
+                if (!isFinite(v) || v < 0) return '';
+                return v.toFixed(Math.max(CURRENCY.decimals, 2));
+            }
+            const fmtOther = otherFiat ? fmtFiat : fmtCrypto;
+
+            function fromXmr() {
+                const x = parseFloat(xmrInput.value);
+                otherInput.value = isNaN(x) ? '' : fmtOther(x * perXmr);
+            }
+            function fromOther() {
+                const o = parseFloat(otherInput.value);
+                xmrInput.value = (isNaN(o) || perXmr <= 0) ? '' : fmtCrypto(o / perXmr);
+            }
+
+            xmrInput.addEventListener('input', fromXmr);
+            otherInput.addEventListener('input', fromOther);
+
+            xmrInput.value = '1';   // seed with 1 XMR
+            fromXmr();
+        })();
     </script>
 }
