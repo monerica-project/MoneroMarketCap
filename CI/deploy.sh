@@ -76,7 +76,18 @@ if [[ -n "${SSH_PASSWORD:-}" ]]; then
     SSH_PREFIX=(sshpass -p "$SSH_PASSWORD")
 fi
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=30)
+# One multiplexed connection for the whole deploy: the master authenticates
+# once, every later ssh/scp reuses the socket. Avoids tripping ufw limit /
+# fail2ban / MaxStartups, and is faster.
+SSH_CTL="${TMPDIR:-/tmp}/deploy-mux-%r@%h:%p"
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=30 \
+          -o ControlMaster=auto -o ControlPath="$SSH_CTL" -o ControlPersist=120)
+
+# Close the master socket on exit so it doesn't linger between runs.
+cleanup_ssh_master() {
+    "${SSH_PREFIX[@]}" ssh "${SSH_OPTS[@]}" -O exit "$SSH_USER@$SSH_HOST" 2>/dev/null || true
+}
+trap cleanup_ssh_master EXIT
 
 ssh_run() {
     "${SSH_PREFIX[@]}" ssh "${SSH_OPTS[@]}" "$SSH_USER@$SSH_HOST" "$1"
