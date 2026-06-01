@@ -16,6 +16,7 @@
             <button class="btn btn-outline-secondary btn-sm">↻ Refresh All Prices</button>
         </form>
         <a asp-page="/Admin/AddCoin" class="btn btn-primary btn-sm">+ Add Coin</a>
+        <a asp-page="/Admin/TradeLinks" class="btn btn-outline-secondary btn-sm">Trade Links</a>
         <a asp-page="/Admin/Users" class="btn btn-outline-secondary btn-sm">Manage Users</a>
     </div>
 </div>
@@ -36,6 +37,7 @@ else
                 <th class="text-end">Market Cap</th>
                 <th class="text-end">24h %</th>
                 <th class="text-end">Updated</th>
+                <th>Trade</th>
                 <th>Status</th>
                 <th></th>
             </tr>
@@ -67,6 +69,17 @@ else
                     </td>
                     <td class="text-end" style="font-size:0.8rem;color:var(--xmr-text-muted)">
                         @coin.UpdatedAt.ToString("g")
+                    </td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(coin.TradeUrl))
+                        {
+                            <a href="@coin.TradeUrl" target="_blank" rel="nofollow noopener"
+                               class="text-success" title="@coin.TradeUrl">✓ link</a>
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
                     </td>
                     <td>
                         <form method="post" asp-page-handler="ToggleActive">

@@ -37,6 +37,10 @@ public class Coin : AuditableEntity
 
     public bool IsActive { get; set; } = true;
 
+    // Admin-managed affiliate link for trading this coin for Monero.
+    // When set, a "Trade ... for Monero" button appears on the coin's detail page.
+    public string? TradeUrl { get; set; }
+
     public decimal PriceChangePercent1h { get; set; }
     public decimal PriceChangePercent7d { get; set; }
     public decimal PriceChangePercent30d { get; set; }

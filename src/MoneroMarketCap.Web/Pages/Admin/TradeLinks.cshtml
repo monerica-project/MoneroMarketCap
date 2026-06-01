@@ -1,0 +1,146 @@
+@page
+@model MoneroMarketCap.Pages.Admin.TradeLinksModel
+@{
+    ViewData["Title"] = "Admin — Trade Links";
+
+    // Shared row markup for both tables (configured + results).
+    // Must be async Task (not void) because the rows contain tag helpers
+    // (asp-page-handler forms), which Razor compiles into awaited calls.
+    async Task RenderRow(MoneroMarketCap.Data.Models.Coin coin)
+    {
+        var hasLink = !string.IsNullOrEmpty(coin.TradeUrl);
+        <tr class="@(!coin.IsActive ? "opacity-50" : "")">
+            <td class="rank-cell">@(coin.MarketCapRank > 0 ? "#" + coin.MarketCapRank : "—")</td>
+            <td>
+                <div class="coin-name-cell">
+                    @if (!string.IsNullOrEmpty(coin.ImageUrl))
+                    {
+                        <img src="@coin.ImageUrl" width="22" height="22" style="border-radius:50%;" />
+                    }
+                    <span class="coin-symbol">@coin.Symbol</span>
+                    <span class="coin-name">@coin.Name</span>
+                    @if (!coin.IsActive)
+                    {
+                        <span class="badge bg-secondary" style="font-size:.65rem">inactive</span>
+                    }
+                </div>
+            </td>
+            <td>
+                <form method="post" asp-page-handler="SetLink" class="d-flex gap-2 align-items-center mb-0">
+                    <input type="hidden" name="id" value="@coin.Id" />
+                    <input type="hidden" name="q" value="@Model.Q" />
+                    <input type="url" name="tradeUrl" value="@coin.TradeUrl"
+                           class="form-control form-control-sm" style="min-width:300px"
+                           placeholder="https://exchange.example.com/?ref=yourcode" autocomplete="off" />
+                    <button class="btn btn-primary btn-sm" type="submit">Save</button>
+                </form>
+            </td>
+            <td class="text-end" style="white-space:nowrap">
+                @if (hasLink)
+                {
+                    <a href="@coin.TradeUrl" target="_blank" rel="nofollow noopener"
+                       class="btn btn-outline-secondary btn-sm" title="Open link in new tab">Open ↗</a>
+                    <form method="post" asp-page-handler="ClearLink" class="d-inline mb-0">
+                        <input type="hidden" name="id" value="@coin.Id" />
+                        <input type="hidden" name="q" value="@Model.Q" />
+                        <button class="btn btn-outline-danger btn-sm" type="submit">Clear</button>
+                    </form>
+                }
+                else
+                {
+                    <span class="text-muted" style="font-size:.8rem">no link</span>
+                }
+            </td>
+        </tr>
+    }
+}
+
+@if (TempData["Status"] != null)
+{
+    <div class="alert alert-success">@TempData["Status"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Trade Links</h2>
+    <a asp-page="/Admin/Index" class="btn btn-outline-secondary btn-sm">← Back to Coins</a>
+</div>
+
+<p class="text-muted">
+    Set a per-coin affiliate trade link. When a link is present, a
+    <strong>“Trade … for Monero”</strong> button shows on that coin's detail page.
+    Leave the field empty and click Save (or use Clear) to remove a link.
+</p>
+
+<!-- Search -->
+<form method="get" class="mb-4">
+    <div class="input-group" style="max-width:520px">
+        <input type="text" name="q" value="@Model.Q" class="form-control"
+               placeholder="Find a coin by symbol, name, or CoinGecko ID…" autocomplete="off" />
+        <button class="btn btn-primary" type="submit">Search</button>
+        @if (!string.IsNullOrWhiteSpace(Model.Q))
+        {
+            <a asp-page="/Admin/TradeLinks" class="btn btn-outline-secondary">Reset</a>
+        }
+    </div>
+</form>
+
+@if (Model.Configured.Any())
+{
+    <h5 class="mt-4 mb-2">Coins with a trade link (@Model.Configured.Count)</h5>
+    <table class="table market-table align-middle">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Coin</th>
+                <th>Affiliate trade link</th>
+                <th class="text-end"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var coin in Model.Configured)
+            {
+                await RenderRow(coin);
+            }
+        </tbody>
+    </table>
+}
+
+<h5 class="mt-4 mb-2">
+    @(string.IsNullOrWhiteSpace(Model.Q) ? "Top coins" : $"Search results for \"{Model.Q}\"")
+</h5>
+
+@if (!Model.Results.Any())
+{
+    <p class="text-muted">
+        @(string.IsNullOrWhiteSpace(Model.Q)
+            ? "No coins found."
+            : "No matches. Try a different symbol, name, or CoinGecko ID.")
+    </p>
+}
+else
+{
+    <table class="table market-table align-middle">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Coin</th>
+                <th>Affiliate trade link</th>
+                <th class="text-end"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var coin in Model.Results)
+            {
+                await RenderRow(coin);
+            }
+        </tbody>
+    </table>
+    @if (Model.Results.Count >= 50)
+    {
+        <p class="text-muted" style="font-size:.85rem">Showing first 50 — narrow your search to find a specific coin.</p>
+    }
+}

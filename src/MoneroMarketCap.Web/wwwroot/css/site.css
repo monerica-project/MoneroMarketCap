@@ -1064,6 +1064,7 @@ div[style*="border:1px solid green"] {
     .conv-rate-note { color: #8a93a3; font-size: .8rem; }
     .conv-hint { margin-top: .7rem; font-size: .75rem; color: #6c7585; }
     @media (max-width: 520px) {
-        .converter { flex-direction: column; align-items: stretch; }
+        .converter { flex-direction: column; align-items: stretch; gap: .75rem; }
+        .conv-field { flex: 0 0 auto; }
         .conv-swap { align-self: center; padding: .2rem 0; }
     }
