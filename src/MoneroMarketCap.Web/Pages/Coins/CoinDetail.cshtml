@@ -705,17 +705,26 @@
         // ── Pure series helpers ───────────────────────────────────────────────────
         function normalize(series) {
             if (!series.length) return [];
-            const base = series[0][1];
-            if (!base) return series.map(p => [p[0], 0]);
-            return series.map(p => [p[0], ((p[1] / base) - 1) * 100]);
+            // Base off the first finite, non-zero value (not blindly series[0]).
+            let base = null;
+            for (const p of series) {
+                if (p[1] != null && isFinite(p[1]) && p[1] !== 0) { base = p[1]; break; }
+            }
+            if (base == null) return series.map(p => [p[0], null]);
+            // Preserve null as null → Chart.js draws a gap instead of a fake
+            // -100% cliff (which is what `null / base` used to collapse to).
+            return series.map(p => [
+                p[0],
+                (p[1] == null || !isFinite(p[1])) ? null : ((p[1] / base) - 1) * 100
+            ]);
         }
 
         function alignSeries(a, b) {
-            const bMap = new Map(b.map(p => [new Date(p[0]).toDateString(), p[1]]));
-            return a.map(p => {
-                const key = new Date(p[0]).toDateString();
-                return [p[0], bMap.get(key) ?? null];
-            });
+            // UTC day key (YYYY-MM-DD) so a near-midnight stamp can't land the
+            // two series on different local days and break alignment.
+            const dayKey = ts => new Date(ts).toISOString().slice(0, 10);
+            const bMap = new Map(b.map(p => [dayKey(p[0]), p[1]]));
+            return a.map(p => [p[0], bMap.get(dayKey(p[0])) ?? null]);
         }
 
         // ── Build the chart for the current mode ──────────────────────────────────
