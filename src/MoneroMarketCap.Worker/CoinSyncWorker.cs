@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿﻿using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Services.Interfaces;
@@ -102,9 +102,57 @@ public class CoinSyncWorker : BackgroundService
 
         await db.SaveChangesAsync();
 
+        // 5. Record an intraday price snapshot for each active coin so the 24h
+        //    chart can be served from the DB (the web box can't reach CoinGecko
+        //    live). We already have fresh prices in hand from this cycle, so this
+        //    is just a second, lightweight write — no extra upstream calls.
+        await RecordIntradaySnapshotsAsync(db);
+
         _logger.LogInformation(
             "Reconcile complete. Top: {Top}, Added: {Added}, Updated: {Updated}, Reactivated: {Reactivated}, Deactivated: {Deactivated}",
             topCount, added, updated, reactivated, deactivated);
+    }
+
+    // Appends one "5m" snapshot row per active coin at the current price, then
+    // prunes snapshots older than the retention window so the table stays small.
+    // Cadence is whatever CoinGecko:RefreshIntervalMinutes is (default 5 min),
+    // which is plenty of resolution for a 24-hour line.
+    private async Task RecordIntradaySnapshotsAsync(AppDbContext db)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var active = await db.Coins.Where(c => c.IsActive && c.PriceUsd > 0).ToListAsync();
+
+            foreach (var c in active)
+            {
+                db.CoinPriceHistories.Add(new CoinPriceHistory
+                {
+                    CoinId = c.Id,
+                    PriceUsd = c.PriceUsd,
+                    MarketCapUsd = c.MarketCapUsd,
+                    CirculatingSupply = c.CirculatingSupply,
+                    Interval = "5m",
+                    RecordedAt = now,
+                });
+            }
+
+            // Keep ~48h of intraday history (double the 24h window, for headroom).
+            var cutoff = now.AddHours(-48);
+            var stale = await db.CoinPriceHistories
+                .Where(h => h.Interval == "5m" && h.RecordedAt < cutoff)
+                .ToListAsync();
+            if (stale.Count > 0)
+                db.CoinPriceHistories.RemoveRange(stale);
+
+            await db.SaveChangesAsync();
+            _logger.LogInformation("Intraday snapshot: wrote {Count}, pruned {Pruned}", active.Count, stale.Count);
+        }
+        catch (Exception ex)
+        {
+            // Snapshotting is best-effort; never let it break the main cycle.
+            _logger.LogError(ex, "Intraday snapshot failed");
+        }
     }
 
     private static Coin MapToCoin(CoinGeckoMarketData m) => new()

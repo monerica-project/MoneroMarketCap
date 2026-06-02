@@ -52,7 +52,14 @@ public class CoinGeckoService : ICoinGeckoService
     {
         try
         {
-            var url = $"coins/{coinGeckoId}/market_chart?vs_currency=usd&days={days}&interval=daily";
+            // For multi-day ranges we force daily granularity (one point/day).
+            // For days<=1 we OMIT the interval param so CoinGecko returns its
+            // automatic fine granularity (~5-minute points) — a real intraday
+            // series for the 24h chart. Forcing interval=daily here would yield
+            // a single point and no usable line.
+            var url = days <= 1
+                ? $"coins/{coinGeckoId}/market_chart?vs_currency=usd&days=1"
+                : $"coins/{coinGeckoId}/market_chart?vs_currency=usd&days={days}&interval=daily";
             _logger.LogInformation("Fetching chart: {Url}", _http.BaseAddress + url);
 
             var res = await _http.GetAsync(url);

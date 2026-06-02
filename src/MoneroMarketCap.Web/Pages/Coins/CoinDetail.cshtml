@@ -262,6 +262,7 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <span id="chart-title">Price (@cur.Code) — Last 365 Days</span>
         <div class="d-flex align-items-center gap-2">
+            <div id="range-switch" class="btn-group btn-group-sm chart-mode-switch d-none" role="group"></div>
             <div id="mode-switch" class="btn-group btn-group-sm chart-mode-switch d-none" role="group"></div>
             <span id="chart-status" class="chart-status">Loading...</span>
         </div>
@@ -604,9 +605,45 @@
         const isUsd = CURRENCY.code === 'USD';
 
         let chartInstance = null;
-        let rawCoin    = null;   // [[ts, priceInSelectedCurrency], ...]  (from server)
-        let rawXmr     = null;   // XMR in selected currency
-        let rawCoinUsd = null;   // this coin in USD (baseline for "vs USD" mode)
+        let rawCoin    = null;   // [[ts, priceInSelectedCurrency], ...]  active (range-sliced) view
+        let rawXmr     = null;   // XMR in selected currency, range-sliced
+        let rawCoinUsd = null;   // this coin in USD, range-sliced (baseline for "vs USD")
+
+        // Full series as fetched from the server (~365 daily points). The range
+        // selector slices these into the raw* views above without re-fetching.
+        let fullCoin    = null;
+        let fullXmr     = null;
+        let fullCoinUsd = null;
+
+        // ─── Time-range selector ──────────────────────────────────────────────────
+        // Day-count ranges are tail slices of the daily series we already fetched.
+        // The 24h range is special: daily data can't draw it, so it lazy-loads an
+        // intraday (~5-min) series from /chart24h and is price-only (relative
+        // comparisons over a single day are noise — the vs toggles are hidden).
+        const RANGES = [
+            { id: '365', label: '1Y',  days: 365 },
+            { id: '30',  label: '30D', days: 30  },
+            { id: '7',   label: '7D',  days: 7   },
+            { id: '1',   label: '24H', days: 1, intraday: true }
+        ];
+        let range = RANGES[0];   // default 1Y (full)
+
+        let intraday    = null;  // cached [[tsMs, priceInCurrency], ...] for 24h
+
+        // Keep the last `days` points of a series (null-safe; series may be null).
+        function tail(series, days) {
+            if (!series) return series;
+            return days >= series.length ? series : series.slice(series.length - days);
+        }
+
+        // Slice every full series to the active range, then rebuild the chart.
+        // The 24h range swaps in the intraday series and is handled in setRange.
+        function applyRange() {
+            rawCoin    = tail(fullCoin, range.days);
+            rawXmr     = tail(fullXmr, range.days);
+            rawCoinUsd = tail(fullCoinUsd, range.days);
+            buildChart();
+        }
 
         // Available modes depend on context:
         //   price → coin in selected currency (absolute)
@@ -732,9 +769,16 @@
             const ctx = document.getElementById('price-chart').getContext('2d');
             if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
+            // 24h is intraday and price-only; force the mode regardless of the
+            // last-selected comparison view.
+            const intradayView = !!range.intraday;
+            if (intradayView) mode = 'price';
+
             const labels = rawCoin.map(p => {
                 const d = new Date(p[0]);
-                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                return intradayView
+                    ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             });
 
             let datasets;
@@ -901,11 +945,21 @@
             updateChartChrome();
         }
 
-        // ── Title reflects the active mode ────────────────────────────────────────
+        // ── Title reflects the active mode + range ────────────────────────────────
+        // Use the actual number of points shown (range may exceed available history).
+        function rangeSuffix() {
+            if (range.intraday) return 'Last 24 hours';
+            const n = (rawCoin && rawCoin.length) ? rawCoin.length : range.days;
+            if (n <= 1)  return 'Last day';
+            if (n <= 7)  return 'Last 7 days';
+            if (n <= 31) return 'Last ' + n + ' days';
+            return 'Last ' + n + ' days';
+        }
         function titleFor(m) {
-            if (m === 'price') return 'Price (' + CURRENCY.code + ') — Last 365 Days';
-            if (m === 'usd')   return coinSymbol + ': ' + CURRENCY.code + ' vs USD — Last 365 Days';
-            return coinSymbol + ' vs XMR (' + CURRENCY.code + ') — Last 365 Days';
+            const suffix = rangeSuffix();
+            if (m === 'price') return 'Price (' + CURRENCY.code + ') — ' + suffix;
+            if (m === 'usd')   return coinSymbol + ': ' + CURRENCY.code + ' vs USD — ' + suffix;
+            return coinSymbol + ' vs XMR (' + CURRENCY.code + ') — ' + suffix;
         }
 
         // Label shown on each one-click mode button.
@@ -941,20 +995,117 @@
             buildChart();
         }
 
+        // Build one button per range. Only offers ranges we actually have data for
+        // (hides 90D/1Y on a coin with only a few weeks of history). Hidden entirely
+        // if there's effectively one range available.
+        function initRangeSwitch() {
+            const sw = document.getElementById('range-switch');
+            if (!sw) return;
+            sw.innerHTML = '';
+            const have = fullCoin ? fullCoin.length : 0;
+            // Always offer the four core ranges. 1Y simply shows whatever full
+            // history exists (even if slightly under 365 days), 24H is a live
+            // intraday fetch, and 7D always applies. Only 30D is conditional —
+            // drop it on a coin with barely a week of history so it isn't a
+            // duplicate of 7D.
+            const avail = RANGES.filter(r =>
+                r.id === '365' || r.id === '7' || r.intraday || r.days <= have);
+            if (avail.length <= 1) { sw.classList.add('d-none'); return; }
+            for (const r of avail) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'btn btn-outline-secondary btn-sm chart-mode-btn';
+                b.textContent = r.label;
+                b.dataset.range = r.id;
+                b.addEventListener('click', () => setRange(r.id));
+                sw.appendChild(b);
+            }
+            sw.classList.remove('d-none');
+        }
+
+        async function setRange(id) {
+            const r = RANGES.find(x => x.id === id);
+            if (!r) return;
+            range = r;
+
+            if (r.intraday) {
+                // (Re)fetch the intraday series if we don't already have it.
+                // Retries on each click; never spins forever (12s abort); and
+                // surfaces the real HTTP status so failures are diagnosable.
+                if (!intraday || !intraday.length) {
+                    document.getElementById('chart-status').textContent = 'Loading 24h…';
+                    const ctl = new AbortController();
+                    const timer = setTimeout(() => ctl.abort(), 12000);
+                    try {
+                        const res = await fetch('/api/coin/' + coinGeckoId
+                            + '/chart24h?currency=' + encodeURIComponent(CURRENCY.code),
+                            { signal: ctl.signal });
+                        clearTimeout(timer);
+                        if (res.status === 204) {
+                            document.getElementById('chart-status').textContent =
+                                'Collecting 24h data — check back soon';
+                            return;
+                        }
+                        if (!res.ok) {
+                            document.getElementById('chart-status').textContent =
+                                '24h: HTTP ' + res.status + ' — tap 24H to retry';
+                            return;
+                        }
+                        const j = await res.json();
+                        intraday = Array.isArray(j) ? j : (j.prices ?? []);
+                    } catch (e) {
+                        clearTimeout(timer);
+                        document.getElementById('chart-status').textContent =
+                            (e.name === 'AbortError')
+                                ? '24h timed out — tap 24H to retry'
+                                : '24h unavailable — tap 24H to retry';
+                        return;
+                    }
+                }
+                if (!intraday || !intraday.length) {
+                    document.getElementById('chart-status').textContent =
+                        '24h unavailable — tap 24H to retry';
+                    return;
+                }
+                rawCoin = intraday;
+                rawXmr = null;
+                rawCoinUsd = null;
+                document.getElementById('chart-status').textContent = intraday.length + ' points';
+                buildChart();   // intradayView inside forces price mode
+                return;
+            }
+
+            // Day-range: restore the status line and slice the daily series.
+            document.getElementById('chart-status').textContent =
+                (fullCoin ? fullCoin.length : '') + ' days';
+            applyRange();
+        }
+
         function updateChartChrome() {
             document.getElementById('chart-title').textContent = titleFor(mode);
+            const intradayView = !!range.intraday;
 
-            // Highlight the active mode button.
+            // The mode switch (Price / vs USD / vs XMR) is meaningless intraday —
+            // hide it for 24h, show it otherwise.
             const sw = document.getElementById('mode-switch');
             if (sw) {
+                sw.classList.toggle('d-none', intradayView || MODES.length <= 1);
                 for (const b of sw.querySelectorAll('.chart-mode-btn')) {
                     b.classList.toggle('active', b.dataset.mode === mode);
                 }
             }
 
-            // MA chips are only meaningful on the absolute price chart.
+            // Highlight the active range button.
+            const rs = document.getElementById('range-switch');
+            if (rs) {
+                for (const b of rs.querySelectorAll('.chart-mode-btn')) {
+                    b.classList.toggle('active', b.dataset.range === range.id);
+                }
+            }
+
+            // MA chips: only on the absolute daily price chart (not intraday).
             const maBar = document.getElementById('ma-toolbar');
-            if (maBar) maBar.classList.toggle('d-none', mode !== 'price');
+            if (maBar) maBar.classList.toggle('d-none', intradayView || mode !== 'price');
         }
 
         // Build the MA toggle chips once from the INDICATORS config. Stays hidden
@@ -1003,27 +1154,28 @@
 
                 if (!coinRes.ok) throw new Error('fetch failed');
                 const coinJson = await coinRes.json();
-                rawCoin = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
+                fullCoin = Array.isArray(coinJson) ? coinJson : (coinJson.prices ?? []);
 
                 if (xmrRes) {
                     const xmrJson = await xmrRes.json();
-                    rawXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
+                    fullXmr = Array.isArray(xmrJson) ? xmrJson : (xmrJson.prices ?? []);
                 }
 
                 if (coinUsdRes) {
                     const usdJson = await coinUsdRes.json();
-                    rawCoinUsd = Array.isArray(usdJson) ? usdJson : (usdJson.prices ?? []);
+                    fullCoinUsd = Array.isArray(usdJson) ? usdJson : (usdJson.prices ?? []);
                 }
 
-                if (!rawCoin.length) {
+                if (!fullCoin.length) {
                     document.getElementById('chart-status').textContent = 'No data available';
                     return;
                 }
 
-                document.getElementById('chart-status').textContent = rawCoin.length + ' days';
+                document.getElementById('chart-status').textContent = fullCoin.length + ' days';
                 initModeSwitch();
+                initRangeSwitch();
                 initIndicatorToolbar();
-                buildChart();
+                applyRange();   // slices full series to the active range, then builds
             } catch (e) {
                 document.getElementById('chart-status').textContent = 'Chart unavailable';
             }

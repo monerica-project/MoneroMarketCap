@@ -204,6 +204,63 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     return Results.Content(json, "application/json");
 });
 
+// ── 24h intraday chart (/api/coin/{id}/chart24h) ─────────────────────────────
+// Served entirely from the DB: the worker writes a "5m" price snapshot per coin
+// each refresh cycle, so we just read the last 24h of those rows. No live
+// CoinGecko call from the web box (that path is unreliable / can't reach the
+// API). Prices are USD; apply today's live FX uniformly — within a day the rate
+// barely moves, so per-point FX history isn't worth it. Cached 2 min.
+app.MapGet("/api/coin/{coinGeckoId}/chart24h", async (
+    string coinGeckoId,
+    string? currency,
+    IServiceScopeFactory scopeFactory,
+    IFiatRateService fxRates,
+    IMemoryCache cache) =>
+{
+    var currencyCode = (currency ?? "USD").Trim().ToUpperInvariant();
+    if (!CurrencyCatalog.IsSupported(currencyCode))
+        currencyCode = "USD";
+
+    var cacheKey = $"chart24h_{coinGeckoId}_{currencyCode}";
+    if (cache.TryGetValue(cacheKey, out string? cached))
+        return Results.Content(cached!, "application/json");
+
+    using var scope = scopeFactory.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    var cutoff = DateTime.UtcNow.AddHours(-24);
+
+    var snapshots = await db.CoinPriceHistories
+        .Where(h => h.Coin.CoinGeckoId == coinGeckoId
+                 && h.Interval == "5m"
+                 && h.RecordedAt >= cutoff)
+        .OrderBy(h => h.RecordedAt)
+        .Select(h => new { h.RecordedAt, h.PriceUsd })
+        .ToListAsync();
+
+    // No intraday history yet (worker hasn't run since deploy, or coin is new).
+    // 204 lets the front end say "collecting…" rather than show a broken chart.
+    if (snapshots.Count == 0)
+        return Results.StatusCode(204);
+
+    var liveRates = await fxRates.GetRatesAsync();
+    var fx = currencyCode == "USD"
+        ? 1m
+        : (liveRates.TryGetValue(currencyCode, out var lr) && lr > 0 ? lr : 1m);
+
+    var result = snapshots
+        .Select(s => new double[]
+        {
+            new DateTimeOffset(s.RecordedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            (double)(s.PriceUsd * fx)
+        })
+        .ToList();
+
+    var json = System.Text.Json.JsonSerializer.Serialize(result);
+    cache.Set(cacheKey, json, TimeSpan.FromMinutes(2));
+    return Results.Content(json, "application/json");
+});
+
 // ── Sponsor proxy (/api/sponsors) ────────────────────────────────────────────
 var _sponsorCache = string.Empty;
 var _sponsorCachedAt = DateTime.MinValue;
