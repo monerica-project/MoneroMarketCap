@@ -195,6 +195,39 @@ public class CoinPriceUpdateService : BackgroundService
 
         await db.SaveChangesAsync();
 
+        // ── Intraday (5m) snapshots for the 24h chart ────────────────────────────
+        // We already have fresh prices for every active coin in hand this cycle,
+        // so record one "5m" history row each (no extra CoinGecko calls), then
+        // prune anything older than 48h so the table stays bounded. The 24h chart
+        // endpoint reads these rows straight from the DB.
+        var snapNow = DateTime.UtcNow;
+        foreach (var coin in activeCoins)
+        {
+            if (coin.PriceUsd <= 0) continue;
+            db.CoinPriceHistories.Add(new CoinPriceHistory
+            {
+                CoinId = coin.Id,
+                PriceUsd = coin.PriceUsd,
+                MarketCapUsd = coin.MarketCapUsd,
+                CirculatingSupply = coin.CirculatingSupply,
+                Interval = "5m",
+                RecordedAt = snapNow
+            });
+        }
+
+        var snapCutoff = snapNow.AddHours(-48);
+        var staleSnaps = await db.CoinPriceHistories
+            .Where(h => h.Interval == "5m" && h.RecordedAt < snapCutoff)
+            .ToListAsync();
+        if (staleSnaps.Count > 0)
+            db.CoinPriceHistories.RemoveRange(staleSnaps);
+
+        await db.SaveChangesAsync();
+
+        this.logger.LogInformation(
+            "Intraday snapshot: wrote {Wrote} 5m rows, pruned {Pruned}",
+            activeCoins.Count, staleSnaps.Count);
+
         this.logger.LogInformation(
             "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, reactivated: {Reactivated}, deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
             this.topCount, added, updated, reactivated, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);

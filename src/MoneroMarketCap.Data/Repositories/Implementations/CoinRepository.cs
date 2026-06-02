@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿﻿using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data.Models;
 
 namespace MoneroMarketCap.Data.Repositories;
@@ -31,7 +31,7 @@ public class CoinRepository : ICoinRepository
         var coin = await _db.Coins.FindAsync(coinId);
         if (coin == null) return;
 
-        _db.CoinPriceHistory.Add(new CoinPriceHistory
+        _db.CoinPriceHistories.Add(new CoinPriceHistory
         {
             CoinId = coinId,
             PriceUsd = coin.PriceUsd,
@@ -44,7 +44,7 @@ public class CoinRepository : ICoinRepository
     }
 
     public async Task<IReadOnlyList<CoinPriceHistory>> GetPriceHistoryAsync(int coinId, string interval, DateTime from, DateTime to) =>
-        await _db.CoinPriceHistory
+        await _db.CoinPriceHistories
             .Where(h => h.CoinId == coinId && h.Interval == interval && h.RecordedAt >= from && h.RecordedAt <= to)
             .OrderBy(h => h.RecordedAt)
             .ToListAsync();

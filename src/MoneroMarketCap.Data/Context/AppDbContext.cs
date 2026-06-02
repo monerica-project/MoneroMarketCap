@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿﻿using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data.Models;
 
 namespace MoneroMarketCap.Data;
@@ -11,7 +11,6 @@ public class AppDbContext : DbContext
     public DbSet<Role> Roles { get; set; }
     public DbSet<UserRole> UserRoles { get; set; }
     public DbSet<Coin> Coins { get; set; }
-    public DbSet<CoinPriceHistory> CoinPriceHistory { get; set; }
     public DbSet<Portfolio> Portfolios { get; set; }
     public DbSet<PortfolioCoin> PortfolioCoins { get; set; }
     public DbSet<CoinTransaction> CoinTransactions { get; set; }
