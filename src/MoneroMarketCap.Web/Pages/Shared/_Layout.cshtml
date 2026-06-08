@@ -85,6 +85,8 @@
     <div class="container">
         &copy; @DateTime.UtcNow.Year - MoneroMarketCap
         &nbsp;|&nbsp;
+        <a asp-page="/About" style="color:var(--xmr-text-muted);font-size:0.85rem">About</a>
+        &nbsp;|&nbsp;
         <a asp-page="/Contact" style="color:var(--xmr-text-muted);font-size:0.85rem">Contact</a>
         &nbsp;|&nbsp;
         <a asp-page="/Sponsorship" style="color:var(--xmr-text-muted);font-size:0.85rem">Sponsorship</a>
@@ -100,6 +102,18 @@
         }
         <text>&nbsp;|&nbsp;</text>
         <a style="color:var(--xmr-text-muted);font-size:0.85rem" href="https://github.com/monerica-project/MoneroMarketCap" target="_blank">Code</a>
+        @{
+            var xmrDonationAddress = Configuration["Donations:XmrAddress"];
+        }
+        @if (!string.IsNullOrWhiteSpace(xmrDonationAddress))
+        {
+            <div style="margin-top:0.4rem;font-size:0.8rem">
+                <span style="color:var(--xmr-text-muted)">&#x2764;&#xFE0F; Donate XMR:</span>
+                <a href="monero:@xmrDonationAddress"
+                   title="Open in your Monero wallet"
+                   style="color:var(--xmr-orange);word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">@xmrDonationAddress</a>
+            </div>
+        }
         <div style="margin-top:0.4rem;font-size:0.75rem;color:var(--xmr-text-muted)">
             Some links on this site may be affiliate links. We may earn a commission, at no extra cost to you, if you trade through them.
         </div>

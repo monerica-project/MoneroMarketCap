@@ -37,3 +37,7 @@ $COINGECKO_API_KEY         = ""
 $COINGECKO_REFRESH_MINUTES = 8
 $ADMIN_USERNAME            = "admin"
 $ADMIN_PASSWORD            = "changeme_admin_password"
+
+# -- Donations ------------------------------------------------------------------
+# Your XMR donation address shown in the footer. Leave empty to hide the line.
+XMR_DONATION_ADDRESS=""

@@ -383,6 +383,7 @@ jq -n \
     --argjson sponsorTtl "$SPONSOR_CACHE_TTL" \
     --argjson sponsorRot "$SPONSOR_ROTATE_SECONDS" \
     --arg onion       "$ONION_HOST" \
+    --arg xmrDonation "$XMR_DONATION_ADDRESS" \
     '{
         ConnectionStrings: { DefaultConnection: $conn },
         CoinGecko: {
@@ -402,7 +403,8 @@ jq -n \
             RotateIntervalSeconds: $sponsorRot
         }
     }
-    + (if $onion != "" then { Tor: { OnionHost: $onion } } else {} end)' \
+    + (if $onion != "" then { Tor: { OnionHost: $onion } } else {} end)
+    + (if $xmrDonation != "" then { Donations: { XmrAddress: $xmrDonation } } else {} end)' \
     > "$WEB_CFG_FILE"
 
 # Worker config (BtcPay section conditional)
