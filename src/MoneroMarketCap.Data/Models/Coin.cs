@@ -41,6 +41,13 @@ public class Coin : AuditableEntity
     // When set, a "Trade ... for Monero" button appears on the coin's detail page.
     public string? TradeUrl { get; set; }
 
+    // Auto-resolved ChangeNOW "from" ticker (legacy ticker, e.g. "bnbbsc"), filled
+    // lazily on first coin-page load when TradeUrl is empty and the asset is listed
+    // on ChangeNOW. The effective link is built from this + the config template at
+    // render time, so a link_id/template change propagates without rewriting rows.
+    // Null = not yet resolved (or no match — cheap to re-check next load).
+    public string? ChangeNowTicker { get; set; }
+
     public decimal PriceChangePercent1h { get; set; }
     public decimal PriceChangePercent7d { get; set; }
     public decimal PriceChangePercent30d { get; set; }

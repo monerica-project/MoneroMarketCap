@@ -123,7 +123,7 @@
         </div>
     </div>
 </div>
-
+ 
 @if (isXmr)
 {
     <div class="mb-4">
@@ -136,10 +136,11 @@
     </div>
 }
 
-@if (!isXmr && !string.IsNullOrEmpty(coin.TradeUrl))
+
+@if (!isXmr && !string.IsNullOrEmpty(Model.EffectiveTradeUrl))
 {
     <div class="mb-4">
-        <a href="@coin.TradeUrl"
+        <a href="@Model.EffectiveTradeUrl"
            target="_blank"
            rel="sponsored noopener"
            class="btn btn-xmr-trade">
@@ -147,6 +148,7 @@
         </a>
     </div>
 }
+
 
 <!-- Converter -->
 @if (canConvert)

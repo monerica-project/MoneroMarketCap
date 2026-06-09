@@ -13,9 +13,14 @@ public class DetailModel : PageModel
     private readonly ICoinRepository _coins;
     private readonly IFiatRateService _fxRates;
     private readonly IFiatRateHistoryService _fxHistory;
+    private readonly IChangeNowLinkService _changeNow;
 
     public Coin? Coin { get; set; }
     public Coin? Monero { get; set; }
+
+    // Affiliate link actually rendered by the view. Admin TradeUrl wins; otherwise
+    // built from the coin's resolved ChangeNOW ticker + the config template.
+    public string? EffectiveTradeUrl { get; set; }
 
     // Currency-adjusted percentage returns for the selected display currency.
     // Default to the raw USD values from CoinGecko; recomputed against
@@ -38,11 +43,13 @@ public class DetailModel : PageModel
     public DetailModel(
         ICoinRepository coins,
         IFiatRateService fxRates,
-        IFiatRateHistoryService fxHistory)
+        IFiatRateHistoryService fxHistory,
+        IChangeNowLinkService changeNow)
     {
         _coins = coins;
         _fxRates = fxRates;
         _fxHistory = fxHistory;
+        _changeNow = changeNow;
     }
 
     public async Task<IActionResult> OnGetAsync(string symbol)
@@ -114,6 +121,45 @@ public class DetailModel : PageModel
             VsXmrChange7d  = ComputeVsXmr(Coin.PriceChangePercent7d,  Monero.PriceChangePercent7d);
             VsXmrChange30d = ComputeVsXmr(Coin.PriceChangePercent30d, Monero.PriceChangePercent30d);
             VsXmrChange1yr = ComputeVsXmr(Coin.PriceChangePercent1y,  Monero.PriceChangePercent1y);
+        }
+
+        // ChangeNOW affiliate link. Admin-set TradeUrl always wins. Otherwise, if
+        // we've already resolved this coin's ChangeNOW ticker, build the link from
+        // the current template (so a link_id/template change in config propagates
+        // without rewriting the DB). First time we see a coin, resolve it against
+        // the cached currency list and persist the ticker on a hit.
+        var isXmr = Coin.Symbol.ToUpper() == "XMR";
+        if (!isXmr)
+        {
+            if (!string.IsNullOrEmpty(Coin.TradeUrl))
+            {
+                EffectiveTradeUrl = Coin.TradeUrl;
+            }
+            else if (!string.IsNullOrEmpty(Coin.ChangeNowTicker))
+            {
+                EffectiveTradeUrl = _changeNow.BuildTradeUrl(Coin.ChangeNowTicker);
+            }
+            else
+            {
+                var from = _changeNow.ResolveFromTicker(Coin.Symbol);
+                if (from != null)
+                {
+                    Coin.ChangeNowTicker = from;
+                    try
+                    {
+                        await _coins.SaveChangesAsync();
+                    }
+                    catch
+                    {
+                        // Best-effort persist: the link still renders this request,
+                        // and the write retries on a later load.
+                    }
+
+                    EffectiveTradeUrl = _changeNow.BuildTradeUrl(from);
+                }
+
+                // No match → leave ChangeNowTicker null; cheap in-memory re-check next load.
+            }
         }
 
         return Page();

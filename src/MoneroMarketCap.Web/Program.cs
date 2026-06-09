@@ -7,6 +7,7 @@ using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Implementations;
 using MoneroMarketCap.Services.Interfaces;
 using MoneroMarketCap.Services.Models;
+using MoneroMarketCap.Web.HostedServices;  
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +51,14 @@ builder.Services.AddHttpClient<IFiatRateService, FiatRateService>();
 // Historical FX: same deal. The Worker fetches from frankfurter.app and writes
 // to FiatRateHistory; the Web app only joins that table at chart-render time.
 builder.Services.AddHttpClient<IFiatRateHistoryService, FiatRateHistoryService>();
+
+// ChangeNOW affiliate "trade for Monero" links. The singleton holds a periodically
+// refreshed snapshot of ChangeNOW's supported currencies; the warmer keeps it fresh
+// and off the request path. AddHttpClient() ensures IHttpClientFactory is available
+// (also used by the sponsor proxy endpoint).
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<IChangeNowLinkService, ChangeNowLinkService>();
+builder.Services.AddHostedService<ChangeNowCacheWarmer>();
 
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>
