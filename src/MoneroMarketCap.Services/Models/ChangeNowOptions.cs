@@ -21,7 +21,8 @@ public sealed class ChangeNowOptions
     ///   {to}              -> <see cref="DestinationTicker"/>
     /// Example: https://changenow.app.link/referral?link_id=40676d9d377a6b&amp;from={ticker}&amp;to=xmr
     /// </summary>
-    public string LinkTemplate { get; set; } = string.Empty;
+    public string LinkTemplate { get; set; } =
+        "https://changenow.app.link/referral?link_id=40676d9d377a6b&from={ticker}&to=xmr";
 
     /// <summary>The "to" side of every swap. Coins matching this ticker never get a link (no XMR-&gt;XMR).</summary>
     public string DestinationTicker { get; set; } = "xmr";

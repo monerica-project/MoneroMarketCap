@@ -277,6 +277,23 @@ var _sponsorCacheTtl = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
 var _sponsorLock = new SemaphoreSlim(1, 1);
 
+// ── ChangeNOW link diagnostic (/api/changenow/status) — TEMP, remove later ───
+app.MapGet("/api/changenow/status", (IChangeNowLinkService changeNow) =>
+    Results.Json(new
+    {
+        enabled = changeNow.Enabled,
+        refreshIntervalHours = changeNow.RefreshInterval.TotalHours,
+        resolve = new
+        {
+            sky = changeNow.ResolveFromTicker("sky"),
+            btc = changeNow.ResolveFromTicker("btc"),
+            eth = changeNow.ResolveFromTicker("eth"),
+        },
+        skyUrl = changeNow.ResolveTradeUrl("sky"),
+    }));
+
+ 
+
 // ── Sitemap (/sitemap.xml) ───────────────────────────────────────────────────
 app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
 {

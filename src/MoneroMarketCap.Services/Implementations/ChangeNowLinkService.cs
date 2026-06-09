@@ -12,6 +12,10 @@ namespace MoneroMarketCap.Services.Implementations;
 /// currencies (coin symbol -> "from" ticker) and builds affiliate links from the
 /// configured template. The request path only ever reads the warm in-memory map;
 /// the ChangeNowCacheWarmer hosted service keeps it fresh.
+///
+/// Matching is intentionally strict: a coin links only when its symbol exactly equals
+/// a ChangeNOW (non-fiat) ticker, or an explicit override is configured. No fuzzy/name
+/// matching — we never emit a link we aren't sure points at the same asset.
 /// </summary>
 public sealed class ChangeNowLinkService : IChangeNowLinkService
 {
@@ -91,7 +95,9 @@ public sealed class ChangeNowLinkService : IChangeNowLinkService
         if (!Enabled)
             return;
 
-        await _refreshGate.WaitAsync(ct);
+        // Acquire WITHOUT the token: a cancellation here must not throw out of this
+        // method. Contention is effectively nil (single warmer, 12h interval).
+        await _refreshGate.WaitAsync();
         try
         {
             var client = _httpFactory.CreateClient(HttpClientName);
@@ -99,12 +105,13 @@ public sealed class ChangeNowLinkService : IChangeNowLinkService
 
             using var req = new HttpRequestMessage(HttpMethod.Get, _options.CurrenciesApiUrl);
             req.Headers.Add("Accept", "application/json");
+            req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MoneroMarketCap/1.0; +https://moneromarketcap.com)");
 
             using var res = await client.SendAsync(req, ct);
             if (!res.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "ChangeNOW currencies fetch failed ({Status}). Keeping previous cache ({Count} entries).",
+                    "ChangeNOW currencies fetch failed ({Status}); keeping previous cache ({Count} entries).",
                     (int)res.StatusCode,
                     _symbolToFrom?.Count ?? 0);
                 return;
@@ -119,15 +126,15 @@ public sealed class ChangeNowLinkService : IChangeNowLinkService
 
             _logger.LogInformation("ChangeNOW currencies cached: {Count} tradable symbols.", map.Count);
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
         catch (Exception ex)
         {
+            // Best-effort: ANY failure — timeout, cancellation, DNS, TLS, HTTP, parse —
+            // must be swallowed. This runs inside a BackgroundService, and an unhandled
+            // exception there stops the whole host (default StopHost behavior). Keep the
+            // previous cache and try again next cycle.
             _logger.LogWarning(
                 ex,
-                "ChangeNOW currencies refresh threw. Keeping previous cache ({Count} entries).",
+                "ChangeNOW currencies refresh failed; keeping previous cache ({Count} entries).",
                 _symbolToFrom?.Count ?? 0);
         }
         finally
@@ -160,8 +167,10 @@ public sealed class ChangeNowLinkService : IChangeNowLinkService
             map[group.Key] = from;
         }
 
-        // Manual overrides win outright and need not exist in the feed — the escape
-        // hatch for pinning a default network (the USDT/BNB multi-chain problem).
+        // Manual overrides win outright and need not exist in the feed — the escape hatch
+        // for pinning a default network (the USDT/BNB multi-chain problem) or for forcing a
+        // specific coin (keyed by its CoinGecko symbol). You verify these yourself, so they're
+        // correct by construction.
         foreach (var kvp in _options.TickerOverrides)
         {
             if (string.IsNullOrWhiteSpace(kvp.Key) || string.IsNullOrWhiteSpace(kvp.Value))

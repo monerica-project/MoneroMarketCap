@@ -3,9 +3,10 @@ using MoneroMarketCap.Services.Interfaces;
 namespace MoneroMarketCap.Web.HostedServices;
 
 /// <summary>
-/// Warms the ChangeNOW supported-currency snapshot at startup and refreshes it on
-/// a fixed interval, so request-path code (coin detail pages) only ever reads a warm
-/// in-memory cache and never blocks on the ChangeNOW API.
+/// Warms the ChangeNOW supported-currency snapshot at startup and refreshes it on a
+/// fixed interval. The entire body is guarded: a BackgroundService whose ExecuteAsync
+/// throws will (by default) STOP THE HOST, so nothing here is allowed to escape —
+/// the link feature must never be able to take the site down.
 /// </summary>
 public sealed class ChangeNowCacheWarmer : BackgroundService
 {
@@ -26,12 +27,13 @@ public sealed class ChangeNowCacheWarmer : BackgroundService
             return;
         }
 
-        // Initial warm-up so the first coin-page visit after deploy already has data.
-        await _changeNow.RefreshAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(_changeNow.RefreshInterval);
         try
         {
+            // Initial warm-up so the first coin-page visit after deploy already has data.
+            // RefreshAsync is best-effort and never throws, but we still guard everything.
+            await _changeNow.RefreshAsync(stoppingToken);
+
+            using var timer = new PeriodicTimer(_changeNow.RefreshInterval);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 await _changeNow.RefreshAsync(stoppingToken);
@@ -40,6 +42,11 @@ public sealed class ChangeNowCacheWarmer : BackgroundService
         catch (OperationCanceledException)
         {
             // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Last line of defence: never let the warmer fault the host.
+            _logger.LogError(ex, "ChangeNOW cache warmer stopped unexpectedly (host left running).");
         }
     }
 }
