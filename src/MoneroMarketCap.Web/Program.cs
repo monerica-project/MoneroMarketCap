@@ -7,7 +7,6 @@ using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Implementations;
 using MoneroMarketCap.Services.Interfaces;
 using MoneroMarketCap.Services.Models;
-using MoneroMarketCap.Web.HostedServices;  
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,7 +57,6 @@ builder.Services.AddHttpClient<IFiatRateHistoryService, FiatRateHistoryService>(
 // (also used by the sponsor proxy endpoint).
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IChangeNowLinkService, ChangeNowLinkService>();
-builder.Services.AddHostedService<ChangeNowCacheWarmer>();
 
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>

@@ -93,6 +93,30 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<CoinHistoryBackfil
 // Ongoing: reconciles top N, upserts coin rows, upserts today's history row each cycle.
 builder.Services.AddHostedService<CoinPriceUpdateService>();
 
+// ── ChangeNOW affiliate-link resolution ──────────────────────────────────
+// Resolves a "from" ticker for each NEW coin (once). Same IPv4-forcing handler
+// as the clients above: api.changenow.io is Cloudflare-fronted and this VPS's
+// IPv6 is broken, so the default handler hangs on IPv6 and times out. The
+// singleton's fetch uses this named "changenow" client.
+builder.Services.AddHttpClient("changenow")
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        ConnectTimeout = TimeSpan.FromSeconds(15),
+        EnableMultipleHttp2Connections = false,
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            await socket.ConnectAsync(context.DnsEndPoint.Host, context.DnsEndPoint.Port, cancellationToken);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+    });
+builder.Services.AddSingleton<IChangeNowLinkService, ChangeNowLinkService>();
+builder.Services.AddHostedService<ChangeNowResolveWorker>();
+
 // ── Monero supply (via BTCPay Server's connected XMR daemon) ─────────────
 // MoneroSupplyService reads BtcPay:BaseUrl + BtcPay:ApiKey from configuration
 // internally; this just wires up the typed HttpClient and timeout.
@@ -115,4 +139,13 @@ else
 }
 
 var host = builder.Build();
+
+// One-shot manual backfill: resolve a ticker for every coin that has none yet, then exit.
+//   dotnet MoneroMarketCap.Worker.dll --changenow-backfill
+if (args.Contains("--changenow-backfill"))
+{
+    await ChangeNowBackfill.RunAsync(host.Services);
+    return;
+}
+
 host.Run();

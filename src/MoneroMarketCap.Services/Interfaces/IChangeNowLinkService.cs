@@ -9,6 +9,9 @@ public interface IChangeNowLinkService
     /// <summary>Whether link generation is enabled (configured and a template is present).</summary>
     bool Enabled { get; }
 
+    /// <summary>True once the supported-currency snapshot has been successfully loaded at least once.</summary>
+    bool IsWarm { get; }
+
     /// <summary>How often the supported-currency snapshot should be refreshed.</summary>
     TimeSpan RefreshInterval { get; }
 

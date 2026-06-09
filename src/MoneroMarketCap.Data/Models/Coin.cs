@@ -48,6 +48,12 @@ public class Coin : AuditableEntity
     // Null = not yet resolved (or no match — cheap to re-check next load).
     public string? ChangeNowTicker { get; set; }
 
+    // When the Worker last attempted ChangeNOW resolution for this coin. Null = never
+    // attempted ("new coin"); the Worker resolves only these automatically and never
+    // re-checks afterward. The migration stamps all pre-existing rows so they're treated
+    // as known and handled only via the manual backfill.
+    public DateTime? ChangeNowCheckedAt { get; set; }
+
     public decimal PriceChangePercent1h { get; set; }
     public decimal PriceChangePercent7d { get; set; }
     public decimal PriceChangePercent30d { get; set; }

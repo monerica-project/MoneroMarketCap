@@ -123,43 +123,17 @@ public class DetailModel : PageModel
             VsXmrChange1yr = ComputeVsXmr(Coin.PriceChangePercent1y,  Monero.PriceChangePercent1y);
         }
 
-        // ChangeNOW affiliate link. Admin-set TradeUrl always wins. Otherwise, if
-        // we've already resolved this coin's ChangeNOW ticker, build the link from
-        // the current template (so a link_id/template change in config propagates
-        // without rewriting the DB). First time we see a coin, resolve it against
-        // the cached currency list and persist the ticker on a hit.
+         // ChangeNOW affiliate link — READ ONLY. Admin TradeUrl wins; otherwise build the
+        // link from the ticker the Worker already resolved. The Web never resolves or
+        // writes here (no network on the request path).
         var isXmr = Coin.Symbol.ToUpper() == "XMR";
         if (!isXmr)
         {
-            if (!string.IsNullOrEmpty(Coin.TradeUrl))
-            {
-                EffectiveTradeUrl = Coin.TradeUrl;
-            }
-            else if (!string.IsNullOrEmpty(Coin.ChangeNowTicker))
-            {
-                EffectiveTradeUrl = _changeNow.BuildTradeUrl(Coin.ChangeNowTicker);
-            }
-            else
-            {
-                var from = _changeNow.ResolveFromTicker(Coin.Symbol);
-                if (from != null)
-                {
-                    Coin.ChangeNowTicker = from;
-                    try
-                    {
-                        await _coins.SaveChangesAsync();
-                    }
-                    catch
-                    {
-                        // Best-effort persist: the link still renders this request,
-                        // and the write retries on a later load.
-                    }
-
-                    EffectiveTradeUrl = _changeNow.BuildTradeUrl(from);
-                }
-
-                // No match → leave ChangeNowTicker null; cheap in-memory re-check next load.
-            }
+            EffectiveTradeUrl = !string.IsNullOrEmpty(Coin.TradeUrl)
+                ? Coin.TradeUrl
+                : (!string.IsNullOrEmpty(Coin.ChangeNowTicker)
+                    ? _changeNow.BuildTradeUrl(Coin.ChangeNowTicker)
+                    : null);
         }
 
         return Page();

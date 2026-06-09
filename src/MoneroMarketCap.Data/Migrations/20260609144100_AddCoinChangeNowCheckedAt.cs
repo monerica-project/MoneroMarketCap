@@ -1,0 +1,29 @@
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace MoneroMarketCap.Data.Migrations
+{
+    /// <inheritdoc />
+    public partial class AddCoinChangeNowCheckedAt : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.AddColumn<DateTime>(
+                name: "ChangeNowCheckedAt",
+                table: "Coins",
+                type: "timestamp with time zone",
+                nullable: true);
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropColumn(
+                name: "ChangeNowCheckedAt",
+                table: "Coins");
+        }
+    }
+}
