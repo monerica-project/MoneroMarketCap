@@ -51,10 +51,10 @@ builder.Services.AddHttpClient<IFiatRateService, FiatRateService>();
 // to FiatRateHistory; the Web app only joins that table at chart-render time.
 builder.Services.AddHttpClient<IFiatRateHistoryService, FiatRateHistoryService>();
 
-// ChangeNOW affiliate "trade for Monero" links. The singleton holds a periodically
-// refreshed snapshot of ChangeNOW's supported currencies; the warmer keeps it fresh
-// and off the request path. AddHttpClient() ensures IHttpClientFactory is available
-// (also used by the sponsor proxy endpoint).
+// ChangeNOW affiliate "trade for Monero" links. The Web only BUILDS a link from a
+// coin's already-resolved ChangeNowTicker + the config template — no fetch, no cache,
+// no background work here (resolution lives in the Worker). AddHttpClient() stays for
+// the sponsor proxy; this singleton never makes a network call in this process.
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IChangeNowLinkService, ChangeNowLinkService>();
 
@@ -111,6 +111,32 @@ using (var scope = app.Services.CreateScope())
         await roles.AssignRoleAsync(admin.Id, RoleNames.Admin);
     }
 }
+
+// ── Never cache error responses ────────────────────────────────────────────────
+// Brave (and other browsers) on Windows were serving stale cached 404/500 pages:
+// once a URL 404'd (e.g. a coin page before that coin existed) or hit a transient
+// 500, the browser kept showing the cached error even after the page became valid.
+// Error responses carry no Cache-Control by default, so browsers fall back to
+// heuristic caching. Force no-store on anything 4xx/5xx so every error is always
+// refetched. Registered FIRST so its OnStarting callback sees the final status code,
+// including the /NotFound and /Error pages re-executed by the middleware below.
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        if (context.Response.StatusCode >= 400)
+        {
+            context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+            context.Response.Headers["Pragma"] = "no-cache";
+            context.Response.Headers["Expires"] = "0";
+            context.Response.Headers.Remove("ETag");
+            context.Response.Headers.Remove("Last-Modified");
+        }
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
 
 // ── Chart endpoint — served from DB (worker handles writes) ──────────────────
 // Currency-aware: for USD requests, returns CoinPriceHistories straight. For
@@ -218,6 +244,7 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
 // API). Prices are USD; apply today's live FX uniformly — within a day the rate
 // barely moves, so per-point FX history isn't worth it. Cached 2 min.
 app.MapGet("/api/coin/{coinGeckoId}/chart24h", async (
+    HttpContext ctx,
     string coinGeckoId,
     string? currency,
     IServiceScopeFactory scopeFactory,
@@ -245,10 +272,15 @@ app.MapGet("/api/coin/{coinGeckoId}/chart24h", async (
         .Select(h => new { h.RecordedAt, h.PriceUsd })
         .ToListAsync();
 
-    // No intraday history yet (worker hasn't run since deploy, or coin is new).
-    // 204 lets the front end say "collecting…" rather than show a broken chart.
+    // No intraday history yet (worker hasn't run since deploy, or coin is brand
+    // new). 204 lets the front end say "collecting…" rather than show a broken
+    // chart — but it must NOT be cached, or a new coin's chart would stay empty
+    // in the browser even after the worker starts producing snapshots.
     if (snapshots.Count == 0)
+    {
+        ctx.Response.Headers["Cache-Control"] = "no-store";
         return Results.StatusCode(204);
+    }
 
     var liveRates = await fxRates.GetRatesAsync();
     var fx = currencyCode == "USD"
@@ -274,23 +306,6 @@ var _sponsorCachedAt = DateTime.MinValue;
 var _sponsorCacheTtl = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
 var _sponsorLock = new SemaphoreSlim(1, 1);
-
-// ── ChangeNOW link diagnostic (/api/changenow/status) — TEMP, remove later ───
-app.MapGet("/api/changenow/status", (IChangeNowLinkService changeNow) =>
-    Results.Json(new
-    {
-        enabled = changeNow.Enabled,
-        refreshIntervalHours = changeNow.RefreshInterval.TotalHours,
-        resolve = new
-        {
-            sky = changeNow.ResolveFromTicker("sky"),
-            btc = changeNow.ResolveFromTicker("btc"),
-            eth = changeNow.ResolveFromTicker("eth"),
-        },
-        skyUrl = changeNow.ResolveTradeUrl("sky"),
-    }));
-
- 
 
 // ── Sitemap (/sitemap.xml) ───────────────────────────────────────────────────
 app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
