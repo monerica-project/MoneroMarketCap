@@ -1,0 +1,171 @@
+﻿@page
+@model MoneroMarketCap.Pages.Admin.ActivityModel
+@{
+    ViewData["Title"] = "Admin — User Activity";
+
+    string Pct(int count) => Model.TotalUsers > 0
+        ? ((decimal)count / Model.TotalUsers * 100).ToString("N1") + "%"
+        : "—";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="mb-0">User Activity</h2>
+    <a asp-page="/Admin/Index" class="btn btn-secondary btn-sm">← Back</a>
+</div>
+
+<p class="text-muted mb-4" style="font-size:0.85rem">
+    Activity counts how recently each user last visited a page while signed in.
+    @if (Model.TrackingSince != null)
+    {
+        <text>Tracking has been recording since @Model.TrackingSince.Value.ToString("g") UTC, so windows longer than that aren't fully populated yet.</text>
+    }
+    else
+    {
+        <text>No activity has been recorded yet — figures will fill in as users visit the site.</text>
+    }
+    Signup figures come from account creation dates and are accurate for all ranges.
+</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted" style="font-size:0.8rem">Total Users</div>
+                <strong style="font-size:1.6rem">@Model.TotalUsers</strong>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted" style="font-size:0.8rem">Active (last 7 days)</div>
+                <strong style="font-size:1.6rem">@Model.ActiveLast7Days</strong>
+                <div class="text-muted" style="font-size:0.78rem">@Pct(Model.ActiveLast7Days) of users</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted" style="font-size:0.8rem">Active (ever)</div>
+                <strong style="font-size:1.6rem">@Model.ActiveEver</strong>
+                <div class="text-muted" style="font-size:0.78rem">@Model.NeverActive never active</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted" style="font-size:0.8rem">New (last 7 days)</div>
+                <strong style="font-size:1.6rem">@Model.NewLast7Days</strong>
+                <div class="text-muted" style="font-size:0.78rem">@Pct(Model.NewLast7Days) of users</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Activity by Time Range</h5>
+                <table class="table market-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Range</th>
+                            <th class="text-end">Active Users</th>
+                            <th class="text-end">% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in Model.ActivityBuckets)
+                        {
+                            <tr>
+                                <td>@b.Label</td>
+                                <td class="text-end mono">@b.Count</td>
+                                <td class="text-end mono">@Pct(b.Count)</td>
+                            </tr>
+                        }
+                        <tr>
+                            <td>Never active</td>
+                            <td class="text-end mono">@Model.NeverActive</td>
+                            <td class="text-end mono">@Pct(Model.NeverActive)</td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th>All users</th>
+                            <th class="text-end mono">@Model.TotalUsers</th>
+                            <th class="text-end mono">100.0%</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-3">New Signups by Time Range</h5>
+                <table class="table market-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Range</th>
+                            <th class="text-end">New Users</th>
+                            <th class="text-end">% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in Model.SignupBuckets)
+                        {
+                            <tr>
+                                <td>@b.Label</td>
+                                <td class="text-end mono">@b.Count</td>
+                                <td class="text-end mono">@Pct(b.Count)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title mb-3">Most Recent Activity</h5>
+        @if (!Model.RecentActivity.Any())
+        {
+            <p class="text-muted mb-0">No activity recorded yet.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table market-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th class="text-end">Last Seen (UTC)</th>
+                            <th class="text-end">Last Login (UTC)</th>
+                            <th class="text-end">Joined</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var u in Model.RecentActivity)
+                        {
+                            <tr>
+                                <td><strong>@u.Username</strong></td>
+                                <td class="text-end mono">@(u.LastSeenAt?.ToString("g") ?? "—")</td>
+                                <td class="text-end mono">@(u.LastLoginAt?.ToString("g") ?? "—")</td>
+                                <td class="text-end" style="font-size:0.85rem;color:var(--xmr-text-muted)">
+                                    @u.CreatedAt.ToShortDateString()
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

@@ -26,11 +26,6 @@ public class LoginModel : PageModel
             return Page();
         }
 
-        // Record the successful login so the admin activity dashboard can bucket
-        // users by recency. The user entity is tracked by the repository's context.
-        user.LastLoginAt = DateTime.UtcNow;
-        await _users.SaveChangesAsync();
-
         var claims = new List<Claim>
     {
         new(ClaimTypes.Name, user.Username),

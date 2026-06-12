@@ -20,13 +20,4 @@ public class AppUser : AuditableEntity
     /// admin activity dashboard to bucket users by how recently they signed in.
     /// </summary>
     public DateTime? LastLoginAt { get; set; }
-
-    /// <summary>
-    /// UTC timestamp of the user's most recent authenticated request, updated by
-    /// <c>LastSeenMiddleware</c> on a throttled basis (at most once every few
-    /// minutes per user). Unlike <see cref="LastLoginAt"/> this reflects ongoing
-    /// activity for already-signed-in users, not just fresh logins, and drives the
-    /// activity buckets on the admin dashboard.
-    /// </summary>
-    public DateTime? LastSeenAt { get; set; }
 }

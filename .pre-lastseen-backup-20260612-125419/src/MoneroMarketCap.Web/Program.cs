@@ -438,11 +438,6 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Throttled "last seen" tracker — must run after authentication so the user
-// principal is populated. Updates AppUser.LastSeenAt at most once per user per
-// few minutes; see LastSeenMiddleware.
-app.UseMiddleware<MoneroMarketCap.Web.Middleware.LastSeenMiddleware>();
-
 app.MapStaticAssets();
 app.MapRazorPages()
    .WithStaticAssets();
