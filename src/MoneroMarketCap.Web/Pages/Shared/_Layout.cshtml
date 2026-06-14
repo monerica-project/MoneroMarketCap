@@ -7,6 +7,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="format-detection" content="telephone=no">
     <title>@ViewData["Title"] - MoneroMarketCap</title>
+    @{
+        // Canonical URL — always the production host, path only. Query strings are
+        // dropped so currency/sort/privacy variants and .onion/IP/localhost hosts all
+        // consolidate onto a single indexable URL. A page can override for special
+        // cases by setting ViewData["Canonical"] (e.g. to a base/un-paginated URL).
+        var canonicalBase = (Configuration["Site:CanonicalBaseUrl"] ?? "https://moneromarketcap.com").TrimEnd('/');
+        var canonicalUrl = ViewData["Canonical"] as string;
+        if (string.IsNullOrEmpty(canonicalUrl))
+        {
+            var canonicalPath = Context.Request.Path.HasValue ? Context.Request.Path.Value! : "/";
+            canonicalUrl = canonicalBase + canonicalPath.ToLowerInvariant();
+        }
+    }
+    <link rel="canonical" href="@canonicalUrl" />
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
