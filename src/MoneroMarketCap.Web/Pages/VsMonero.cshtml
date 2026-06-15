@@ -1,0 +1,324 @@
+@page "/vs-monero"
+@using MoneroMarketCap.Services.Display
+@using MoneroMarketCap.Web.Helpers
+@model MoneroMarketCap.Pages.VsMoneroModel
+@{
+    ViewData["Title"] = "Performance vs Monero — Gainers & Losers";
+    var cur = Model.Currency;
+    var rate = Model.RatePerUsd;
+}
+
+<div class="vsm-header">
+    <h1 class="vsm-title">Performance <span class="vsm-vs">vs</span> Monero</h1>
+    <p class="vsm-sub">
+        How every tracked coin is doing <strong>relative to XMR</strong> over each time window.
+        <span class="text-success">Green = gaining on Monero</span> (outperforming);
+        <span class="text-danger">red = losing to Monero</span> (underperforming).
+        Pick a window to rank by it — a coin sitting green across several columns is one steadily climbing against XMR.
+    </p>
+</div>
+
+@if (Model.Monero == null)
+{
+    <div class="empty-state">
+        <p>Monero price data isn't available yet, so comparisons can't be computed. Check back shortly.</p>
+    </div>
+}
+else if (!Model.Rows.Any())
+{
+    <div class="empty-state">
+        <p>No coin data yet.</p>
+    </div>
+}
+else
+{
+    <div class="vsm-controls">
+        <div class="vsm-range" role="group" aria-label="Time window">
+            <span class="vsm-range-label">Rank by:</span>
+            <button type="button" class="vsm-range-btn" data-range="1h">1h</button>
+            <button type="button" class="vsm-range-btn" data-range="24h">24h</button>
+            <button type="button" class="vsm-range-btn is-active" data-range="7d">7d</button>
+            <button type="button" class="vsm-range-btn" data-range="30d">30d</button>
+            <button type="button" class="vsm-range-btn" data-range="1y">1y</button>
+        </div>
+        <div class="vsm-filter">
+            <label for="vsm-mcap">Min. market cap:</label>
+            <select id="vsm-mcap" class="vsm-select">
+                <option value="0" selected>All</option>
+                <option value="1000000">$1M+</option>
+                <option value="10000000">$10M+</option>
+                <option value="100000000">$100M+</option>
+                <option value="1000000000">$1B+</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="vsm-summary">
+        <div class="vsm-card vsm-card--up">
+            <div class="vsm-card-head">
+                <span class="vsm-card-title">Gaining on Monero</span>
+                <span class="vsm-card-window" data-summary-window>7d</span>
+            </div>
+            <div class="vsm-card-count" data-summary-up-count>—</div>
+            <div class="vsm-card-sub">coins outperforming XMR</div>
+            <ol class="vsm-card-list" data-summary-up-list></ol>
+        </div>
+        <div class="vsm-card vsm-card--down">
+            <div class="vsm-card-head">
+                <span class="vsm-card-title">Losing to Monero</span>
+                <span class="vsm-card-window" data-summary-window>7d</span>
+            </div>
+            <div class="vsm-card-count" data-summary-down-count>—</div>
+            <div class="vsm-card-sub">coins underperforming XMR</div>
+            <ol class="vsm-card-list" data-summary-down-list></ol>
+        </div>
+    </div>
+
+    <div class="table-meta">
+        <span>
+            <span class="text-muted">Comparing against XMR at</span>
+            <span class="mono">@MoneyFormatter.FormatPrice(Model.Monero.PriceUsd, cur, rate)</span>
+        </span>
+        @if (Model.LastUpdated.HasValue)
+        {
+            <span>
+                <span class="text-muted">Data updated:</span>
+                <span class="mono" title="@Model.LastUpdated.Value.ToString("yyyy-MM-dd HH:mm:ss") UTC">
+                    @Model.LastUpdated.Value.ToString("HH:mm:ss") UTC
+                </span>
+            </span>
+        }
+    </div>
+
+    <div class="table-responsive">
+        <table class="table market-table vsm-table">
+            <thead>
+                <tr>
+                    <th class="col-rank">#</th>
+                    <th class="sortable" data-sort="name">Coin <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="xmrprice">Price (XMR) <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable vsm-col" data-sort="vs1h" data-range-col="1h">vs XMR · 1h <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable vsm-col" data-sort="vs24h" data-range-col="24h">vs XMR · 24h <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable vsm-col" data-sort="vs7d" data-range-col="7d">vs XMR · 7d <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable vsm-col" data-sort="vs30d" data-range-col="30d">vs XMR · 30d <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable vsm-col" data-sort="vs1y" data-range-col="1y">vs XMR · 1y <span class="sort-indicator"></span></th>
+                    <th class="text-end sortable" data-sort="mcap">Market Cap <span class="sort-indicator"></span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    var coin = row.Coin;
+                    <tr data-name="@coin.Symbol.ToLower()"
+                        data-xmrprice="@row.PriceInXmr.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                        data-mcap="@row.MarketCapUsd.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                        data-vs1h="@VsData(row.Vs1h)"
+                        data-vs24h="@VsData(row.Vs24h)"
+                        data-vs7d="@VsData(row.Vs7d)"
+                        data-vs30d="@VsData(row.Vs30d)"
+                        data-vs1y="@VsData(row.Vs1y)">
+                        <td class="rank-cell cell-rank"></td>
+                        <td>
+                            <div class="coin-name-cell">
+                                @if (!string.IsNullOrEmpty(coin.ImageUrl))
+                                {
+                                    <a href="/coins/@coin.Symbol.ToLower()">
+                                        <img src="@coin.ImageUrl" width="20" height="20" class="coin-icon" alt="" />
+                                    </a>
+                                }
+                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-symbol coin-link">@coin.Symbol</a>
+                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-name coin-name-link d-none d-lg-inline">@coin.Name</a>
+                            </div>
+                        </td>
+                        <td class="text-end mono xmr-val">
+                            @if (row.PriceInXmr >= 1)
+                            {
+                                @($"{row.PriceInXmr:N4} XMR")
+                            }
+                            else
+                            {
+                                @($"{row.PriceInXmr:N8} XMR")
+                            }
+                        </td>
+                        @VsCell(row.Vs1h, "1h")
+                        @VsCell(row.Vs24h, "24h")
+                        @VsCell(row.Vs7d, "7d")
+                        @VsCell(row.Vs30d, "30d")
+                        @VsCell(row.Vs1y, "1y")
+                        <td class="text-end mono cell-mcap">@MoneyFormatter.FormatLarge(row.MarketCapUsd, cur, rate)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <p class="vsm-foot text-muted">
+        "vs XMR" is relative performance: how the coin moved versus how Monero moved over the same window.
+        A coin up 10% while XMR was flat reads as +10% vs XMR; if XMR also rose 10%, it reads ~0%.
+        Figures are currency-independent. This page is informational and not financial advice.
+    </p>
+}
+
+<partial name="_SponsorList" />
+
+@functions {
+    // Raw numeric value for the row's data-* attribute (invariant culture), or empty
+    // when the window can't be computed — JS treats empty as "no data" and ranks it last.
+    string VsData(decimal? v) =>
+        v.HasValue ? v.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
+
+    // A colored vs-XMR table cell. range tags the cell so the active window can be highlighted.
+    Microsoft.AspNetCore.Html.IHtmlContent VsCell(decimal? v, string range)
+    {
+        var en = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+        string cls, inner;
+        if (!v.HasValue)
+        {
+            cls = "text-muted";
+            inner = "—";
+        }
+        else if (v.Value >= 0)
+        {
+            cls = "text-success";
+            inner = "▲ " + v.Value.ToString("N2", en) + "%";
+        }
+        else
+        {
+            cls = "text-danger";
+            inner = "▼ " + System.Math.Abs(v.Value).ToString("N2", en) + "%";
+        }
+
+        var html = $"<td class=\"text-end mono vsm-cell {cls}\" data-range-col=\"{range}\">{inner}</td>";
+        return new Microsoft.AspNetCore.Html.HtmlString(html);
+    }
+}
+
+@section Scripts {
+    <script>
+        (function () {
+            const table = document.querySelector('.vsm-table');
+            if (!table) return;
+            const tbody = table.querySelector('tbody');
+            const allRows = Array.from(tbody.querySelectorAll('tr'));
+
+            // range -> the row dataset key holding that window's vs-XMR value
+            const RANGE_KEY = { '1h': 'vs1h', '24h': 'vs24h', '7d': 'vs7d', '30d': 'vs30d', '1y': 'vs1y' };
+
+            let activeRange = '7d';
+            let sortCol = 'vs7d';   // defaults to the active window
+            let sortDir = 'desc';   // best performers first
+            let minMcap = 0;
+
+            const num = (row, key) => {
+                const raw = row.dataset[key];
+                return raw === '' || raw === undefined ? NaN : parseFloat(raw);
+            };
+
+            function visibleRows() {
+                return allRows.filter(r => (parseFloat(r.dataset.mcap) || 0) >= minMcap);
+            }
+
+            function applySort() {
+                const rows = visibleRows();
+                rows.sort((a, b) => {
+                    if (sortCol === 'name') {
+                        const av = a.dataset.name || '', bv = b.dataset.name || '';
+                        return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+                    }
+                    const av = num(a, sortCol);
+                    const bv = num(b, sortCol);
+                    // Push missing values to the bottom regardless of direction.
+                    if (isNaN(av) && isNaN(bv)) return 0;
+                    if (isNaN(av)) return 1;
+                    if (isNaN(bv)) return -1;
+                    return sortDir === 'asc' ? av - bv : bv - av;
+                });
+
+                // Hidden rows first removed, then re-append sorted visible ones; rank them.
+                allRows.forEach(r => { r.style.display = 'none'; });
+                rows.forEach((row, idx) => {
+                    row.style.display = '';
+                    const rc = row.querySelector('.cell-rank');
+                    if (rc) rc.textContent = idx + 1;
+                    tbody.appendChild(row);
+                });
+
+                table.querySelectorAll('thead th').forEach(th => {
+                    const ind = th.querySelector('.sort-indicator');
+                    if (!ind) return;
+                    ind.textContent = th.dataset.sort === sortCol ? (sortDir === 'asc' ? '▲' : '▼') : '';
+                });
+            }
+
+            function highlightWindow() {
+                table.querySelectorAll('[data-range-col]').forEach(el => {
+                    el.classList.toggle('vsm-active-col', el.dataset.rangeCol === activeRange);
+                });
+            }
+
+            function updateSummary() {
+                const key = RANGE_KEY[activeRange];
+                const rows = visibleRows()
+                    .map(r => ({ sym: r.dataset.name.toUpperCase(), v: num(r, key) }))
+                    .filter(x => !isNaN(x.v));
+
+                const up = rows.filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+                const down = rows.filter(x => x.v < 0).sort((a, b) => a.v - b.v);
+
+                document.querySelectorAll('[data-summary-window]').forEach(e => e.textContent = activeRange);
+                document.querySelector('[data-summary-up-count]').textContent = up.length;
+                document.querySelector('[data-summary-down-count]').textContent = down.length;
+
+                const fill = (sel, list, cls, arrow) => {
+                    const ol = document.querySelector(sel);
+                    ol.innerHTML = '';
+                    list.slice(0, 3).forEach(x => {
+                        const li = document.createElement('li');
+                        li.innerHTML = '<span class="vsm-mini-sym">' + x.sym + '</span>' +
+                            '<span class="' + cls + ' mono">' + arrow + ' ' + Math.abs(x.v).toFixed(2) + '%</span>';
+                        ol.appendChild(li);
+                    });
+                    if (!list.length) ol.innerHTML = '<li class="text-muted">none</li>';
+                };
+                fill('[data-summary-up-list]', up, 'text-success', '▲');
+                fill('[data-summary-down-list]', down, 'text-danger', '▼');
+            }
+
+            function refresh() { highlightWindow(); applySort(); updateSummary(); }
+
+            // Range buttons: set the active window, sort by it descending, refresh.
+            document.querySelectorAll('.vsm-range-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.vsm-range-btn').forEach(b => b.classList.remove('is-active'));
+                    btn.classList.add('is-active');
+                    activeRange = btn.dataset.range;
+                    sortCol = RANGE_KEY[activeRange];
+                    sortDir = 'desc';
+                    refresh();
+                });
+            });
+
+            // Column header sorting.
+            table.querySelectorAll('thead th[data-sort]').forEach(th => {
+                th.addEventListener('click', () => {
+                    const col = th.dataset.sort;
+                    if (sortCol === col) {
+                        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        sortCol = col;
+                        sortDir = col === 'name' ? 'asc' : 'desc';
+                    }
+                    applySort();
+                });
+            });
+
+            // Market-cap filter.
+            document.getElementById('vsm-mcap').addEventListener('change', e => {
+                minMcap = parseFloat(e.target.value) || 0;
+                refresh();
+            });
+
+            refresh();
+        })();
+    </script>
+}

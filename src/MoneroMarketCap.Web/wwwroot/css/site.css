@@ -1068,3 +1068,207 @@ div[style*="border:1px solid green"] {
         .conv-field { flex: 0 0 auto; }
         .conv-swap { align-self: center; padding: .2rem 0; }
     }
+/* ──────────────────────────────────────────────────────────────────────────
+ * vs-Monero leaderboard page (/vs-monero)
+ * ────────────────────────────────────────────────────────────────────────── */
+.vsm-header {
+    margin-bottom: 1.25rem;
+}
+
+.vsm-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+}
+
+    .vsm-title .vsm-vs {
+        color: var(--xmr-orange);
+        font-style: italic;
+    }
+
+.vsm-sub {
+    color: var(--xmr-text-muted);
+    font-size: 0.9rem;
+    max-width: 70ch;
+    margin-bottom: 0;
+}
+
+    .vsm-sub strong {
+        color: var(--xmr-text);
+    }
+
+/* Controls bar */
+.vsm-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.vsm-range {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.vsm-range-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--xmr-text-muted);
+    margin-right: 0.25rem;
+}
+
+.vsm-range-btn {
+    background: var(--xmr-surface);
+    border: 1px solid var(--xmr-border);
+    color: var(--xmr-text);
+    padding: 0.3rem 0.85rem;
+    border-radius: 5px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+    .vsm-range-btn:hover {
+        border-color: var(--xmr-orange);
+        color: var(--xmr-orange);
+    }
+
+    .vsm-range-btn.is-active {
+        background: var(--xmr-orange);
+        border-color: var(--xmr-orange);
+        color: #000;
+    }
+
+.vsm-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--xmr-text-muted);
+}
+
+.vsm-select {
+    background: var(--xmr-surface);
+    border: 1px solid var(--xmr-border);
+    color: var(--xmr-text);
+    padding: 0.3rem 0.5rem;
+    border-radius: 5px;
+    font-size: 0.85rem;
+}
+
+/* Summary cards */
+.vsm-summary {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+}
+
+.vsm-card {
+    flex: 1 1 260px;
+    min-width: 240px;
+    border: 1px solid var(--xmr-border);
+    border-radius: 6px;
+    padding: 0.9rem 1.1rem;
+    background: var(--xmr-surface);
+}
+
+    .vsm-card--up { border-left: 3px solid #2ecc71; }
+    .vsm-card--down { border-left: 3px solid #e74c3c; }
+
+.vsm-card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.vsm-card-title {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--xmr-text-muted);
+}
+
+.vsm-card-window {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--xmr-orange);
+}
+
+.vsm-card-count {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+    font-family: monospace;
+}
+
+.vsm-card-sub {
+    font-size: 0.75rem;
+    color: var(--xmr-text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.vsm-card-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+    .vsm-card-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        padding: 0.12rem 0;
+    }
+
+.vsm-mini-sym {
+    font-weight: 600;
+}
+
+/* Table — active-window highlight */
+.vsm-table th.vsm-active-col,
+.vsm-table td.vsm-active-col {
+    background: rgba(255, 102, 0, 0.07);
+}
+
+.vsm-table thead th.vsm-active-col {
+    background: rgba(255, 102, 0, 0.14);
+}
+
+.vsm-cell {
+    white-space: nowrap;
+}
+
+.vsm-foot {
+    font-size: 0.78rem;
+    margin-top: 1rem;
+    max-width: 80ch;
+}
+
+@media (max-width: 640px) {
+    .vsm-controls { flex-direction: column; align-items: stretch; }
+    .vsm-filter { justify-content: space-between; }
+}
+
+/* "See full ranking" link under the homepage vs-XMR best/worst block */
+.vs-xmr-more {
+    display: inline-block;
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--xmr-orange);
+    text-decoration: none;
+}
+
+    .vs-xmr-more:hover {
+        color: var(--xmr-orange-light);
+        text-decoration: underline;
+    }
