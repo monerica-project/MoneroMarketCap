@@ -307,6 +307,94 @@ var _sponsorCacheTtl = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
 var _sponsorLock = new SemaphoreSlim(1, 1);
 
+// ── Spot price by ticker (/api/price/{symbol}) ───────────────────────────────
+// Returns the latest fiat price for a coin by its ticker symbol. The price is
+// read from the Coins table (kept fresh by the Worker's CoinPriceUpdateService),
+// so this endpoint never touches CoinGecko and carries no upstream rate-limit risk.
+//
+//   GET /api/price/btc            → USD price
+//   GET /api/price/btc?vs=eur     → EUR price (any CurrencyCatalog code; USD default)
+//
+// Symbols are stored uppercase and are not guaranteed unique across listed assets,
+// so the canonical match is the active coin with the best (lowest non-zero) market
+// cap rank. Responses are cached briefly server-side and via Cache-Control.
+app.MapGet("/api/price/{symbol}", async (
+    string symbol,
+    string? vs,
+    HttpContext ctx,
+    IServiceScopeFactory scopeFactory,
+    IMemoryCache cache) =>
+{
+    var ticker = (symbol ?? string.Empty).Trim().ToUpperInvariant();
+    if (ticker.Length is 0 or > 32)
+        return Results.Json(new { error = "Invalid ticker.", symbol }, statusCode: 400);
+
+    // Resolve the display currency. Anything we don't support falls back to USD.
+    var currency = (vs ?? CurrencyCatalog.DefaultCode).Trim().ToUpperInvariant();
+    if (!CurrencyCatalog.IsSupported(currency))
+        currency = CurrencyCatalog.DefaultCode;
+
+    ctx.Response.Headers["Cache-Control"] = "public, max-age=30";
+
+    var cacheKey = $"price_{ticker}_{currency}";
+    if (cache.TryGetValue(cacheKey, out IResult? cached) && cached is not null)
+        return cached;
+
+    using var scope = scopeFactory.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Canonical coin for this ticker: prefer active, then the best-ranked
+    // (rank 0 = unranked, sorted last), then highest market cap as a tiebreak.
+    var coin = await db.Coins
+        .Where(c => c.Symbol == ticker)
+        .OrderByDescending(c => c.IsActive)
+        .ThenBy(c => c.MarketCapRank == 0)
+        .ThenBy(c => c.MarketCapRank)
+        .ThenByDescending(c => c.MarketCapUsd)
+        .Select(c => new
+        {
+            c.Symbol,
+            c.Name,
+            c.PriceUsd,
+            c.MarketCapRank,
+            c.UpdatedAt
+        })
+        .FirstOrDefaultAsync();
+
+    if (coin is null)
+        return Results.Json(new { error = "Unknown ticker.", symbol = ticker }, statusCode: 404);
+
+    // Convert USD → requested currency. GetRatesAsync returns units-per-USD
+    // (USD => 1.0); USD short-circuits with no DB hit.
+    var rate = 1m;
+    if (currency != CurrencyCatalog.DefaultCode)
+    {
+        var fx = scope.ServiceProvider.GetRequiredService<IFiatRateService>();
+        var rates = await fx.GetRatesAsync(ctx.RequestAborted);
+        if (!rates.TryGetValue(currency, out rate) || rate <= 0)
+        {
+            // Rate unavailable (worker hasn't synced this currency yet) → USD.
+            currency = CurrencyCatalog.DefaultCode;
+            rate = 1m;
+        }
+    }
+
+    var result = Results.Json(new
+    {
+        symbol = coin.Symbol,
+        name = coin.Name,
+        currency,
+        price = coin.PriceUsd * rate,
+        priceUsd = coin.PriceUsd,
+        rate,
+        marketCapRank = coin.MarketCapRank,
+        lastUpdated = coin.UpdatedAt
+    });
+
+    cache.Set(cacheKey, result, TimeSpan.FromSeconds(30));
+    return result;
+});
+
 // ── Sitemap (/sitemap.xml) ───────────────────────────────────────────────────
 app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
 {
