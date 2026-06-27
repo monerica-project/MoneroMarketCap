@@ -623,8 +623,8 @@
         // ─── Time-range selector ──────────────────────────────────────────────────
         // Day-count ranges are tail slices of the daily series we already fetched.
         // The 24h range is special: daily data can't draw it, so it lazy-loads an
-        // intraday (~5-min) series from /chart24h and is price-only (relative
-        // comparisons over a single day are noise — the vs toggles are hidden).
+        // intraday (~5-min) series from /chart24h — for both the coin and Monero, so
+        // the vs-XMR view works here too (USD intraday isn't fetched, so vs-USD is hidden).
         const RANGES = [
             { id: '365', label: '1Y',  days: 365 },
             { id: '30',  label: '30D', days: 30  },
@@ -633,7 +633,8 @@
         ];
         let range = RANGES[0];   // default 1Y (full)
 
-        let intraday    = null;  // cached [[tsMs, priceInCurrency], ...] for 24h
+        let intraday    = null;  // cached [[tsMs, priceInCurrency], ...] for 24h (coin)
+        let intradayXmr = null;  // cached intraday XMR series (for the vs-XMR view on 24h)
 
         // Keep the last `days` points of a series (null-safe; series may be null).
         function tail(series, days) {
@@ -769,15 +770,31 @@
             return a.map(p => [p[0], bMap.get(dayKey(p[0])) ?? null]);
         }
 
+        // Intraday alignment: day-keying collapses a single day, so match each point
+        // of `a` to the nearest-in-time point of `b` (both are ~5-min same-day series).
+        function alignByTime(a, b) {
+            if (!b || !b.length) return a.map(p => [p[0], null]);
+            const bs = b.slice().sort((x, y) => x[0] - y[0]);
+            return a.map(p => {
+                const t = p[0];
+                let lo = 0, hi = bs.length - 1;
+                while (lo < hi) { const mid = (lo + hi) >> 1; if (bs[mid][0] < t) lo = mid + 1; else hi = mid; }
+                let best = bs[lo];
+                if (lo > 0 && Math.abs(bs[lo - 1][0] - t) < Math.abs(best[0] - t)) best = bs[lo - 1];
+                return [t, best ? best[1] : null];
+            });
+        }
+
         // ── Build the chart for the current mode ──────────────────────────────────
         function buildChart() {
             const ctx = document.getElementById('price-chart').getContext('2d');
             if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
-            // 24h is intraday and price-only; force the mode regardless of the
-            // last-selected comparison view.
+            // 24h is intraday: we fetch the coin and (for vs-XMR) Monero, but not USD —
+            // so vs-XMR and price both work here; only fall back off the vs-USD view.
             const intradayView = !!range.intraday;
-            if (intradayView) mode = 'price';
+            if (intradayView && mode === 'usd') mode = 'price';
+            if (intradayView && mode === 'vs' && (!rawXmr || !rawXmr.length)) mode = 'price';
 
             const labels = rawCoin.map(p => {
                 const d = new Date(p[0]);
@@ -868,7 +885,9 @@
                 // vs XMR: coin vs Monero, both normalized from SELECTED-currency
                 // prices, so the fiat context carries through into both lines.
                 const normCoin = normalize(rawCoin);
-                const xmrAligned = alignSeries(rawCoin, rawXmr || []);
+                const xmrAligned = intradayView
+                    ? alignByTime(rawCoin, rawXmr || [])
+                    : alignSeries(rawCoin, rawXmr || []);
 
                 datasets = [
                     {
@@ -1042,9 +1061,13 @@
                     const ctl = new AbortController();
                     const timer = setTimeout(() => ctl.abort(), 12000);
                     try {
-                        const res = await fetch('/api/coin/' + coinGeckoId
-                            + '/chart24h?currency=' + encodeURIComponent(CURRENCY.code),
-                            { signal: ctl.signal });
+                        const cur = encodeURIComponent(CURRENCY.code);
+                        // Fetch the coin and (for vs-XMR) Monero intraday in parallel.
+                        const [res, xmrRes] = await Promise.all([
+                            fetch('/api/coin/' + coinGeckoId + '/chart24h?currency=' + cur, { signal: ctl.signal }),
+                            isXmr ? Promise.resolve(null)
+                                  : fetch('/api/coin/monero/chart24h?currency=' + cur, { signal: ctl.signal })
+                        ]);
                         clearTimeout(timer);
                         if (res.status === 204) {
                             document.getElementById('chart-status').textContent =
@@ -1058,6 +1081,12 @@
                         }
                         const j = await res.json();
                         intraday = Array.isArray(j) ? j : (j.prices ?? []);
+                        if (xmrRes && xmrRes.ok) {
+                            const jx = await xmrRes.json();
+                            intradayXmr = Array.isArray(jx) ? jx : (jx.prices ?? []);
+                        } else {
+                            intradayXmr = null;
+                        }
                     } catch (e) {
                         clearTimeout(timer);
                         document.getElementById('chart-status').textContent =
@@ -1073,7 +1102,7 @@
                     return;
                 }
                 rawCoin = intraday;
-                rawXmr = null;
+                rawXmr = intradayXmr;
                 rawCoinUsd = null;
                 document.getElementById('chart-status').textContent = intraday.length + ' points';
                 buildChart();   // intradayView inside forces price mode
@@ -1090,12 +1119,14 @@
             document.getElementById('chart-title').textContent = titleFor(mode);
             const intradayView = !!range.intraday;
 
-            // The mode switch (Price / vs USD / vs XMR) is meaningless intraday —
-            // hide it for 24h, show it otherwise.
+            // Intraday supports Price and vs-XMR (no USD intraday series), so show the
+            // switch but hide the vs-USD button when intraday.
             const sw = document.getElementById('mode-switch');
             if (sw) {
-                sw.classList.toggle('d-none', intradayView || MODES.length <= 1);
+                sw.classList.toggle('d-none', MODES.length <= 1);
                 for (const b of sw.querySelectorAll('.chart-mode-btn')) {
+                    const usdBtn = b.dataset.mode === 'usd';
+                    b.classList.toggle('d-none', intradayView && usdBtn);
                     b.classList.toggle('active', b.dataset.mode === mode);
                 }
             }
