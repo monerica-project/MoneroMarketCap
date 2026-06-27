@@ -19,8 +19,17 @@
             var canonicalPath = Context.Request.Path.HasValue ? Context.Request.Path.Value! : "/";
             canonicalUrl = canonicalBase + canonicalPath.ToLowerInvariant();
         }
+
+        // Per-page description (set via ViewData["MetaDescription"]); falls back to a
+        // site-wide default so no page ships without one.
+        var metaDescription = ViewData["MetaDescription"] as string;
+        if (string.IsNullOrWhiteSpace(metaDescription))
+        {
+            metaDescription = "MoneroMarketCap tracks cryptocurrency prices and market caps valued in Monero (XMR). Compare any coin against Monero and convert it to XMR.";
+        }
     }
     <link rel="canonical" href="@canonicalUrl" />
+    <meta name="description" content="@metaDescription" />
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />

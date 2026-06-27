@@ -4,6 +4,9 @@
 @using MoneroMarketCap.Web.Helpers
 @{
     ViewData["Title"] = Model.Coin?.Symbol + " — " + Model.Coin?.Name;
+    ViewData["MetaDescription"] = (Model.Coin?.Symbol?.ToUpperInvariant() == "XMR")
+        ? "Monero (XMR) live price, market cap and charts on MoneroMarketCap — track XMR and value the entire crypto market in Monero."
+        : $"{Model.Coin?.Name} ({Model.Coin?.Symbol}) live price, market cap and charts valued in Monero (XMR). See how {Model.Coin?.Symbol} performs against Monero and convert {Model.Coin?.Symbol} to XMR on MoneroMarketCap.";
     ViewBag.SponsorRotateIntervalSeconds = 30;
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var cur = Model.Currency;

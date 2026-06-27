@@ -3,6 +3,7 @@
 @model MoneroMarketCap.Pages.Portfolios.IndexModel
 @{
     ViewData["Title"] = "My Portfolios";
+    ViewData["MetaDescription"] = "Track your cryptocurrency portfolio valued in Monero (XMR) on MoneroMarketCap — see allocations, profit and loss, and your total worth in XMR.";
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var cur = Model.Currency;
     var rate = Model.RatePerUsd;
