@@ -4,9 +4,12 @@
 @model MoneroMarketCap.Pages.VsMoneroModel
 @{
     ViewData["Title"] = "Performance vs Monero — Gainers & Losers";
+    ViewBag.SponsorRotateIntervalSeconds = 30;
     var cur = Model.Currency;
     var rate = Model.RatePerUsd;
 }
+
+<partial name="_SponsorBanner" />
 
 <div class="vsm-header">
     <h1 class="vsm-title">Performance <span class="vsm-vs">vs</span> Monero</h1>
