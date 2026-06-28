@@ -625,16 +625,23 @@
         // The 24h range is special: daily data can't draw it, so it lazy-loads an
         // intraday (~5-min) series from /chart24h — for both the coin and Monero, so
         // the vs-XMR view works here too (USD intraday isn't fetched, so vs-USD is hidden).
+        // 7D/30D are "fine": they lazy-load an hourly series so the line is as
+        // detailed as 1Y/24H, instead of a sparse tail slice of the daily data.
         const RANGES = [
             { id: '365', label: '1Y',  days: 365 },
-            { id: '30',  label: '30D', days: 30  },
-            { id: '7',   label: '7D',  days: 7   },
+            { id: '30',  label: '30D', days: 30, fine: true },
+            { id: '7',   label: '7D',  days: 7,  fine: true },
             { id: '1',   label: '24H', days: 1, intraday: true }
         ];
         let range = RANGES[0];   // default 1Y (full)
 
         let intraday    = null;  // cached [[tsMs, priceInCurrency], ...] for 24h (coin)
         let intradayXmr = null;  // cached intraday XMR series (for the vs-XMR view on 24h)
+
+        // Per-range caches for the hourly "fine" series (keyed by range id: '7','30').
+        const fineCoin = {};     // { '7': [...], '30': [...] }
+        const fineXmr  = {};
+        const fineUsd  = {};
 
         // Keep the last `days` points of a series (null-safe; series may be null).
         function tail(series, days) {
@@ -793,8 +800,15 @@
             // 24h is intraday: we fetch the coin and (for vs-XMR) Monero, but not USD —
             // so vs-XMR and price both work here; only fall back off the vs-USD view.
             const intradayView = !!range.intraday;
+            // "Fine" ranges (7D/30D) carry sub-daily (hourly) points like intraday,
+            // so they align by timestamp — but keep date labels, not clock times.
+            const fineView = !!range.fine;
+            const subDaily = intradayView || fineView;
             if (intradayView && mode === 'usd') mode = 'price';
             if (intradayView && mode === 'vs' && (!rawXmr || !rawXmr.length)) mode = 'price';
+            // Fine ranges fetch a USD series too, but if it's missing fall off vs-USD.
+            if (fineView && mode === 'usd' && (!rawCoinUsd || !rawCoinUsd.length)) mode = 'price';
+            if (fineView && mode === 'vs' && (!rawXmr || !rawXmr.length)) mode = 'price';
 
             const labels = rawCoin.map(p => {
                 const d = new Date(p[0]);
@@ -851,7 +865,7 @@
                 // contribution — a weak fiat lifts its line above USD, a strong
                 // fiat pushes it below. Both derived from server-converted prices.
                 const normSel = normalize(rawCoin);
-                const usdAligned = alignSeries(rawCoin, rawCoinUsd || []);
+                const usdAligned = (subDaily ? alignByTime : alignSeries)(rawCoin, rawCoinUsd || []);
                 const normUsd = normalize(usdAligned);
 
                 datasets = [
@@ -885,7 +899,7 @@
                 // vs XMR: coin vs Monero, both normalized from SELECTED-currency
                 // prices, so the fiat context carries through into both lines.
                 const normCoin = normalize(rawCoin);
-                const xmrAligned = intradayView
+                const xmrAligned = subDaily
                     ? alignByTime(rawCoin, rawXmr || [])
                     : alignSeries(rawCoin, rawXmr || []);
 
@@ -1047,53 +1061,90 @@
             sw.classList.remove('d-none');
         }
 
+        // Fetch the 5-minute intraday series for the coin (+ Monero for vs-XMR).
+        // Returns { coin, xmr } (xmr may be null) or null if the coin data isn't
+        // usable (network failure, 204, non-OK, or empty). Never throws.
+        async function loadIntraday24h(cur) {
+            const ctl = new AbortController();
+            const timer = setTimeout(() => ctl.abort(), 12000);
+            try {
+                const settled = await Promise.allSettled([
+                    fetch('/api/coin/' + coinGeckoId + '/chart24h?currency=' + cur, { signal: ctl.signal }),
+                    isXmr ? Promise.resolve(null)
+                          : fetch('/api/coin/monero/chart24h?currency=' + cur, { signal: ctl.signal })
+                ]);
+                const res    = settled[0].status === 'fulfilled' ? settled[0].value : null;
+                const xmrRes = settled[1].status === 'fulfilled' ? settled[1].value : null;
+                if (!res || !res.ok) return null;
+                const j = await res.json();
+                const coin = Array.isArray(j) ? j : (j.prices ?? []);
+                if (!coin.length) return null;
+                let xmr = null;
+                if (xmrRes && xmrRes.ok) {
+                    try { const jx = await xmrRes.json(); xmr = Array.isArray(jx) ? jx : (jx.prices ?? []); }
+                    catch { xmr = null; }
+                }
+                return { coin, xmr };
+            } catch { return null; }
+            finally { clearTimeout(timer); }
+        }
+
+        // Fallback for 24h: the hourly series sliced to the last 24 hours. Uses the
+        // reliable DB-backed /chartfine data so the 24h chart still renders (at hourly
+        // resolution) when the 5-minute series is unavailable. Never throws.
+        async function loadHourlyLast24h(cur) {
+            const ctl = new AbortController();
+            const timer = setTimeout(() => ctl.abort(), 12000);
+            const cut = Date.now() - 24 * 3600 * 1000;
+            const tail = arr => (arr || []).filter(p => p && p[0] >= cut);
+            try {
+                const q = '/chartfine?days=7&currency=' + cur;
+                const settled = await Promise.allSettled([
+                    fetch('/api/coin/' + coinGeckoId + q, { signal: ctl.signal }),
+                    isXmr ? Promise.resolve(null) : fetch('/api/coin/monero' + q, { signal: ctl.signal })
+                ]);
+                const res    = settled[0].status === 'fulfilled' ? settled[0].value : null;
+                const xmrRes = settled[1].status === 'fulfilled' ? settled[1].value : null;
+                if (!res || !res.ok) return null;
+                const j = await res.json();
+                const coin = tail(Array.isArray(j) ? j : (j.prices ?? []));
+                if (!coin.length) return null;
+                let xmr = null;
+                if (xmrRes && xmrRes.ok) {
+                    try { const jx = await xmrRes.json(); xmr = tail(Array.isArray(jx) ? jx : (jx.prices ?? [])); }
+                    catch { xmr = null; }
+                }
+                return { coin, xmr: (xmr && xmr.length) ? xmr : null };
+            } catch { return null; }
+            finally { clearTimeout(timer); }
+        }
+
         async function setRange(id) {
             const r = RANGES.find(x => x.id === id);
             if (!r) return;
             range = r;
 
             if (r.intraday) {
-                // (Re)fetch the intraday series if we don't already have it.
-                // Retries on each click; never spins forever (12s abort); and
-                // surfaces the real HTTP status so failures are diagnosable.
+                // Build the 24h view if we don't have it yet. Primary source is the
+                // 5-minute intraday endpoint (richest); if that yields nothing for any
+                // reason, fall back to the hourly series sliced to the last 24h (which
+                // is DB-backed and reliable). Only if BOTH yield nothing do we show the
+                // retry message. Each fetch is independent so the Monero comparison
+                // series can never take down the coin's own line.
                 if (!intraday || !intraday.length) {
                     document.getElementById('chart-status').textContent = 'Loading 24h…';
-                    const ctl = new AbortController();
-                    const timer = setTimeout(() => ctl.abort(), 12000);
-                    try {
-                        const cur = encodeURIComponent(CURRENCY.code);
-                        // Fetch the coin and (for vs-XMR) Monero intraday in parallel.
-                        const [res, xmrRes] = await Promise.all([
-                            fetch('/api/coin/' + coinGeckoId + '/chart24h?currency=' + cur, { signal: ctl.signal }),
-                            isXmr ? Promise.resolve(null)
-                                  : fetch('/api/coin/monero/chart24h?currency=' + cur, { signal: ctl.signal })
-                        ]);
-                        clearTimeout(timer);
-                        if (res.status === 204) {
-                            document.getElementById('chart-status').textContent =
-                                'Collecting 24h data — check back soon';
-                            return;
+                    const cur = encodeURIComponent(CURRENCY.code);
+
+                    const pair = await loadIntraday24h(cur);   // 5-minute series
+                    if (pair && pair.coin && pair.coin.length) {
+                        intraday = pair.coin;
+                        intradayXmr = pair.xmr;
+                    } else {
+                        const fb = await loadHourlyLast24h(cur);   // hourly fallback
+                        if (fb && fb.coin && fb.coin.length) {
+                            intraday = fb.coin;
+                            intradayXmr = fb.xmr;
                         }
-                        if (!res.ok) {
-                            document.getElementById('chart-status').textContent =
-                                '24h: HTTP ' + res.status + ' — tap 24H to retry';
-                            return;
-                        }
-                        const j = await res.json();
-                        intraday = Array.isArray(j) ? j : (j.prices ?? []);
-                        if (xmrRes && xmrRes.ok) {
-                            const jx = await xmrRes.json();
-                            intradayXmr = Array.isArray(jx) ? jx : (jx.prices ?? []);
-                        } else {
-                            intradayXmr = null;
-                        }
-                    } catch (e) {
-                        clearTimeout(timer);
-                        document.getElementById('chart-status').textContent =
-                            (e.name === 'AbortError')
-                                ? '24h timed out — tap 24H to retry'
-                                : '24h unavailable — tap 24H to retry';
-                        return;
                     }
                 }
                 if (!intraday || !intraday.length) {
@@ -1106,6 +1157,79 @@
                 rawCoinUsd = null;
                 document.getElementById('chart-status').textContent = intraday.length + ' points';
                 buildChart();   // intradayView inside forces price mode
+                return;
+            }
+
+            if (r.fine) {
+                // Lazy-load (once) the hourly series for this range, then draw it.
+                // On any failure we fall back to the daily tail slice so the chart
+                // still renders — just at lower detail.
+                if (!fineCoin[r.id] || !fineCoin[r.id].length) {
+                    document.getElementById('chart-status').textContent = 'Loading ' + r.label + '…';
+                    const ctl = new AbortController();
+                    const timer = setTimeout(() => ctl.abort(), 12000);
+                    try {
+                        const cur = encodeURIComponent(CURRENCY.code);
+                        const base = '/api/coin/';
+                        const q = '/chartfine?days=' + r.days + '&currency=' + cur;
+                        // Independent fetches: only the coin series is required. The XMR
+                        // and USD comparison series are best-effort — if one fails, that
+                        // overlay just isn't shown; the chart still draws.
+                        const settled = await Promise.allSettled([
+                            fetch(base + coinGeckoId + q, { signal: ctl.signal }),
+                            isXmr ? Promise.resolve(null) : fetch(base + 'monero' + q, { signal: ctl.signal }),
+                            isUsd ? Promise.resolve(null)
+                                  : fetch(base + coinGeckoId + '/chartfine?days=' + r.days + '&currency=USD', { signal: ctl.signal })
+                        ]);
+                        clearTimeout(timer);
+
+                        const res    = settled[0].status === 'fulfilled' ? settled[0].value : null;
+                        const xmrRes = settled[1].status === 'fulfilled' ? settled[1].value : null;
+                        const usdRes = settled[2].status === 'fulfilled' ? settled[2].value : null;
+
+                        // 204 (or coin fetch failed) = no hourly data → fall back to the
+                        // daily slice so the range still renders.
+                        if (!res || res.status === 204 || !res.ok) {
+                            document.getElementById('chart-status').textContent =
+                                (fullCoin ? fullCoin.length : '') + ' days';
+                            applyRange();
+                            return;
+                        }
+                        const j = await res.json();
+                        fineCoin[r.id] = Array.isArray(j) ? j : (j.prices ?? []);
+                        fineXmr[r.id] = null;
+                        if (xmrRes && xmrRes.ok) {
+                            try { const jx = await xmrRes.json(); fineXmr[r.id] = Array.isArray(jx) ? jx : (jx.prices ?? []); }
+                            catch { fineXmr[r.id] = null; }
+                        }
+                        fineUsd[r.id] = null;
+                        if (usdRes && usdRes.ok) {
+                            try { const ju = await usdRes.json(); fineUsd[r.id] = Array.isArray(ju) ? ju : (ju.prices ?? []); }
+                            catch { fineUsd[r.id] = null; }
+                        }
+                    } catch (e) {
+                        clearTimeout(timer);
+                        // Fine data unavailable (e.g. the box can't reach CoinGecko) —
+                        // fall back to the daily tail slice for this range.
+                        document.getElementById('chart-status').textContent =
+                            (fullCoin ? fullCoin.length : '') + ' days';
+                        applyRange();
+                        return;
+                    }
+                }
+
+                if (!fineCoin[r.id] || !fineCoin[r.id].length) {
+                    document.getElementById('chart-status').textContent =
+                        (fullCoin ? fullCoin.length : '') + ' days';
+                    applyRange();
+                    return;
+                }
+
+                rawCoin    = fineCoin[r.id];
+                rawXmr     = fineXmr[r.id];
+                rawCoinUsd = fineUsd[r.id];
+                document.getElementById('chart-status').textContent = fineCoin[r.id].length + ' points';
+                buildChart();
                 return;
             }
 
@@ -1139,9 +1263,11 @@
                 }
             }
 
-            // MA chips: only on the absolute daily price chart (not intraday).
+            // MA chips: only on the absolute daily price chart. Hidden on intraday
+            // and on the fine (hourly) ranges, where the day-based periods (SMA 50,
+            // SMA 200, EMA 21) don't correspond to the point spacing.
             const maBar = document.getElementById('ma-toolbar');
-            if (maBar) maBar.classList.toggle('d-none', intradayView || mode !== 'price');
+            if (maBar) maBar.classList.toggle('d-none', intradayView || !!range.fine || mode !== 'price');
         }
 
         // Build the MA toggle chips once from the INDICATORS config. Stays hidden

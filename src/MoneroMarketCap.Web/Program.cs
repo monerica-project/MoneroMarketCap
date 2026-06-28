@@ -272,10 +272,27 @@ app.MapGet("/api/coin/{coinGeckoId}/chart24h", async (
         .Select(h => new { h.RecordedAt, h.PriceUsd })
         .ToListAsync();
 
-    // No intraday history yet (worker hasn't run since deploy, or coin is brand
-    // new). 204 lets the front end say "collecting…" rather than show a broken
-    // chart — but it must NOT be cached, or a new coin's chart would stay empty
-    // in the browser even after the worker starts producing snapshots.
+    // The 5-minute snapshots only accumulate while the worker runs, so right after
+    // a deploy (or on a brand-new coin) there are few/none. Rather than show
+    // "unavailable", fall back to the hourly ("1h") series for the last 24h — it's
+    // maintained in the background and gives ~24 points. As 5m snapshots build up
+    // they take over automatically (richer line). Threshold: ~1h of 5m data.
+    if (snapshots.Count < 12)
+    {
+        var hourly = await db.CoinPriceHistories
+            .Where(h => h.Coin.CoinGeckoId == coinGeckoId
+                     && h.Interval == "1h"
+                     && h.RecordedAt >= cutoff)
+            .OrderBy(h => h.RecordedAt)
+            .Select(h => new { h.RecordedAt, h.PriceUsd })
+            .ToListAsync();
+        if (hourly.Count > snapshots.Count)
+            snapshots = hourly;
+    }
+
+    // Still nothing — no intraday or hourly history yet. 204 lets the front end say
+    // "collecting…" rather than show a broken chart, and must NOT be cached so the
+    // chart fills in once the worker produces data.
     if (snapshots.Count == 0)
     {
         ctx.Response.Headers["Cache-Control"] = "no-store";
@@ -297,6 +314,102 @@ app.MapGet("/api/coin/{coinGeckoId}/chart24h", async (
 
     var json = System.Text.Json.JsonSerializer.Serialize(result);
     cache.Set(cacheKey, json, TimeSpan.FromMinutes(2));
+    return Results.Content(json, "application/json");
+});
+
+// ── Fine (hourly) chart for short ranges (/api/coin/{id}/chartfine?days=7|30) ──
+// The DB only stores one point per day (1d) plus ~48h of 5-minute snapshots, so
+// 7D/30D would otherwise draw a sparse 7- or 30-point line. We keep a persistent
+// hourly ("1h") series in the DB so the chart is ALWAYS available and consistent —
+// not dependent on reaching CoinGecko at request time. The series is (re)built from
+// CoinGecko's hourly data only when the DB copy is missing or stale (>90 min old);
+// every request thereafter is served from the DB. USD prices are stored once and
+// converted to the requested currency on read using the same per-day FiatRateHistory
+// rates as the daily chart. Returns 204 only when there's no DB data AND CoinGecko
+// is unreachable, so the client can fall back to the daily slice.
+app.MapGet("/api/coin/{coinGeckoId}/chartfine", async (
+    HttpContext ctx,
+    string coinGeckoId,
+    int days,
+    string? currency,
+    IServiceScopeFactory scopeFactory,
+    IFiatRateHistoryService fxHistory,
+    IFiatRateService fxRates,
+    IMemoryCache cache) =>
+{
+    var currencyCode = (currency ?? "USD").Trim().ToUpperInvariant();
+    if (!CurrencyCatalog.IsSupported(currencyCode))
+        currencyCode = "USD";
+
+    // Only the short ranges that benefit from hourly data.
+    var windowDays = days <= 7 ? 7 : 30;
+
+    var cacheKey = $"chartfine_{coinGeckoId}_{currencyCode}_{windowDays}";
+    if (cache.TryGetValue(cacheKey, out string? cached))
+        return Results.Content(cached!, "application/json");
+
+    using var scope = scopeFactory.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    var coin = await db.Coins
+        .Where(c => c.CoinGeckoId == coinGeckoId)
+        .Select(c => new { c.Id })
+        .FirstOrDefaultAsync();
+
+    if (coin is null)
+    {
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        return Results.StatusCode(204);
+    }
+
+    // Served entirely from the DB — the Worker's HourlyHistoryBackfillService keeps
+    // the "1h" series fresh in the background, so this endpoint never calls CoinGecko
+    // and returns instantly. If the worker hasn't populated this coin yet, return 204
+    // so the client falls back to the daily slice until the hourly data arrives.
+    var windowStart = DateTime.UtcNow.AddDays(-windowDays);
+    var rows = await db.CoinPriceHistories
+        .Where(h => h.CoinId == coin.Id && h.Interval == "1h" && h.RecordedAt >= windowStart)
+        .OrderBy(h => h.RecordedAt)
+        .Select(h => new { h.RecordedAt, h.PriceUsd })
+        .ToListAsync();
+
+    if (rows.Count == 0)
+    {
+        // No hourly data and we couldn't fetch any — let the client use the daily slice.
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        return Results.StatusCode(204);
+    }
+
+    var fxCutoff = DateTime.UtcNow.Date.AddDays(-(windowDays + 2));
+    var fxMap = await fxHistory.GetSeriesAsync(currencyCode, fxCutoff, DateTime.UtcNow.Date);
+    var liveRates = await fxRates.GetRatesAsync();
+    var liveFallbackRate = liveRates.TryGetValue(currencyCode, out var lr) && lr > 0 ? lr : 1m;
+
+    var result = rows
+        .Select(r =>
+        {
+            var date = r.RecordedAt.Date;
+            // Same fx lookup as the daily chart: exact day, else walk back 14 days,
+            // else today's live rate. USD short-circuits to an all-1.0 map.
+            if (!fxMap.TryGetValue(date, out var fx))
+            {
+                fx = 0m;
+                for (int back = 1; back <= 14; back++)
+                {
+                    if (fxMap.TryGetValue(date.AddDays(-back), out var prev)) { fx = prev; break; }
+                }
+                if (fx == 0m) fx = liveFallbackRate;
+            }
+            return new double[]
+            {
+                new DateTimeOffset(r.RecordedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                (double)(r.PriceUsd * fx)
+            };
+        })
+        .ToList();
+
+    var json = System.Text.Json.JsonSerializer.Serialize(result);
+    cache.Set(cacheKey, json, TimeSpan.FromMinutes(15));
     return Results.Content(json, "application/json");
 });
 

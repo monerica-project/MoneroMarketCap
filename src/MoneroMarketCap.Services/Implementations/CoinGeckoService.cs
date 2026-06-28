@@ -81,6 +81,35 @@ public class CoinGeckoService : ICoinGeckoService
         }
     }
 
+    public async Task<string?> GetMarketChartHourlyAsync(string coinGeckoId, int days)
+    {
+        try
+        {
+            // No interval param: CoinGecko auto-selects granularity — hourly for
+            // 2–90 day ranges, 5-minute for 1 day. This yields a detailed line
+            // (e.g. ~169 points for 7d, ~721 for 30d) rather than one point/day.
+            days = Math.Clamp(days, 1, 90);
+            var url = $"coins/{coinGeckoId}/market_chart?vs_currency=usd&days={days}";
+            _logger.LogInformation("Fetching hourly chart: {Url}", _http.BaseAddress + url);
+
+            var res = await _http.GetAsync(url);
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync();
+                _logger.LogError("Hourly chart fetch failed {Status}: {Body}", (int)res.StatusCode, body);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+            return doc.RootElement.GetProperty("prices").GetRawText();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GetMarketChartHourlyAsync exception for {Id}", coinGeckoId);
+            return null;
+        }
+    }
+
     public async Task<List<CoinGeckoSearchResult>> SearchCoinsAsync(string query)
     {
         try

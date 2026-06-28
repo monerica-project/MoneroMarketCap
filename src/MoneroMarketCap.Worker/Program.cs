@@ -90,6 +90,10 @@ builder.Services.AddHostedService<FiatRateHistoryWorker>();
 builder.Services.AddSingleton<CoinHistoryBackfillService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CoinHistoryBackfillService>());
 
+// Keeps the hourly ("1h") series fresh for the detailed 7D/30D charts. Runs in the
+// background on a schedule so the web box never has to call CoinGecko at request time.
+builder.Services.AddHostedService<HourlyHistoryBackfillService>();
+
 // Ongoing: reconciles top N, upserts coin rows, upserts today's history row each cycle.
 builder.Services.AddHostedService<CoinPriceUpdateService>();
 
