@@ -417,7 +417,7 @@ app.MapGet("/api/coin/{coinGeckoId}/chartfine", async (
 var _sponsorCache = string.Empty;
 var _sponsorCachedAt = DateTime.MinValue;
 var _sponsorCacheTtl = TimeSpan.FromMinutes(
-    builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 5));
+    builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 60));
 var _sponsorLock = new SemaphoreSlim(1, 1);
 
 // ── Spot price by ticker (/api/price/{symbol}) ───────────────────────────────
@@ -551,7 +551,7 @@ app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
 
 app.MapGet("/api/sponsors", async (HttpContext ctx, IHttpClientFactory httpFactory, CancellationToken cancel) =>
 {
-    ctx.Response.Headers["Cache-Control"] = "public, max-age=300";
+    ctx.Response.Headers["Cache-Control"] = "public, max-age=3600";
 
     if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
     {

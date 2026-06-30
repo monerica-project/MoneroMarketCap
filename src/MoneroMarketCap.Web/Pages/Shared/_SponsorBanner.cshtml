@@ -54,11 +54,17 @@
             sponsorPage = (start + SPONSORS_PER_PAGE >= sponsors.length) ? 0 : sponsorPage + 1;
         }
 
+        function hideBanner() {
+            const b = document.getElementById('sponsor-banner');
+            if (b) { b.style.display = 'none'; }
+        }
+
         async function loadSponsors() {
             try {
                 const res = await fetch('/api/sponsors');
-                if (!res.ok) return;
+                if (!res.ok) { hideBanner(); return; }
                 const data = await res.json();
+                if (!data || data.length === 0) { hideBanner(); return; }
                 sponsors = data.sort((a, b) => {
                     const tDiff = (typeOrder[a.sponsorshipType] ?? 9) - (typeOrder[b.sponsorshipType] ?? 9);
                     if (tDiff !== 0) return tDiff;
@@ -69,8 +75,7 @@
                 if (sponsorTimer) clearInterval(sponsorTimer);
                 sponsorTimer = setInterval(renderSponsors, ROTATE_MS);
             } catch (e) {
-                const loading = document.getElementById('sponsor-loading');
-                if (loading) loading.style.display = 'none';
+                hideBanner();
             }
         }
 

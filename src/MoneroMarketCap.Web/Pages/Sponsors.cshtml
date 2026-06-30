@@ -1,0 +1,31 @@
+@page "/sponsors"
+@{
+    ViewData["Title"] = "Sponsors";
+    ViewData["MetaDescription"] = "MoneroMarketCap's sponsors come from the Monerica directory. See all current sponsors and learn how to become one.";
+}
+
+<h2>Sponsors</h2>
+
+<p>
+    The sponsors featured on MoneroMarketCap come from
+    <a href="https://monerica.com" target="_blank" rel="noopener">Monerica</a>,
+    a curated directory of Monero-accepting merchants, services and resources.
+    Please support the projects that support the Monero ecosystem.
+</p>
+
+<div style="background:var(--xmr-surface);border:1px solid var(--xmr-border);border-radius:10px;padding:1rem 1.25rem;margin:1.25rem 0;">
+    <h3 style="color:var(--xmr-orange);margin-top:0;">Become a sponsor</h3>
+    <p style="margin-bottom:.6rem;">
+        Sponsors pay in Monero (XMR) for placement on Monerica, and a selection of those sponsors is
+        featured here on MoneroMarketCap. To advertise here:
+    </p>
+    <ol style="margin:0 0 .8rem 1.1rem;line-height:1.7;">
+        <li>Get your project listed on <a href="https://monerica.com" target="_blank" rel="noopener">monerica.com</a>.</li>
+        <li>Choose a sponsored listing (main, category or subcategory).</li>
+        <li>Active sponsors appear automatically across Monerica and affiliated sites like this one.</li>
+    </ol>
+    <a class="btn btn-primary" href="https://monerica.com" target="_blank" rel="noopener">Buy a sponsorship on Monerica →</a>
+</div>
+
+<h3 style="color:var(--xmr-orange);">Current sponsors</h3>
+<partial name="Shared/_SponsorList" />

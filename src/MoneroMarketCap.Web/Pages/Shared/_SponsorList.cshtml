@@ -36,15 +36,9 @@
             if (!grid) return;
             try {
                 const res = await fetch('/api/sponsors');
-                if (!res.ok) {
-                    grid.innerHTML = '<div style="color:var(--xmr-text-muted);font-size:0.85rem">No sponsors available.</div>';
-                    return;
-                }
+                if (!res.ok) { hideSponsorBox(); return; }
                 const data = await res.json();
-                if (!data || data.length === 0) {
-                    grid.innerHTML = '<div style="color:var(--xmr-text-muted);font-size:0.85rem">No sponsors available.</div>';
-                    return;
-                }
+                if (!data || data.length === 0) { hideSponsorBox(); return; }
                 const sorted = data.slice().sort((a, b) => {
                     const tDiff = (typeOrder[a.sponsorshipType] ?? 9) - (typeOrder[b.sponsorshipType] ?? 9);
                     if (tDiff !== 0) return tDiff;
@@ -58,8 +52,13 @@
                         </a>
                     `).join('');
             } catch (e) {
-                grid.innerHTML = '<div style="color:var(--xmr-text-muted);font-size:0.85rem">Failed to load sponsors.</div>';
+                hideSponsorBox();
             }
+        }
+
+        function hideSponsorBox() {
+            const sec = document.getElementById('sponsor-list-section');
+            if (sec) { sec.style.display = 'none'; }
         }
 
         loadSponsorList();
