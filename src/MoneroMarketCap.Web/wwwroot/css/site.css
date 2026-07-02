@@ -1272,3 +1272,111 @@ div[style*="border:1px solid green"] {
         color: var(--xmr-orange-light);
         text-decoration: underline;
     }
+
+/* Dark-theme pagination (exchange table pager) — overrides Bootstrap's white/blue */
+.pagination .page-link {
+    background-color: var(--xmr-surface);
+    border-color: var(--xmr-border);
+    color: var(--xmr-text);
+}
+
+    .pagination .page-link:hover {
+        background-color: var(--xmr-black);
+        border-color: var(--xmr-orange);
+        color: var(--xmr-orange-light);
+    }
+
+    .pagination .page-link:focus {
+        box-shadow: 0 0 0 0.2rem rgba(255, 102, 0, 0.25);
+        border-color: var(--xmr-orange);
+        color: var(--xmr-orange-light);
+    }
+
+.pagination .page-item.active .page-link {
+    background-color: var(--xmr-orange);
+    border-color: var(--xmr-orange);
+    color: var(--xmr-black);
+}
+
+.pagination .page-item.disabled .page-link {
+    background-color: var(--xmr-surface);
+    border-color: var(--xmr-border);
+    color: var(--xmr-text-muted);
+}
+
+/* Coin search box + autocomplete dropdown (navbar) */
+.coin-search {
+    position: relative;
+    min-width: 190px;
+}
+
+    .coin-search input {
+        background-color: var(--xmr-surface);
+        border-color: var(--xmr-border);
+        color: var(--xmr-text);
+    }
+
+        .coin-search input::placeholder {
+            color: var(--xmr-text-muted);
+        }
+
+        .coin-search input:focus {
+            background-color: var(--xmr-black);
+            border-color: var(--xmr-orange);
+            color: var(--xmr-text);
+            box-shadow: 0 0 0 0.2rem rgba(255, 102, 0, 0.25);
+        }
+
+.coin-search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 1050;
+    background-color: var(--xmr-surface);
+    border: 1px solid var(--xmr-border);
+    border-radius: 0.375rem;
+    max-height: 340px;
+    overflow-y: auto;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.coin-search-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    cursor: pointer;
+    color: var(--xmr-text);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+    .coin-search-item:hover,
+    .coin-search-item.active {
+        background-color: var(--xmr-black);
+        color: var(--xmr-orange-light);
+    }
+
+    .coin-search-item img {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+    }
+
+.coin-search-sym {
+    font-weight: 600;
+}
+
+.coin-search-name {
+    color: var(--xmr-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.coin-search-empty {
+    padding: 0.5rem 0.6rem;
+    color: var(--xmr-text-muted);
+    font-size: 0.85rem;
+}

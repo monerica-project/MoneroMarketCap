@@ -15,7 +15,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("MoneroMarketCap.Data")));
 
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    // Clean path-based pagination for the coin page's exchange table:
+    // /coins/{symbol}/exchanges/{page}. Page 1 stays the plain /coins/{symbol}.
+    options.Conventions.AddPageRoute("/Coins/CoinDetail", "coins/{symbol}/exchanges/{xp:int}");
+});
 
 builder.Services.AddRouting(options =>
 {
@@ -633,6 +638,57 @@ if (!string.IsNullOrEmpty(onionHost))
         await next();
     });
 }
+
+// Coin search autocomplete: matches by symbol or name, best matches first (exact
+// symbol > symbol prefix > name prefix > contains), market-cap tiebroken, top 10.
+app.MapGet("/api/coins/suggest", async (
+    string? q,
+    HttpContext ctx,
+    IServiceScopeFactory scopeFactory) =>
+{
+    var term = (q ?? string.Empty).Trim();
+    if (term.Length == 0)
+    {
+        return Results.Json(Array.Empty<object>());
+    }
+
+    ctx.Response.Headers["Cache-Control"] = "public, max-age=30";
+
+    using var scope = scopeFactory.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    var like = $"%{term}%";
+    var matches = await db.Coins
+        .Where(c => EF.Functions.ILike(c.Symbol, like) || EF.Functions.ILike(c.Name, like))
+        .OrderByDescending(c => c.IsActive)
+        .ThenBy(c => c.MarketCapRank == 0)
+        .ThenBy(c => c.MarketCapRank)
+        .ThenByDescending(c => c.MarketCapUsd)
+        .Select(c => new { c.Symbol, c.Name, c.ImageUrl })
+        .ToListAsync();
+
+    // Match-quality rank, in memory (the filtered set is small). OrderBy is stable,
+    // so the market-cap ordering above is preserved within each rank tier.
+    int Rank(string sym, string name) =>
+        string.Equals(sym, term, StringComparison.OrdinalIgnoreCase) ? 0
+        : sym.StartsWith(term, StringComparison.OrdinalIgnoreCase) ? 1
+        : name.StartsWith(term, StringComparison.OrdinalIgnoreCase) ? 2
+        : 3;
+
+    var results = matches
+        .OrderBy(c => Rank(c.Symbol, c.Name))
+        .Take(10)
+        .Select(c => new
+        {
+            symbol = c.Symbol,
+            name = c.Name,
+            image = c.ImageUrl,
+            url = $"/coins/{c.Symbol.ToLowerInvariant()}",
+        })
+        .ToList();
+
+    return Results.Json(results);
+});
 
 app.UseHttpsRedirection();
 app.UseRouting();

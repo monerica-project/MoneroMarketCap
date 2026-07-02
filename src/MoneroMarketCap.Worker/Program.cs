@@ -119,7 +119,20 @@ builder.Services.AddHttpClient("changenow")
         }
     });
 builder.Services.AddSingleton<IChangeNowLinkService, ChangeNowLinkService>();
-builder.Services.AddHostedService<ChangeNowResolveWorker>();
+// ChangeNOW link resolution is RETIRED — the per-coin exchange table now comes from
+// SwapRaven (below), which supersedes the single "Trade for Monero" button. This
+// weekly-fetch worker is no longer needed, so it is not registered.
+// builder.Services.AddHostedService<ChangeNowResolveWorker>();
+
+// ── SwapRaven exchange sync (weekly) ──────────────────────────────────────
+// Populates/reconciles the CoinExchanges table from SwapRaven's undocumented
+// /api/{ticker}/exchanges endpoint so every coin page can list all exchanges that
+// support it (with grade/KYC/AML/fees), each linking to the SwapRaven profile page.
+builder.Services.AddHttpClient<ISwapRavenClient, SwapRavenClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddHostedService<SwapRavenExchangeSyncWorker>();
 
 // ── Monero supply (via BTCPay Server's connected XMR daemon) ─────────────
 // MoneroSupplyService reads BtcPay:BaseUrl + BtcPay:ApiKey from configuration

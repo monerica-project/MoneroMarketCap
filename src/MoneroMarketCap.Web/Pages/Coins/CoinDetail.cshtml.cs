@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
+using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Interfaces;
@@ -14,9 +16,18 @@ public class DetailModel : PageModel
     private readonly IFiatRateService _fxRates;
     private readonly IFiatRateHistoryService _fxHistory;
     private readonly IChangeNowLinkService _changeNow;
+    private readonly AppDbContext _db;
 
     public Coin? Coin { get; set; }
     public Coin? Monero { get; set; }
+
+    // Exchanges (from SwapRaven) that support this coin, graded best-first.
+    // Paged: only the current page's slice is loaded; totals drive the pager.
+    public List<CoinExchange> Exchanges { get; set; } = new();
+    public const int ExPageSize = 25;
+    public int ExPage { get; set; } = 1;
+    public int ExTotal { get; set; }
+    public int ExTotalPages => (int)Math.Ceiling(ExTotal / (double)ExPageSize);
 
     // Affiliate link actually rendered by the view. Admin TradeUrl wins; otherwise
     // built from the coin's resolved ChangeNOW ticker + the config template.
@@ -44,21 +55,70 @@ public class DetailModel : PageModel
         ICoinRepository coins,
         IFiatRateService fxRates,
         IFiatRateHistoryService fxHistory,
-        IChangeNowLinkService changeNow)
+        IChangeNowLinkService changeNow,
+        AppDbContext db)
     {
         _coins = coins;
         _fxRates = fxRates;
         _fxHistory = fxHistory;
         _changeNow = changeNow;
+        _db = db;
     }
 
-    public async Task<IActionResult> OnGetAsync(string symbol)
+    /// <summary>Turns an enum-name like "LikelyIfSuspicious" into "Likely if suspicious".</summary>
+    public static string Humanize(string? enumName)
+    {
+        if (string.IsNullOrWhiteSpace(enumName))
+        {
+            return "—";
+        }
+
+        var spaced = System.Text.RegularExpressions.Regex.Replace(enumName, "(?<=[a-z0-9])(?=[A-Z])", " ");
+        return spaced.Length > 1 ? char.ToUpperInvariant(spaced[0]) + spaced.Substring(1).ToLowerInvariant() : spaced;
+    }
+
+    /// <summary>Compact fee display, e.g. "0.4%–0.8%", "1.5%", "Varies", or "—".</summary>
+    public static string FormatFees(CoinExchange e)
+    {
+        if (e.FeeVariesByProvider)
+        {
+            return "Varies";
+        }
+
+        if (e.FeeMinPercent.HasValue && e.FeeMaxPercent.HasValue)
+        {
+            return e.FeeMinPercent.Value == e.FeeMaxPercent.Value
+                ? $"{e.FeeMinPercent.Value:0.##}%"
+                : $"{e.FeeMinPercent.Value:0.##}%–{e.FeeMaxPercent.Value:0.##}%";
+        }
+
+        if (e.FeeMinPercent.HasValue)
+        {
+            return $"{e.FeeMinPercent.Value:0.##}%";
+        }
+
+        return "—";
+    }
+
+    public async Task<IActionResult> OnGetAsync(string symbol, int xp = 1)
     {
         var all = await _coins.GetAllAsync();
         Coin = all.FirstOrDefault(c => c.Symbol.ToUpper() == symbol.ToUpper());
         Monero = all.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
 
         if (Coin == null) return NotFound();
+
+        // Exchanges that support this coin (synced weekly from SwapRaven), graded
+        // best-first, 25 per page.
+        ExTotal = await _db.CoinExchanges.CountAsync(e => e.CoinId == Coin.Id, HttpContext.RequestAborted);
+        ExPage = Math.Clamp(xp, 1, Math.Max(1, ExTotalPages));
+        Exchanges = await _db.CoinExchanges.AsNoTracking()
+            .Where(e => e.CoinId == Coin.Id)
+            .OrderBy(e => e.SortOrder)
+            .ThenBy(e => e.Name)
+            .Skip((ExPage - 1) * ExPageSize)
+            .Take(ExPageSize)
+            .ToListAsync(HttpContext.RequestAborted);
 
         Currency = CurrencyResolver.Resolve(HttpContext);
         var rates = await _fxRates.GetRatesAsync(HttpContext.RequestAborted);

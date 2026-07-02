@@ -2,11 +2,22 @@
 @model MoneroMarketCap.Pages.Coins.DetailModel
 @using MoneroMarketCap.Services.Display
 @using MoneroMarketCap.Web.Helpers
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
-    ViewData["Title"] = Model.Coin?.Symbol + " — " + Model.Coin?.Name;
+    // Consolidate every exchange-pagination view (/coins/{sym}/exchanges/N) onto the
+    // base coin URL so paginated pages aren't indexed as separate/duplicate content.
+    var canonBase = (Configuration["Site:CanonicalBaseUrl"] ?? "https://moneromarketcap.com").TrimEnd('/');
+    ViewData["Canonical"] = $"{canonBase}/coins/{Model.Coin?.Symbol?.ToLowerInvariant()}";
+    var exCount = Model.ExTotal;
+    var exSeoSuffix = exCount > 0
+        ? $" Compare {exCount} exchange{(exCount == 1 ? "" : "s")} that support {Model.Coin?.Symbol} — grades, KYC/AML policy and fees."
+        : string.Empty;
+    ViewData["Title"] = exCount > 0
+        ? $"{Model.Coin?.Symbol} — {Model.Coin?.Name} price & exchanges"
+        : $"{Model.Coin?.Symbol} — {Model.Coin?.Name}";
     ViewData["MetaDescription"] = (Model.Coin?.Symbol?.ToUpperInvariant() == "XMR")
-        ? "Monero (XMR) live price, market cap and charts on MoneroMarketCap — track XMR and value the entire crypto market in Monero."
-        : $"{Model.Coin?.Name} ({Model.Coin?.Symbol}) live price, market cap and charts valued in Monero (XMR). See how {Model.Coin?.Symbol} performs against Monero and convert {Model.Coin?.Symbol} to XMR on MoneroMarketCap.";
+        ? $"Monero (XMR) live price, market cap and charts on MoneroMarketCap — track XMR and value the entire crypto market in Monero.{exSeoSuffix}"
+        : $"{Model.Coin?.Name} ({Model.Coin?.Symbol}) live price, market cap and charts valued in Monero (XMR). See how {Model.Coin?.Symbol} performs against Monero and convert {Model.Coin?.Symbol} to XMR.{exSeoSuffix}";
     ViewBag.SponsorRotateIntervalSeconds = 30;
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var cur = Model.Currency;
@@ -140,17 +151,8 @@
 }
 
 
-@if (!isXmr && !string.IsNullOrEmpty(Model.EffectiveTradeUrl))
-{
-    <div class="mb-4">
-        <a href="@Model.EffectiveTradeUrl"
-           target="_blank"
-           rel="sponsored noopener"
-           class="btn btn-xmr-trade">
-            Trade @coin.Symbol for Monero
-        </a>
-    </div>
-}
+@* Per-coin "Trade for Monero" button retired: the exchange table further down
+   (synced from SwapRaven) now lists every exchange that supports this coin. *@
 
 
 <!-- Converter -->
@@ -417,6 +419,75 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+}
+
+@if (Model.ExTotal > 0)
+{
+    var exSlug = coin.Symbol.ToLowerInvariant();
+    var exFrom = (Model.ExPage - 1) * MoneroMarketCap.Pages.Coins.DetailModel.ExPageSize + 1;
+    var exTo = exFrom + Model.Exchanges.Count - 1;
+    // Clean path-based pagination: page 1 = /coins/{symbol}; page N = /coins/{symbol}/exchanges/N.
+    Func<int, string> exUrl = p => (p <= 1 ? $"/coins/{exSlug}" : $"/coins/{exSlug}/exchanges/{p}") + "#exchanges";
+    <div id="exchanges" class="card mb-4">
+        <div class="card-header">
+            <h2 class="h5 mb-0">Where to buy &amp; swap @coin.Name (@coin.Symbol)</h2>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                @Model.ExTotal exchange@(Model.ExTotal == 1 ? "" : "s") support @coin.Name (@coin.Symbol) —
+                compare each one's grade, KYC and AML policy and fees, then swap @coin.Symbol on
+                <a href="https://swapraven.com/" target="_blank" rel="noopener">SwapRaven</a>.
+                Click an exchange name for its full profile.
+            </p>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 stats-table">
+                    <thead>
+                        <tr>
+                            <th>Exchange</th>
+                            <th>Grade</th>
+                            <th>KYC</th>
+                            <th>AML</th>
+                            <th class="text-end">Fees</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ex in Model.Exchanges)
+                        {
+                            <tr>
+                                <td><a href="@ex.Url" target="_blank" rel="sponsored noopener">@ex.Name</a></td>
+                                <td class="mono">@(string.IsNullOrEmpty(ex.Grade) ? "—" : ex.Grade)</td>
+                                <td>@MoneroMarketCap.Pages.Coins.DetailModel.Humanize(ex.Kyc)</td>
+                                <td>@MoneroMarketCap.Pages.Coins.DetailModel.Humanize(ex.Aml)</td>
+                                <td class="mono text-end">@MoneroMarketCap.Pages.Coins.DetailModel.FormatFees(ex)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Model.ExTotalPages > 1)
+            {
+                <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+                    <span class="text-muted small">Showing @exFrom–@exTo of @Model.ExTotal</span>
+                    <nav aria-label="Exchange pages">
+                        <ul class="pagination pagination-sm mb-0 flex-wrap">
+                            <li class="page-item @(Model.ExPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" href="@exUrl(Model.ExPage - 1)">Prev</a>
+                            </li>
+                            @for (var p = 1; p <= Model.ExTotalPages; p++)
+                            {
+                                <li class="page-item @(p == Model.ExPage ? "active" : "")">
+                                    <a class="page-link" href="@exUrl(p)">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(Model.ExPage >= Model.ExTotalPages ? "disabled" : "")">
+                                <a class="page-link" href="@exUrl(Model.ExPage + 1)">Next</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
         </div>
     </div>
 }
