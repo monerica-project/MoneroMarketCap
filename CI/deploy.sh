@@ -162,12 +162,14 @@ cat <<EOF
 server {
     listen 80;
     server_name $DOMAIN www.$DOMAIN;
-    return 301 https://\$host\$request_uri;
+    # www and apex both redirect to the apex host over https (www never served).
+    return 301 https://$DOMAIN\$request_uri;
 }
 
 server {
     listen 443 ssl;
     server_name $DOMAIN www.$DOMAIN;
+    if (\$host = www.$DOMAIN) { return 301 https://$DOMAIN\$request_uri; }
     ssl_certificate /etc/nginx/certs/$DOMAIN.crt;
     ssl_certificate_key /etc/nginx/certs/$DOMAIN.key;
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -200,12 +202,14 @@ cat <<EOF
 server {
     listen 80;
     server_name $DOMAIN www.$DOMAIN;
-    return 301 https://\$host\$request_uri;
+    # www and apex both redirect to the apex host over https (www never served).
+    return 301 https://$DOMAIN\$request_uri;
 }
 
 server {
     listen 443 ssl;
     server_name $DOMAIN www.$DOMAIN;
+    if (\$host = www.$DOMAIN) { return 301 https://$DOMAIN\$request_uri; }
     ssl_certificate /etc/nginx/certs/$DOMAIN.crt;
     ssl_certificate_key /etc/nginx/certs/$DOMAIN.key;
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -607,7 +611,7 @@ echo 'Stopping docker nginx...'
 docker stop nginx
 sleep 2
 echo 'Getting cert...'
-certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN
+certbot certonly --standalone -d $DOMAIN -d www.$DOMAIN --expand --non-interactive --agree-tos -m admin@$DOMAIN
 echo 'Starting docker nginx...'
 docker start nginx
 sleep 2

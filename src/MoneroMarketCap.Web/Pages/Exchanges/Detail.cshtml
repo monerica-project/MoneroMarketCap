@@ -1,0 +1,129 @@
+@page "/exchanges/{slug}"
+@model MoneroMarketCap.Pages.Exchanges.DetailModel
+@{
+    var ex = Model.Exchange;
+    ViewData["Title"] = $"{ex.Name} — exchange profile";
+    ViewData["Description"] = $"{ex.Name}: the coins it supports, grade, KYC/AML posture, fees and contact info. {Model.CoinTotal} coins.";
+    string Humanize(string? s) => MoneroMarketCap.Pages.Coins.DetailModel.Humanize(s);
+    Func<int, string> coinUrl = p => (p <= 1 ? $"/exchanges/{ex.Slug}" : $"/exchanges/{ex.Slug}?cp={p}") + "#coins";
+}
+
+<p class="mb-2"><a asp-page="/Exchanges/Index" class="btn btn-secondary btn-sm">← All exchanges</a></p>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+    <div>
+        <h1 class="h4 mb-1">@ex.Name</h1>
+        <div class="text-muted small">
+            @(string.IsNullOrEmpty(ex.Kind) ? "Exchange" : ex.Kind)
+            @if (!string.IsNullOrEmpty(ex.Grade)) { <span>· Grade <span class="mono">@ex.Grade</span></span> }
+            @if (!string.IsNullOrEmpty(ex.CountryCode)) { <span>· @ex.CountryCode</span> }
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Model.GoUrl))
+    {
+        <a class="btn btn-primary" href="@Model.GoUrl" target="_blank"
+           rel="@(Model.GoIsAffiliate ? "sponsored noopener" : "noopener")">Go to @ex.Name →</a>
+    }
+</div>
+
+@if (!string.IsNullOrWhiteSpace(ex.Description))
+{
+    <p class="mb-3">@ex.Description</p>
+}
+
+<div class="card mb-4">
+    <div class="card-header"><h2 class="h6 mb-0">Details</h2></div>
+    <div class="card-body p-0">
+        <table class="table table-sm mb-0 stats-table">
+            <tbody>
+                <tr><th>KYC</th><td>@Humanize(ex.Kyc)</td></tr>
+                <tr><th>AML policy</th><td>@Humanize(ex.Aml)</td></tr>
+                <tr><th>Fees</th><td class="mono">@MoneroMarketCap.Pages.Coins.DetailModel.FormatFees(ex)</td></tr>
+                @if (ex.ProcessingTimeMinutes is int mins)
+                {
+                    <tr><th>Typical speed</th><td>@mins min</td></tr>
+                }
+                <tr>
+                    <th>Website</th>
+                    <td><a href="@(Model.GoUrl.Length > 0 ? Model.GoUrl : ex.WebsiteUrl)" target="_blank"
+                           rel="@(Model.GoIsAffiliate ? "sponsored noopener" : "noopener")">@ex.WebsiteUrl</a></td>
+                </tr>
+                @if (!string.IsNullOrWhiteSpace(ex.TorUrl))
+                {
+                    <tr><th>Tor</th><td class="mono text-break">@ex.TorUrl</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (ex.Contacts.Any())
+{
+    <div class="card mb-4">
+        <div class="card-header"><h2 class="h6 mb-0">Contact</h2></div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0 stats-table">
+                <tbody>
+                    @foreach (var c in ex.Contacts.OrderBy(c => c.Type))
+                    {
+                        var href = MoneroMarketCap.Pages.Exchanges.DetailModel.ContactHref(c);
+                        <tr>
+                            <th>@(string.IsNullOrEmpty(c.Label) ? c.Type : c.Label)</th>
+                            <td class="text-break">
+                                @if (href is not null)
+                                {
+                                    <a href="@href" rel="noopener nofollow" target="_blank">@c.Value</a>
+                                }
+                                else
+                                {
+                                    <span class="mono">@c.Value</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div id="coins" class="card mb-4">
+    <div class="card-header">
+        <h2 class="h6 mb-0">Coins @ex.Name supports (@Model.CoinTotal)</h2>
+    </div>
+    <div class="card-body">
+        @if (Model.CoinTotal == 0)
+        {
+            <p class="text-muted small mb-0">No coins recorded for this exchange yet.</p>
+        }
+        else
+        {
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var c in Model.Coins)
+                {
+                    <a class="badge bg-secondary text-decoration-none" href="/coins/@c.Symbol.ToLower()" title="@c.Name">@c.Symbol</a>
+                }
+            </div>
+
+            @if (Model.CoinTotalPages > 1)
+            {
+                <nav aria-label="Coin pages" class="mt-3">
+                    <ul class="pagination pagination-sm mb-0 flex-wrap">
+                        <li class="page-item @(Model.CoinPage <= 1 ? "disabled" : "")">
+                            <a class="page-link" href="@coinUrl(Model.CoinPage - 1)">Prev</a>
+                        </li>
+                        @for (var p = 1; p <= Model.CoinTotalPages; p++)
+                        {
+                            <li class="page-item @(p == Model.CoinPage ? "active" : "")">
+                                <a class="page-link" href="@coinUrl(p)">@p</a>
+                            </li>
+                        }
+                        <li class="page-item @(Model.CoinPage >= Model.CoinTotalPages ? "disabled" : "")">
+                            <a class="page-link" href="@coinUrl(Model.CoinPage + 1)">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        }
+    </div>
+</div>

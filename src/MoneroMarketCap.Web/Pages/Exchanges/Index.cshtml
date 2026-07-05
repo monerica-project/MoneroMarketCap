@@ -1,0 +1,64 @@
+@page "/exchanges"
+@model MoneroMarketCap.Pages.Exchanges.IndexModel
+@{
+    ViewData["Title"] = "Exchanges";
+    ViewData["Description"] = "Every exchange where you can buy and swap crypto — with grades, KYC/AML posture, fees, and the coins each one supports.";
+    Func<int, string> pageUrl = p => p <= 1 ? "/exchanges" : $"/exchanges?p={p}";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h1 class="h4 mb-0">Exchanges</h1>
+    <span class="text-muted small">@Model.Total exchange@(Model.Total == 1 ? "" : "s")</span>
+</div>
+<p class="text-muted small mb-3">
+    Every exchange we track — click one for its full profile: the coins it supports, its grade,
+    KYC/AML posture, fees, contact channels, and a link straight to the exchange.
+</p>
+
+<div class="card mb-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 stats-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th>Type</th>
+                        <th>Grade</th>
+                        <th class="text-end">Coins</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in Model.Rows)
+                    {
+                        <tr>
+                            <td><a href="/exchanges/@e.Slug">@e.Name</a></td>
+                            <td class="text-muted">@(string.IsNullOrEmpty(e.Kind) ? "—" : e.Kind)</td>
+                            <td class="mono">@(string.IsNullOrEmpty(e.Grade) ? "—" : e.Grade)</td>
+                            <td class="text-end">@e.CoinCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if (Model.TotalPages > 1)
+{
+    <nav aria-label="Exchange pages">
+        <ul class="pagination pagination-sm flex-wrap">
+            <li class="page-item @(Model.PageNum <= 1 ? "disabled" : "")">
+                <a class="page-link" href="@pageUrl(Model.PageNum - 1)">Prev</a>
+            </li>
+            @for (var p = 1; p <= Model.TotalPages; p++)
+            {
+                <li class="page-item @(p == Model.PageNum ? "active" : "")">
+                    <a class="page-link" href="@pageUrl(p)">@p</a>
+                </li>
+            }
+            <li class="page-item @(Model.PageNum >= Model.TotalPages ? "disabled" : "")">
+                <a class="page-link" href="@pageUrl(Model.PageNum + 1)">Next</a>
+            </li>
+        </ul>
+    </nav>
+}

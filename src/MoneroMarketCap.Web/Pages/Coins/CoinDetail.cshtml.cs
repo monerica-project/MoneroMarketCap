@@ -21,9 +21,9 @@ public class DetailModel : PageModel
     public Coin? Coin { get; set; }
     public Coin? Monero { get; set; }
 
-    // Exchanges (from SwapRaven) that support this coin, graded best-first.
-    // Paged: only the current page's slice is loaded; totals drive the pager.
-    public List<CoinExchange> Exchanges { get; set; } = new();
+    // Exchanges that support this coin, graded best-first. Paged: only the current
+    // page's slice is loaded; totals drive the pager.
+    public List<Exchange> Exchanges { get; set; } = new();
     public const int ExPageSize = 25;
     public int ExPage { get; set; } = 1;
     public int ExTotal { get; set; }
@@ -78,7 +78,7 @@ public class DetailModel : PageModel
     }
 
     /// <summary>Compact fee display, e.g. "0.4%–0.8%", "1.5%", "Varies", or "—".</summary>
-    public static string FormatFees(CoinExchange e)
+    public static string FormatFees(Exchange e)
     {
         if (e.FeeVariesByProvider)
         {
@@ -110,12 +110,12 @@ public class DetailModel : PageModel
 
         // Exchanges that support this coin (synced weekly from SwapRaven), graded
         // best-first, 25 per page.
-        ExTotal = await _db.CoinExchanges.CountAsync(e => e.CoinId == Coin.Id, HttpContext.RequestAborted);
+        ExTotal = await _db.ExchangeCoins.CountAsync(ec => ec.CoinId == Coin.Id, HttpContext.RequestAborted);
         ExPage = Math.Clamp(xp, 1, Math.Max(1, ExTotalPages));
-        Exchanges = await _db.CoinExchanges.AsNoTracking()
-            .Where(e => e.CoinId == Coin.Id)
-            .OrderBy(e => e.SortOrder)
-            .ThenBy(e => e.Name)
+        Exchanges = await _db.ExchangeCoins.AsNoTracking()
+            .Where(ec => ec.CoinId == Coin.Id)
+            .Select(ec => ec.Exchange!)
+            .OrderBy(e => e.Name)
             .Skip((ExPage - 1) * ExPageSize)
             .Take(ExPageSize)
             .ToListAsync(HttpContext.RequestAborted);

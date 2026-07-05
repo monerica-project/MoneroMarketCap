@@ -437,8 +437,7 @@
         <div class="card-body">
             <p class="text-muted small mb-3">
                 @Model.ExTotal exchange@(Model.ExTotal == 1 ? "" : "s") support @coin.Name (@coin.Symbol) —
-                compare each one's grade, KYC and AML policy and fees, then swap @coin.Symbol on
-                <a href="https://swapraven.com/" target="_blank" rel="noopener">SwapRaven</a>.
+                compare each one's grade, KYC and AML policy and fees.
                 Click an exchange name for its full profile.
             </p>
             <div class="table-responsive">
@@ -456,7 +455,7 @@
                         @foreach (var ex in Model.Exchanges)
                         {
                             <tr>
-                                <td><a href="@ex.Url" target="_blank" rel="sponsored noopener">@ex.Name</a></td>
+                                <td><a href="/exchanges/@ex.Slug">@ex.Name</a></td>
                                 <td class="mono">@(string.IsNullOrEmpty(ex.Grade) ? "—" : ex.Grade)</td>
                                 <td>@MoneroMarketCap.Pages.Coins.DetailModel.Humanize(ex.Kyc)</td>
                                 <td>@MoneroMarketCap.Pages.Coins.DetailModel.Humanize(ex.Aml)</td>

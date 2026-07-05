@@ -134,6 +134,29 @@ builder.Services.AddHttpClient<ISwapRavenClient, SwapRavenClient>(client =>
 });
 builder.Services.AddHostedService<SwapRavenExchangeSyncWorker>();
 
+// ── CEX exchange sync (Kraken + Coinbase) ─────────────────────────────────
+// The two centralized exchanges we hold affiliate links for. Their supported-coin
+// lists come from each exchange's PUBLIC coin API; we link only coins MMC already
+// tracks. Managed separately (Source = "Cex") so the SwapRaven sync never removes them.
+builder.Services.AddHttpClient("cex", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("MoneroMarketCap/1.0");
+})
+.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+    ConnectTimeout = TimeSpan.FromSeconds(15),
+    ConnectCallback = async (context, cancellationToken) =>
+    {
+        // Force IPv4 — this VPS's IPv6 path is broken (same trick as the other clients).
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        await socket.ConnectAsync(context.DnsEndPoint.Host, context.DnsEndPoint.Port, cancellationToken);
+        return new NetworkStream(socket, ownsSocket: true);
+    },
+});
+builder.Services.AddHostedService<CexExchangeSyncWorker>();
+
 // ── Monero supply (via BTCPay Server's connected XMR daemon) ─────────────
 // MoneroSupplyService reads BtcPay:BaseUrl + BtcPay:ApiKey from configuration
 // internally; this just wires up the typed HttpClient and timeout.
