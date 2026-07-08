@@ -11,6 +11,21 @@
     var rate = Model.RatePerUsd;
 }
 
+@* Mobile only: a tiny one-line XMR price + market cap ABOVE the sponsors, so phone users
+   get the key numbers without scrolling past the 5 sponsor cards. Hidden on ≥md (the full
+   stat bar below is fine there). *@
+@if (Model.Monero != null)
+{
+    var mini = Model.Monero;
+    <div class="xmr-mini-bar d-md-none" role="status" aria-label="Monero price and market cap">
+        <span class="mini-item">XMR&nbsp;<strong>@MoneyFormatter.FormatPrice(mini.PriceUsd, cur, rate)</strong>
+            <span class="@(mini.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">@(mini.PriceChangePercent24h >= 0 ? "▲" : "▼")@Math.Abs(mini.PriceChangePercent24h).ToString("N1")%</span>
+        </span>
+        <span class="mini-sep">·</span>
+        <span class="mini-item">MCap&nbsp;<strong>@MoneyFormatter.FormatLarge(MoneroSupplyDisplay.EffectiveMarketCapUsd(mini), cur, rate)</strong></span>
+    </div>
+}
+
 <partial name="_SponsorBanner" />
 
 @if (Model.Monero != null)

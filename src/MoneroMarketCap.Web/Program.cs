@@ -556,7 +556,7 @@ app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
 
 app.MapGet("/api/sponsors", async (HttpContext ctx, IHttpClientFactory httpFactory, CancellationToken cancel) =>
 {
-    ctx.Response.Headers["Cache-Control"] = "public, max-age=3600";
+    ctx.Response.Headers["Cache-Control"] = "public, max-age=1200";
 
     if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
     {

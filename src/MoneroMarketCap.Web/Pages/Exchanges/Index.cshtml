@@ -4,7 +4,10 @@
     ViewData["Title"] = "Exchanges";
     ViewData["Description"] = "Every exchange where you can buy and swap crypto — with grades, KYC/AML posture, fees, and the coins each one supports.";
     Func<int, string> pageUrl = p => p <= 1 ? "/exchanges" : $"/exchanges?p={p}";
+    ViewBag.SponsorRotateIntervalSeconds = 30;
 }
+
+<partial name="_SponsorBanner" />
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h1 class="h4 mb-0">Exchanges</h1>

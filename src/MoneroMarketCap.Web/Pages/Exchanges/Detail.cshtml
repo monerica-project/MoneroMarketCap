@@ -6,7 +6,10 @@
     ViewData["Description"] = $"{ex.Name}: the coins it supports, grade, KYC/AML posture, fees and contact info. {Model.CoinTotal} coins.";
     string Humanize(string? s) => MoneroMarketCap.Pages.Coins.DetailModel.Humanize(s);
     Func<int, string> coinUrl = p => (p <= 1 ? $"/exchanges/{ex.Slug}" : $"/exchanges/{ex.Slug}?cp={p}") + "#coins";
+    ViewBag.SponsorRotateIntervalSeconds = 30;
 }
+
+<partial name="_SponsorBanner" />
 
 <p class="mb-2"><a asp-page="/Exchanges/Index" class="btn btn-secondary btn-sm">← All exchanges</a></p>
 

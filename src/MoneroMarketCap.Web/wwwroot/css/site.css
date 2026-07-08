@@ -766,8 +766,8 @@ div[style*="border:1px solid green"] {
     border: 1px solid var(--xmr-border);
     border-radius: 5px;
     padding: 0.4rem 0.65rem;
-    flex: 1;
-    min-width: 180px;
+    flex: 1 1 0;
+    min-width: 160px;
     max-width: 320px;
     transition: border-color 0.15s ease;
 }
@@ -1380,3 +1380,22 @@ div[style*="border:1px solid green"] {
     color: var(--xmr-text-muted);
     font-size: 0.85rem;
 }
+
+/* Mobile-only compact XMR price/marketcap line, shown above the sponsors so phone
+   users see the key numbers without scrolling past the sponsor cards. */
+.xmr-mini-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: .4rem;
+    font-size: .78rem;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow-x: auto;
+    padding: .4rem .5rem;
+    margin-bottom: .5rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .2);
+}
+.xmr-mini-bar .mini-item strong { font-weight: 600; }
+.xmr-mini-bar .mini-sep { opacity: .45; }
