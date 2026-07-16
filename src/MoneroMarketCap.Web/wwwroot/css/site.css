@@ -16,6 +16,16 @@
     box-sizing: border-box;
 }
 
+/* Text selection: black text on an orange highlight. */
+::selection {
+    background: var(--xmr-orange);
+    color: #000;
+}
+::-moz-selection {
+    background: var(--xmr-orange);
+    color: #000;
+}
+
 html {
     height: 100%;
     -webkit-text-size-adjust: 100%;

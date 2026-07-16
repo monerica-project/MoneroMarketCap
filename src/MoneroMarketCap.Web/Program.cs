@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Constants;
+using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Implementations;
 using MoneroMarketCap.Services.Interfaces;
@@ -513,46 +514,151 @@ app.MapGet("/api/price/{symbol}", async (
     return result;
 });
 
-// ── Sitemap (/sitemap.xml) ───────────────────────────────────────────────────
-app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
+// ── Sitemaps (index + child sitemaps: pages, exchanges, coins) ───────────────
+// /sitemap.xml is a sitemap *index* pointing at child sitemaps, so the directory
+// can grow without hitting the 50,000-URL / 50MB per-file limits. Coin detail
+// pages are chunked across /sitemap-coins-{n}.xml; exchanges and static/evergreen
+// pages get their own files.
+const string sitemapBaseUrl = "https://moneromarketcap.com";
+const int sitemapCoinChunk = 20000;
+
+// Ordered, de-duplicated coin slugs (highest market cap first) — one URL per symbol.
+static List<string> SitemapCoinSlugs(IReadOnlyList<Coin> all)
 {
-    const string baseUrl = "https://moneromarketcap.com";
-    const int topCoinCount = 100;
-
-    var all = await coins.GetAllAsync();
-    var topCoins = all
-        .Where(c => !string.IsNullOrWhiteSpace(c.Symbol) && c.MarketCapUsd > 0)
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var slugs = new List<string>();
+    foreach (var c in all
+        .Where(c => c.IsActive && !string.IsNullOrWhiteSpace(c.Symbol))
         .OrderByDescending(c => c.MarketCapUsd)
-        .Take(topCoinCount)
-        .ToList();
+        .ThenBy(c => c.Symbol, StringComparer.OrdinalIgnoreCase))
+    {
+        var slug = c.Symbol.Trim().ToLowerInvariant();
+        if (seen.Add(slug))
+        {
+            slugs.Add(slug);
+        }
+    }
 
-    var lastMod = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    return slugs;
+}
+
+static string SitemapXmlEscape(string s) => s
+    .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
+    .Replace("\"", "&quot;").Replace("'", "&apos;");
+
+static string BuildUrlSet(IEnumerable<(string Loc, string LastMod, string ChangeFreq, string Priority)> urls)
+{
     var sb = new System.Text.StringBuilder();
-
     sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
     sb.AppendLine("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
-
-    sb.AppendLine("  <url>");
-    sb.AppendLine($"    <loc>{baseUrl}/</loc>");
-    sb.AppendLine($"    <lastmod>{lastMod}</lastmod>");
-    sb.AppendLine("    <changefreq>hourly</changefreq>");
-    sb.AppendLine("    <priority>1.0</priority>");
-    sb.AppendLine("  </url>");
-
-    foreach (var coin in topCoins)
+    foreach (var (loc, lastMod, changeFreq, priority) in urls)
     {
-        var slug = coin.Symbol.Trim().ToLowerInvariant();
         sb.AppendLine("  <url>");
-        sb.AppendLine($"    <loc>{baseUrl}/coins/{slug}</loc>");
+        sb.AppendLine($"    <loc>{loc}</loc>");
         sb.AppendLine($"    <lastmod>{lastMod}</lastmod>");
-        sb.AppendLine("    <changefreq>hourly</changefreq>");
-        sb.AppendLine("    <priority>0.8</priority>");
+        sb.AppendLine($"    <changefreq>{changeFreq}</changefreq>");
+        sb.AppendLine($"    <priority>{priority}</priority>");
         sb.AppendLine("  </url>");
     }
 
     sb.AppendLine("</urlset>");
+    return sb.ToString();
+}
+
+// Sitemap index
+app.MapGet("/sitemap.xml", async (ICoinRepository coins) =>
+{
+    var all = await coins.GetAllAsync();
+    var coinCount = SitemapCoinSlugs(all).Count;
+    var coinPages = Math.Max(1, (int)Math.Ceiling(coinCount / (double)sitemapCoinChunk));
+    var lastMod = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    sb.AppendLine("<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
+
+    void Child(string path)
+    {
+        sb.AppendLine("  <sitemap>");
+        sb.AppendLine($"    <loc>{sitemapBaseUrl}{path}</loc>");
+        sb.AppendLine($"    <lastmod>{lastMod}</lastmod>");
+        sb.AppendLine("  </sitemap>");
+    }
+
+    Child("/sitemap-pages.xml");
+    Child("/sitemap-exchanges.xml");
+    for (var p = 1; p <= coinPages; p++)
+    {
+        Child($"/sitemap-coins-{p}.xml");
+    }
+
+    sb.AppendLine("</sitemapindex>");
     return Results.Content(sb.ToString(), "application/xml");
 });
+
+// Static / evergreen pages
+app.MapGet("/sitemap-pages.xml", () =>
+{
+    var lastMod = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    var pages = new (string Path, string ChangeFreq, string Priority)[]
+    {
+        ("/", "hourly", "1.0"),
+        ("/coins", "hourly", "0.8"),
+        ("/exchanges", "daily", "0.9"),
+        ("/vs-monero", "daily", "0.9"),
+        ("/network", "daily", "0.7"),
+        ("/sponsors", "weekly", "0.5"),
+        ("/about", "monthly", "0.4"),
+        ("/contact", "monthly", "0.3"),
+        ("/privacy", "yearly", "0.2"),
+    };
+
+    var urls = pages.Select(p => ($"{sitemapBaseUrl}{p.Path}", lastMod, p.ChangeFreq, p.Priority));
+    return Results.Content(BuildUrlSet(urls), "application/xml");
+});
+
+// All exchange detail pages
+app.MapGet("/sitemap-exchanges.xml", async (AppDbContext db) =>
+{
+    var exchanges = await db.Exchanges.AsNoTracking()
+        .Where(e => e.Slug != "")
+        .OrderBy(e => e.SortOrder).ThenBy(e => e.Name)
+        .Select(e => new { e.Slug, e.UpdatedAt })
+        .ToListAsync();
+
+    var urls = exchanges.Select(e => (
+        $"{sitemapBaseUrl}/exchanges/{SitemapXmlEscape(e.Slug)}",
+        e.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+        "weekly",
+        "0.6"));
+
+    return Results.Content(BuildUrlSet(urls), "application/xml");
+});
+
+// Coin detail pages (chunked)
+app.MapGet("/sitemap-coins-{page:int}.xml", async (int page, ICoinRepository coins) =>
+{
+    if (page < 1)
+    {
+        return Results.NotFound();
+    }
+
+    var all = await coins.GetAllAsync();
+    var chunk = SitemapCoinSlugs(all).Skip((page - 1) * sitemapCoinChunk).Take(sitemapCoinChunk).ToList();
+    if (chunk.Count == 0)
+    {
+        return Results.NotFound();
+    }
+
+    var lastMod = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    var urls = chunk.Select(s => ($"{sitemapBaseUrl}/coins/{SitemapXmlEscape(s)}", lastMod, "hourly", "0.8"));
+    return Results.Content(BuildUrlSet(urls), "application/xml");
+});
+
+// robots.txt — point crawlers at the sitemap index
+app.MapGet("/robots.txt", () => Results.Text(
+    "User-agent: *\nAllow: /\n\nSitemap: https://moneromarketcap.com/sitemap.xml\n",
+    "text/plain"));
 
 app.MapGet("/api/sponsors", async (HttpContext ctx, IHttpClientFactory httpFactory, CancellationToken cancel) =>
 {
