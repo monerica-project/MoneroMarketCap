@@ -104,7 +104,7 @@
             <div class="xmr-stat xmr-stat--med">
                 <span class="stat-label">vs XMR (7d)</span>
                 <div class="vs-xmr-row">
-                    <a href="/coins/@bestVsXmr.Coin.Symbol.ToLower()" class="vs-xmr-link">
+                    <a href="/coins/@CoinRoute.Key(bestVsXmr.Coin)" class="vs-xmr-link">
                         <div class="vs-xmr-body">
                             <span class="vs-xmr-label">Best</span>
                             <div class="vs-xmr-value" id="vs-xmr-best">
@@ -119,7 +119,7 @@
                             </div>
                         </div>
                     </a>
-                    <a href="/coins/@worstVsXmr.Coin.Symbol.ToLower()" class="vs-xmr-link">
+                    <a href="/coins/@CoinRoute.Key(worstVsXmr.Coin)" class="vs-xmr-link">
                         <div class="vs-xmr-body">
                             <span class="vs-xmr-label">Worst</span>
                             <div class="vs-xmr-value" id="vs-xmr-worst">
@@ -215,12 +215,12 @@ else
                             <div class="coin-name-cell">
                                 @if (!string.IsNullOrEmpty(coin.ImageUrl))
                                 {
-                                    <a href="/coins/@coin.Symbol.ToLower()">
+                                    <a href="/coins/@CoinRoute.Key(coin)">
                                         <img src="@coin.ImageUrl" width="20" height="20" class="coin-icon" />
                                     </a>
                                 }
-                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-symbol coin-link">@coin.Symbol</a>
-                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-name coin-name-link d-none d-lg-inline">@coin.Name</a>
+                                <a href="/coins/@CoinRoute.Key(coin)" class="coin-symbol coin-link">@coin.Symbol</a>
+                                <a href="/coins/@CoinRoute.Key(coin)" class="coin-name coin-name-link d-none d-lg-inline">@coin.Name</a>
                                 @if (isXmr)
                                 {
                                     <span class="xmr-badge">base</span>

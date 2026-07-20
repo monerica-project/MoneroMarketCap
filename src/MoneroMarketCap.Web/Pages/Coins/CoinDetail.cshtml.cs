@@ -103,10 +103,27 @@ public class DetailModel : PageModel
     public async Task<IActionResult> OnGetAsync(string symbol, int xp = 1)
     {
         var all = await _coins.GetAllAsync();
-        Coin = all.FirstOrDefault(c => c.Symbol.ToUpper() == symbol.ToUpper());
+        var key = (symbol ?? string.Empty).Trim();
+
+        // Resolve by ticker first, then by CoinGecko id so the URL-safe slug
+        // (used for coins with non-ASCII tickers, e.g. /coins/bianrensheng) also works.
+        Coin = all.FirstOrDefault(c => c.Symbol.ToUpper() == key.ToUpper())
+            ?? all.FirstOrDefault(c => !string.IsNullOrEmpty(c.CoinGeckoId)
+                                       && c.CoinGeckoId!.ToLowerInvariant() == key.ToLowerInvariant());
         Monero = all.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
 
         if (Coin == null) return NotFound();
+
+        // Canonicalize to the URL-safe route key. This redirects a non-ASCII ticker
+        // URL (e.g. /coins/币安人生) to its clean slug (/coins/bianrensheng), which also
+        // avoids the non-ASCII request path that otherwise breaks response headers.
+        var canonicalKey = CoinRoute.Key(Coin);
+        if (!string.Equals(key, canonicalKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return RedirectPermanent(xp > 1
+                ? $"/coins/{canonicalKey}/exchanges/{xp}"
+                : $"/coins/{canonicalKey}");
+        }
 
         // Exchanges that support this coin (synced weekly from SwapRaven), graded
         // best-first, 25 per page.

@@ -24,7 +24,7 @@ public class DetailModel : PageModel
     public int CoinTotalPages => (int)Math.Ceiling(CoinTotal / (double)CoinPageSize);
     public List<CoinRow> Coins { get; set; } = new();
 
-    public record CoinRow(string Symbol, string Name);
+    public record CoinRow(string Symbol, string Name, string? CoinGeckoId);
 
     public async Task<IActionResult> OnGetAsync(string slug, int cp = 1)
     {
@@ -48,7 +48,7 @@ public class DetailModel : PageModel
             .OrderBy(c => c.Symbol)
             .Skip((CoinPage - 1) * CoinPageSize)
             .Take(CoinPageSize)
-            .Select(c => new CoinRow(c.Symbol, c.Name))
+            .Select(c => new CoinRow(c.Symbol, c.Name, c.CoinGeckoId))
             .ToListAsync(HttpContext.RequestAborted);
 
         return Page();

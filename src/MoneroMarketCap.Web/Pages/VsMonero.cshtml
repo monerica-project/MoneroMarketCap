@@ -126,12 +126,12 @@ else
                             <div class="coin-name-cell">
                                 @if (!string.IsNullOrEmpty(coin.ImageUrl))
                                 {
-                                    <a href="/coins/@coin.Symbol.ToLower()">
+                                    <a href="/coins/@CoinRoute.Key(coin)">
                                         <img src="@coin.ImageUrl" width="20" height="20" class="coin-icon" alt="" />
                                     </a>
                                 }
-                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-symbol coin-link">@coin.Symbol</a>
-                                <a href="/coins/@coin.Symbol.ToLower()" class="coin-name coin-name-link d-none d-lg-inline">@coin.Name</a>
+                                <a href="/coins/@CoinRoute.Key(coin)" class="coin-symbol coin-link">@coin.Symbol</a>
+                                <a href="/coins/@CoinRoute.Key(coin)" class="coin-name coin-name-link d-none d-lg-inline">@coin.Name</a>
                             </div>
                         </td>
                         <td class="text-end mono xmr-val">

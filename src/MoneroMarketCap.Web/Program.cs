@@ -532,7 +532,7 @@ static List<string> SitemapCoinSlugs(IReadOnlyList<Coin> all)
         .OrderByDescending(c => c.MarketCapUsd)
         .ThenBy(c => c.Symbol, StringComparer.OrdinalIgnoreCase))
     {
-        var slug = c.Symbol.Trim().ToLowerInvariant();
+        var slug = MoneroMarketCap.Web.Helpers.CoinRoute.Key(c);
         if (seen.Add(slug))
         {
             slugs.Add(slug);
@@ -712,9 +712,10 @@ app.Use(async (context, next) =>
         && path != path.ToLowerInvariant())
     {
         var lower = path.ToLowerInvariant();
-        var query = context.Request.QueryString;
         context.Response.StatusCode = 308;
-        context.Response.Headers.Location = lower + query.ToString();
+        // Percent-encode so a non-ASCII path never produces an invalid (non-ASCII) header.
+        context.Response.Headers.Location =
+            new PathString(lower).ToUriComponent() + context.Request.QueryString.ToUriComponent();
         return;
     }
     await next();
@@ -736,7 +737,9 @@ if (!string.IsNullOrEmpty(onionHost))
                 && contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase)
                 && !path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
             {
-                var onionUrl = $"http://{onionHost}{path}{context.Request.QueryString}";
+                // Use the percent-encoded (ASCII) path/query — HTTP header values must be
+                // ASCII, so a raw non-ASCII path (e.g. /coins/币安人生) would throw here.
+                var onionUrl = $"http://{onionHost}{context.Request.Path.ToUriComponent()}{context.Request.QueryString.ToUriComponent()}";
                 context.Response.Headers["Onion-Location"] = onionUrl;
             }
             return Task.CompletedTask;
@@ -770,7 +773,7 @@ app.MapGet("/api/coins/suggest", async (
         .ThenBy(c => c.MarketCapRank == 0)
         .ThenBy(c => c.MarketCapRank)
         .ThenByDescending(c => c.MarketCapUsd)
-        .Select(c => new { c.Symbol, c.Name, c.ImageUrl })
+        .Select(c => new { c.Symbol, c.Name, c.ImageUrl, c.CoinGeckoId })
         .ToListAsync();
 
     // Match-quality rank, in memory (the filtered set is small). OrderBy is stable,
@@ -789,7 +792,7 @@ app.MapGet("/api/coins/suggest", async (
             symbol = c.Symbol,
             name = c.Name,
             image = c.ImageUrl,
-            url = $"/coins/{c.Symbol.ToLowerInvariant()}",
+            url = $"/coins/{MoneroMarketCap.Web.Helpers.CoinRoute.Key(c.Symbol, c.CoinGeckoId)}",
         })
         .ToList();
 

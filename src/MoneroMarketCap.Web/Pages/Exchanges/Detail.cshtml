@@ -104,7 +104,7 @@
             <div class="d-flex flex-wrap gap-2">
                 @foreach (var c in Model.Coins)
                 {
-                    <a class="badge bg-secondary text-decoration-none" href="/coins/@c.Symbol.ToLower()" title="@c.Name">@c.Symbol</a>
+                    <a class="badge bg-secondary text-decoration-none" href="/coins/@CoinRoute.Key(c.Symbol, c.CoinGeckoId)" title="@c.Name">@c.Symbol</a>
                 }
             </div>
 

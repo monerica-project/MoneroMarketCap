@@ -7,7 +7,7 @@
     // Consolidate every exchange-pagination view (/coins/{sym}/exchanges/N) onto the
     // base coin URL so paginated pages aren't indexed as separate/duplicate content.
     var canonBase = (Configuration["Site:CanonicalBaseUrl"] ?? "https://moneromarketcap.com").TrimEnd('/');
-    ViewData["Canonical"] = $"{canonBase}/coins/{Model.Coin?.Symbol?.ToLowerInvariant()}";
+    ViewData["Canonical"] = $"{canonBase}/coins/{(Model.Coin != null ? CoinRoute.Key(Model.Coin) : string.Empty)}";
     var exCount = Model.ExTotal;
     var exSeoSuffix = exCount > 0
         ? $" Compare {exCount} exchange{(exCount == 1 ? "" : "s")} that support {Model.Coin?.Symbol} — grades, KYC/AML policy and fees."
@@ -425,7 +425,7 @@
 
 @if (Model.ExTotal > 0)
 {
-    var exSlug = coin.Symbol.ToLowerInvariant();
+    var exSlug = CoinRoute.Key(coin);
     var exFrom = (Model.ExPage - 1) * MoneroMarketCap.Pages.Coins.DetailModel.ExPageSize + 1;
     var exTo = exFrom + Model.Exchanges.Count - 1;
     // Clean path-based pagination: page 1 = /coins/{symbol}; page N = /coins/{symbol}/exchanges/N.
