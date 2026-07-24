@@ -98,7 +98,7 @@ public class CoinPriceUpdateService : BackgroundService
             .ToDictionary(c => c.CoinGeckoId, c => c);
 
         var today = DateTime.UtcNow.Date;
-        int added = 0, updated = 0, reactivated = 0, deactivated = 0;
+        int added = 0, updated = 0, reactivated = 0, deactivated = 0, reEntered = 0;
 
         foreach (var m in topCoins)
         {
@@ -109,18 +109,32 @@ public class CoinPriceUpdateService : BackgroundService
                     CoinGeckoId = m.Id,
                     Symbol = m.Symbol?.ToUpper() ?? "",
                     Name = m.Name ?? "",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    LastInTopNUtc = DateTime.UtcNow
                 };
                 db.Coins.Add(coin);
                 added++;
             }
             else
             {
-                if (!coin.IsActive) reactivated++;
+                if (!coin.IsActive)
+                {
+                    reactivated++;
+
+                    // Re-entry: the coin was out of the top N and is back. Whatever
+                    // gap opened up while it was away is repaired by one market_chart
+                    // call (CoinGecko:BackfillDays, up to the 2 years this plan
+                    // allows), so clear the stamp and let the per-cycle selector
+                    // pick it up instead of polling dropouts continuously.
+                    coin.DailyHistoryBackfilledAtUtc = null;
+                    reEntered++;
+                }
+
                 updated++;
             }
 
             coin.IsActive = true;
+            coin.LastInTopNUtc = DateTime.UtcNow;
             coin.PriceUsd = m.CurrentPrice ?? 0;
             coin.MarketCapUsd = m.MarketCap ?? 0;
             coin.CirculatingSupply = m.CirculatingSupply ?? 0;
@@ -236,8 +250,8 @@ public class CoinPriceUpdateService : BackgroundService
             activeCoins.Count, staleSnaps.Count);
 
         this.logger.LogInformation(
-            "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, reactivated: {Reactivated}, deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
-            this.topCount, added, updated, reactivated, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
+            "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, reactivated: {Reactivated} ({ReEntered} queued for gap repair), deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
+            this.topCount, added, updated, reactivated, reEntered, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
 
         // Which active coins still need their one-year daily backfill?
         //

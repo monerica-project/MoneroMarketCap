@@ -17,8 +17,21 @@ public class DetailModel : PageModel
     private readonly IFiatRateHistoryService _fxHistory;
     private readonly IChangeNowLinkService _changeNow;
     private readonly AppDbContext _db;
+    private readonly IConfiguration _config;
+
+    /// <summary>Active data is refreshed every few minutes; older than this warrants a notice.</summary>
+    private const int StaleAfterMinutes = 60;
 
     public Coin? Coin { get; set; }
+
+    /// <summary>False when the coin has dropped out of the tracked top N (grace period).</summary>
+    public bool IsTracked { get; set; } = true;
+
+    /// <summary>Set when the page should not be indexed (a coin we no longer track).</summary>
+    public bool NoIndex => !IsTracked;
+
+    /// <summary>A warning to show above the figures, or null when the data is current.</summary>
+    public string? DataWarning { get; set; }
     public Coin? Monero { get; set; }
 
     // Exchanges that support this coin, graded best-first. Paged: only the current
@@ -56,13 +69,15 @@ public class DetailModel : PageModel
         IFiatRateService fxRates,
         IFiatRateHistoryService fxHistory,
         IChangeNowLinkService changeNow,
-        AppDbContext db)
+        AppDbContext db,
+        IConfiguration config)
     {
         _coins = coins;
         _fxRates = fxRates;
         _fxHistory = fxHistory;
         _changeNow = changeNow;
         _db = db;
+        _config = config;
     }
 
     /// <summary>Turns an enum-name like "LikelyIfSuspicious" into "Likely if suspicious".</summary>
@@ -102,7 +117,8 @@ public class DetailModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(string symbol, int xp = 1)
     {
-        var all = await _coins.GetAllAsync();
+        var graceDays = _config.GetValue<int>("CoinGecko:TrackingGraceDays", 90);
+        var all = await _coins.GetActiveAndGraceAsync(graceDays);
         var key = (symbol ?? string.Empty).Trim();
 
         // Resolve by ticker first, then by CoinGecko id so the URL-safe slug
@@ -113,6 +129,31 @@ public class DetailModel : PageModel
         Monero = all.FirstOrDefault(c => c.Symbol.ToUpper() == "XMR");
 
         if (Coin == null) return NotFound();
+
+        // Tracking lifecycle: a coin still in the top N is "tracked" and refreshed every
+        // few minutes. One that has dropped out keeps its page for the grace period, but
+        // is flagged noindex and carries a notice so nobody mistakes stale figures for
+        // live ones. A coin whose own data has gone stale while it IS tracked means the
+        // worker is behind — say so rather than showing an old price silently.
+        IsTracked = Coin.IsActive;
+
+        if (!IsTracked)
+        {
+            var since = Coin.LastInTopNUtc.HasValue
+                ? $" It left on {Coin.LastInTopNUtc.Value:d MMMM yyyy}."
+                : string.Empty;
+
+            DataWarning =
+                $"{Coin.Name} is no longer in the top {_config.GetValue<int>("CoinGecko:TopCount", 300)} " +
+                $"coins we track continuously, so the figures below are not being updated.{since} " +
+                $"Last updated {Coin.UpdatedAt:d MMMM yyyy}.";
+        }
+        else if (Coin.UpdatedAt < DateTime.UtcNow.AddMinutes(-StaleAfterMinutes))
+        {
+            DataWarning =
+                $"Price data for {Coin.Name} was last updated {Coin.UpdatedAt:d MMMM yyyy HH:mm} UTC " +
+                "and may be delayed.";
+        }
 
         // Canonicalize to the URL-safe route key. This redirects a non-ASCII ticker
         // URL (e.g. /coins/币安人生) to its clean slug (/coins/bianrensheng), which also

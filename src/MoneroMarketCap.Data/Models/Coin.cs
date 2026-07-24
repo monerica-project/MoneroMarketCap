@@ -79,5 +79,14 @@ public class Coin : AuditableEntity
     [Column("DailyHistoryBackfilledAtUtc")]
     public DateTime? DailyHistoryBackfilledAtUtc { get; set; }
 
+    /// <summary>
+    /// Last time this coin appeared in the CoinGecko top N. Drives the tracking
+    /// lifecycle: still in the list = Active; out but stamped within
+    /// CoinGecko:TrackingGraceDays = Grace (kept, not indexed); older = Retired
+    /// (no longer polled). Null for coins that predate this column.
+    /// </summary>
+    [Column("LastInTopNUtc")]
+    public DateTime? LastInTopNUtc { get; set; }
+
     public ICollection<CoinPriceHistory> PriceHistory { get; set; } = new List<CoinPriceHistory>();
 }

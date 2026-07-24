@@ -29,6 +29,23 @@ public class CoinRepository : ICoinRepository
             .OrderBy(c => c.MarketCapRank)
             .ToListAsync();
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Coin>> GetActiveAndGraceAsync(int graceDays)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-Math.Max(0, graceDays));
+
+        return await _db.Coins
+            .Where(c => c.IsActive
+                        || (c.LastInTopNUtc != null && c.LastInTopNUtc >= cutoff))
+            .OrderBy(c => c.MarketCapRank)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountStaleActiveAsync(DateTime olderThanUtc) =>
+        await _db.Coins
+            .CountAsync(c => c.IsActive && c.UpdatedAt < olderThanUtc);
+
     public async Task AddAsync(Coin entity) => await _db.Coins.AddAsync(entity);
 
     public async Task RecordPriceSnapshotAsync(int coinId, string interval)

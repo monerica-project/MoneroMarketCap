@@ -1,4 +1,4 @@
-﻿@page "/coins/{symbol}"
+@page "/coins/{symbol}"
 @model MoneroMarketCap.Pages.Coins.DetailModel
 @using MoneroMarketCap.Services.Display
 @using MoneroMarketCap.Web.Helpers
@@ -18,6 +18,12 @@
     ViewData["MetaDescription"] = (Model.Coin?.Symbol?.ToUpperInvariant() == "XMR")
         ? $"Monero (XMR) live price, market cap and charts on MoneroMarketCap — track XMR and value the entire crypto market in Monero.{exSeoSuffix}"
         : $"{Model.Coin?.Name} ({Model.Coin?.Symbol}) live price, market cap and charts valued in Monero (XMR). See how {Model.Coin?.Symbol} performs against Monero and convert {Model.Coin?.Symbol} to XMR.{exSeoSuffix}";
+    // Coins we no longer track continuously keep a working URL but are not indexed.
+    if (Model.NoIndex)
+    {
+        ViewData["MetaRobots"] = "noindex,follow";
+    }
+
     ViewBag.SponsorRotateIntervalSeconds = 30;
     var usd = System.Globalization.CultureInfo.GetCultureInfo("en-US");
     var cur = Model.Currency;
@@ -103,6 +109,16 @@
 <div class="mb-3">
     <a asp-page="/Index" class="btn btn-secondary btn-sm">← Back</a>
 </div>
+
+@* Stale/untracked data notice — shown above the figures so nobody reads an old
+   price as live. Set in the page model: untracked coin, or tracked but overdue. *@
+@if (!string.IsNullOrWhiteSpace(Model.DataWarning))
+{
+    <div class="alert @(Model.IsTracked ? "alert-warning" : "alert-secondary") mb-4" role="status">
+        <strong>@(Model.IsTracked ? "Data may be delayed" : "No longer tracked")</strong>
+        &mdash; @Model.DataWarning
+    </div>
+}
 
 
 @if (isXmr && MoneroSupplyDisplay.IsNodeSupplyFresh(coin))

@@ -382,6 +382,8 @@ jq -n \
     --arg cgHdr       "$COINGECKO_API_KEY_HEADER" \
     --argjson cgRefresh "$COINGECKO_REFRESH_MINUTES" \
         --argjson cgTop     "${COINGECKO_TOP_COUNT:-300}" \
+        --argjson cgBackfill "${COINGECKO_BACKFILL_DAYS:-730}" \
+        --argjson cgGrace   "${COINGECKO_TRACKING_GRACE_DAYS:-90}" \
     --arg adminUser   "$ADMIN_USERNAME" \
     --arg adminPass   "$ADMIN_PASSWORD" \
     --arg sponsorUrl  "$SPONSOR_URL" \
@@ -396,6 +398,8 @@ jq -n \
             BaseUrl: $cgBase,
             ApiKeyHeader: $cgHdr,
             TopCount: $cgTop,
+            BackfillDays: $cgBackfill,
+            TrackingGraceDays: $cgGrace,
             RefreshIntervalMinutes: $cgRefresh
         },
         Admin: {
@@ -421,6 +425,8 @@ if [[ $HAS_BTCPAY -eq 1 ]]; then
         --arg cgHdr       "$COINGECKO_API_KEY_HEADER" \
         --argjson cgRefresh "$COINGECKO_REFRESH_MINUTES" \
         --argjson cgTop     "${COINGECKO_TOP_COUNT:-300}" \
+        --argjson cgBackfill "${COINGECKO_BACKFILL_DAYS:-730}" \
+        --argjson cgGrace   "${COINGECKO_TRACKING_GRACE_DAYS:-90}" \
         --arg btcBase     "$BTCPAY_BASE_URL" \
         --arg btcKey      "$BTCPAY_API_KEY" \
         --argjson btcRefresh "$BTCPAY_REFRESH_MINUTES" \
@@ -432,6 +438,8 @@ if [[ $HAS_BTCPAY -eq 1 ]]; then
                 BaseUrl: $cgBase,
                 ApiKeyHeader: $cgHdr,
                 TopCount: $cgTop,
+                BackfillDays: $cgBackfill,
+                TrackingGraceDays: $cgGrace,
                 RefreshIntervalMinutes: $cgRefresh
             },
             BtcPay: {
@@ -450,6 +458,8 @@ else
         --arg cgHdr       "$COINGECKO_API_KEY_HEADER" \
         --argjson cgRefresh "$COINGECKO_REFRESH_MINUTES" \
         --argjson cgTop     "${COINGECKO_TOP_COUNT:-300}" \
+        --argjson cgBackfill "${COINGECKO_BACKFILL_DAYS:-730}" \
+        --argjson cgGrace   "${COINGECKO_TRACKING_GRACE_DAYS:-90}" \
         '{
             ConnectionStrings: { DefaultConnection: $conn },
             CoinGecko: {
@@ -457,6 +467,8 @@ else
                 BaseUrl: $cgBase,
                 ApiKeyHeader: $cgHdr,
                 TopCount: $cgTop,
+                BackfillDays: $cgBackfill,
+                TrackingGraceDays: $cgGrace,
                 RefreshIntervalMinutes: $cgRefresh
             }
         }' > "$WORKER_CFG_FILE"

@@ -1,4 +1,4 @@
-﻿@page
+@page
 @model MoneroMarketCap.Pages.Admin.IndexModel
 @{
     ViewData["Title"] = "Admin — Coins";
@@ -11,6 +11,15 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>Manage Coins</h2>
+
+    @* Tracking health. StaleCoinCount > 0 means the worker is behind or down. *@
+    <p class="mb-3">
+        <span class="badge bg-secondary">@Model.Coins.Count tracked</span>
+        <span class="badge @(Model.StaleCoinCount > 0 ? "bg-danger" : "bg-success")">
+            @Model.StaleCoinCount stale (&gt;1h)
+        </span>
+        <span class="badge bg-secondary">@Model.GraceCoinCount in grace window</span>
+    </p>
     <div class="d-flex gap-2">
         <form method="post" asp-page-handler="RefreshAll">
             <button class="btn btn-outline-secondary btn-sm">↻ Refresh All Prices</button>

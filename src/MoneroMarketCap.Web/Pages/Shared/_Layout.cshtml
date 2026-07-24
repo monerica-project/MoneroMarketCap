@@ -29,6 +29,12 @@
         }
     }
     <link rel="canonical" href="@canonicalUrl" />
+    @* Pages can opt out of indexing via ViewData["MetaRobots"], e.g. a coin we no
+       longer track continuously. Kept "follow" so internal links still pass through. *@
+    @if (ViewData["MetaRobots"] is string metaRobots && !string.IsNullOrWhiteSpace(metaRobots))
+    {
+        <meta name="robots" content="@metaRobots" />
+    }
     <meta name="description" content="@metaDescription" />
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />

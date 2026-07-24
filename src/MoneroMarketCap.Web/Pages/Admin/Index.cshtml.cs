@@ -19,6 +19,12 @@ public class IndexModel : PageModel
 
     public IReadOnlyList<Coin> Coins { get; set; } = new List<Coin>();
 
+    /// <summary>Active coins whose market data has not refreshed in the last hour.</summary>
+    public int StaleCoinCount { get; set; }
+
+    /// <summary>Coins in the grace window: dropped out of the top N but still kept.</summary>
+    public int GraceCoinCount { get; set; }
+
     public IndexModel(ICoinRepository coins, ICoinGeckoService gecko, AppDbContext db)
     {
         _coins = coins;
@@ -26,8 +32,14 @@ public class IndexModel : PageModel
         _db = db;
     }
 
-    public async Task OnGetAsync() =>
+    public async Task OnGetAsync()
+    {
         Coins = await _coins.GetAllAsync();
+
+        // Pipeline health at a glance: if the worker stops, StaleCoinCount climbs.
+        StaleCoinCount = await _coins.CountStaleActiveAsync(DateTime.UtcNow.AddHours(-1));
+        GraceCoinCount = (await _coins.GetActiveAndGraceAsync(90)).Count - Coins.Count;
+    }
 
     public async Task<IActionResult> OnPostRefreshAllAsync()
     {
