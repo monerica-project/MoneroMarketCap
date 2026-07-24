@@ -66,11 +66,17 @@ public class CoinHistoryBackfillService : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var gecko = scope.ServiceProvider.GetRequiredService<ICoinGeckoService>();
 
+        // Only coins that have never been backfilled. Previously this pass fetched a
+        // year of history for EVERY active coin on every process start and threw away
+        // the response for coins that were already complete — one wasted CoinGecko
+        // call per coin, per deploy.
         var activeCoins = await db.Coins
-            .Where(c => c.IsActive && c.CoinGeckoId != null && c.CoinGeckoId != "")
+            .Where(c => c.IsActive
+                        && c.CoinGeckoId != null && c.CoinGeckoId != ""
+                        && c.DailyHistoryBackfilledAtUtc == null)
             .ToListAsync(ct);
 
-        this.logger.LogInformation("Startup backfill for {Count} active coins, {Days} days each",
+        this.logger.LogInformation("Startup backfill for {Count} coin(s) with no history yet, {Days} days each",
             activeCoins.Count, this.days);
 
         int processed = 0, rowsInserted = 0, skipped = 0, failed = 0;
@@ -155,7 +161,7 @@ public class CoinHistoryBackfillService : BackgroundService
             }
 
             if (pricesByDate.Count == 0)
-                return new BackfillResult(BackfillStatus.AlreadyCurrent, 0);
+                return await StampAsync(db, coin, BackfillStatus.AlreadyCurrent, 0, ct);
 
             var existingDates = await db.CoinPriceHistories
                 .Where(h => h.CoinId == coin.Id && h.Interval == "1d")
@@ -184,16 +190,30 @@ public class CoinHistoryBackfillService : BackgroundService
             {
                 await db.SaveChangesAsync(ct);
                 this.logger.LogInformation("Backfilled {Coin}: {Rows} rows", coin.CoinGeckoId, insertedThisCoin);
-                return new BackfillResult(BackfillStatus.Inserted, insertedThisCoin);
+                return await StampAsync(db, coin, BackfillStatus.Inserted, insertedThisCoin, ct);
             }
 
-            return new BackfillResult(BackfillStatus.AlreadyCurrent, 0);
+            return await StampAsync(db, coin, BackfillStatus.AlreadyCurrent, 0, ct);
         }
         catch (Exception ex)
         {
             this.logger.LogWarning(ex, "Backfill failed for {Id}", coin.CoinGeckoId);
             return new BackfillResult(BackfillStatus.Failed, 0);
         }
+    }
+
+    /// <summary>
+    /// Records that this coin's daily history has been fetched, so the per-cycle
+    /// selector stops re-requesting it. Stamped on any non-failed outcome — a coin
+    /// whose history is already complete must be marked too, otherwise it is asked
+    /// for again every cycle. Failures are deliberately left unstamped so they retry.
+    /// </summary>
+    private static async Task<BackfillResult> StampAsync(
+        AppDbContext db, Coin coin, BackfillStatus status, int rows, CancellationToken ct)
+    {
+        coin.DailyHistoryBackfilledAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new BackfillResult(status, rows);
     }
 }
 

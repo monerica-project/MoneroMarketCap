@@ -381,6 +381,7 @@ jq -n \
     --arg cgBase      "$COINGECKO_BASE_URL" \
     --arg cgHdr       "$COINGECKO_API_KEY_HEADER" \
     --argjson cgRefresh "$COINGECKO_REFRESH_MINUTES" \
+        --argjson cgTop     "${COINGECKO_TOP_COUNT:-300}" \
     --arg adminUser   "$ADMIN_USERNAME" \
     --arg adminPass   "$ADMIN_PASSWORD" \
     --arg sponsorUrl  "$SPONSOR_URL" \
@@ -394,7 +395,7 @@ jq -n \
             ApiKey: $cgKey,
             BaseUrl: $cgBase,
             ApiKeyHeader: $cgHdr,
-            TopCoinsOnStartup: 100,
+            TopCount: $cgTop,
             RefreshIntervalMinutes: $cgRefresh
         },
         Admin: {
@@ -419,6 +420,7 @@ if [[ $HAS_BTCPAY -eq 1 ]]; then
         --arg cgBase      "$COINGECKO_BASE_URL" \
         --arg cgHdr       "$COINGECKO_API_KEY_HEADER" \
         --argjson cgRefresh "$COINGECKO_REFRESH_MINUTES" \
+        --argjson cgTop     "${COINGECKO_TOP_COUNT:-300}" \
         --arg btcBase     "$BTCPAY_BASE_URL" \
         --arg btcKey      "$BTCPAY_API_KEY" \
         --argjson btcRefresh "$BTCPAY_REFRESH_MINUTES" \
@@ -429,6 +431,7 @@ if [[ $HAS_BTCPAY -eq 1 ]]; then
                 ApiKey: $cgKey,
                 BaseUrl: $cgBase,
                 ApiKeyHeader: $cgHdr,
+                TopCount: $cgTop,
                 RefreshIntervalMinutes: $cgRefresh
             },
             BtcPay: {
@@ -446,12 +449,14 @@ else
         --arg cgBase      "$COINGECKO_BASE_URL" \
         --arg cgHdr       "$COINGECKO_API_KEY_HEADER" \
         --argjson cgRefresh "$COINGECKO_REFRESH_MINUTES" \
+        --argjson cgTop     "${COINGECKO_TOP_COUNT:-300}" \
         '{
             ConnectionStrings: { DefaultConnection: $conn },
             CoinGecko: {
                 ApiKey: $cgKey,
                 BaseUrl: $cgBase,
                 ApiKeyHeader: $cgHdr,
+                TopCount: $cgTop,
                 RefreshIntervalMinutes: $cgRefresh
             }
         }' > "$WORKER_CFG_FILE"

@@ -17,11 +17,16 @@ public class CoinRepository : ICoinRepository
     public async Task<Coin?> GetByCoinGeckoIdAsync(string coinGeckoId) =>
         await _db.Coins.FirstOrDefaultAsync(c => c.CoinGeckoId == coinGeckoId);
 
+    /// <summary>
+    /// Every active coin, best rank first. "Active" is maintained by the worker: it is
+    /// exactly the current CoinGecko top N (CoinGecko:TopCount), and anything that drops
+    /// out is deactivated. There is deliberately no Take() here — it used to be hard-capped
+    /// at 100, which silently capped the site AND the sitemap no matter what TopCount said.
+    /// </summary>
     public async Task<IReadOnlyList<Coin>> GetAllAsync() =>
         await _db.Coins
             .Where(c => c.IsActive)
             .OrderBy(c => c.MarketCapRank)
-            .Take(100)
             .ToListAsync();
 
     public async Task AddAsync(Coin entity) => await _db.Coins.AddAsync(entity);

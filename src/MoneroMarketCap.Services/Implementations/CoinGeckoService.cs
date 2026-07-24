@@ -173,23 +173,40 @@ public class CoinGeckoService : ICoinGeckoService
         }
     }
 
+    /// <summary>
+    /// The top <paramref name="count"/> coins by market cap, paged.
+    /// </summary>
+    /// <remarks>
+    /// per_page is held CONSTANT across pages and the result trimmed at the end.
+    /// CoinGecko's "page" is an offset in units of per_page, so shrinking per_page on
+    /// the final page re-requests the start of the list instead of continuing it:
+    /// count=300 previously asked for per_page=250&amp;page=1 (ranks 1-250) then
+    /// per_page=50&amp;page=2, which returns ranks 51-100 — duplicates, and ranks
+    /// 251-300 never fetched. Harmless while count was 100 (a single page), wrong
+    /// for anything larger.
+    ///
+    /// 250 is CoinGecko's maximum per_page, so this is also the cheapest way to page:
+    /// 300 coins costs 2 calls per cycle rather than 3 at per_page=100.
+    /// </remarks>
     public async Task<List<CoinGeckoMarketData>> GetTopCoinsAsync(int count = 500)
     {
+        const int perPage = 250;
+
         var results = new List<CoinGeckoMarketData>();
-        int perPage = 250;
         int pages = (int)Math.Ceiling((double)count / perPage);
 
         for (int page = 1; page <= pages; page++)
         {
             try
             {
-                var take = Math.Min(perPage, count - results.Count);
-                var url = BuildMarketsUrl(perPage: take, page: page);
+                var url = BuildMarketsUrl(perPage: perPage, page: page);
                 var response = await _http.GetStringAsync(url);
                 var batch = JsonSerializer.Deserialize<List<CoinGeckoMarketData>>(response, _jsonOptions);
 
                 if (batch == null || !batch.Any()) break;
                 results.AddRange(batch);
+
+                if (results.Count >= count) break;
 
                 if (page < pages)
                     await Task.Delay(TimeSpan.FromSeconds(3));
@@ -201,7 +218,10 @@ public class CoinGeckoService : ICoinGeckoService
             }
         }
 
-        return results;
+        // Trim: the last page overshoots whenever count isn't a multiple of per_page.
+        return results.Count > count
+            ? results.Take(count).ToList()
+            : results;
     }
 
     private static string BuildMarketsUrl(string? ids = null, int perPage = 100, int page = 1)

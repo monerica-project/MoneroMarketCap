@@ -11,6 +11,13 @@ namespace MoneroMarketCap.Services.Implementations;
 
 public class CoinPriceUpdateService : BackgroundService
 {
+    /// <summary>
+    /// A coin that has already been backfilled is re-checked only this often, so a
+    /// long outage can't leave permanent gaps. At ~300 coins this costs about one
+    /// extra CoinGecko call per coin per month.
+    /// </summary>
+    private const int BackfillRefreshDays = 30;
+
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ILogger<CoinPriceUpdateService> logger;
     private readonly CoinHistoryBackfillService backfillService;
@@ -232,25 +239,30 @@ public class CoinPriceUpdateService : BackgroundService
             "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, reactivated: {Reactivated}, deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
             this.topCount, added, updated, reactivated, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
 
-        // Find active coins with thin history (< threshold days) so they get backfilled.
-        // This covers newly-added entrants, reactivated dropouts, and any coin that
-        // ended up with incomplete history for any other reason.
-        var historyCounts = await db.CoinPriceHistories
-            .Where(h => h.Interval == "1d" && activeIds.Contains(h.CoinId))
-            .GroupBy(h => h.CoinId)
-            .Select(g => new { CoinId = g.Key, Count = g.Count() })
+        // Which active coins still need their one-year daily backfill?
+        //
+        // This used to test "fewer than BackfillThresholdDays rows of 1d history".
+        // That is unsatisfiable for any coin younger than the threshold — a coin
+        // listed 60 days ago only ever has ~60 rows — so those coins were re-fetched
+        // from CoinGecko on EVERY cycle (288 wasted calls/day each) and never stopped.
+        //
+        // Instead we keep a persistent stamp per coin: backfill when it has never
+        // been done, or when it is old enough that gaps may have formed (e.g. the
+        // worker was down for a while). A new entrant is backfilled exactly once.
+        var refreshBefore = DateTime.UtcNow.AddDays(-BackfillRefreshDays);
+
+        var toBackfill = await db.Coins
+            .Where(c => activeIds.Contains(c.Id)
+                        && (c.DailyHistoryBackfilledAtUtc == null
+                            || c.DailyHistoryBackfilledAtUtc < refreshBefore))
+            .Select(c => c.Id)
             .ToListAsync();
-
-        var countByCoinId = historyCounts.ToDictionary(x => x.CoinId, x => x.Count);
-
-        var toBackfill = activeIds
-            .Where(id => !countByCoinId.TryGetValue(id, out var count) || count < this.backfillThresholdDays)
-            .ToList();
 
         if (toBackfill.Count > 0)
         {
-            this.logger.LogInformation("Found {Count} active coin(s) with <{Threshold} days of history; queueing backfill",
-                toBackfill.Count, this.backfillThresholdDays);
+            this.logger.LogInformation(
+                "{Count} active coin(s) need the {Days}-day history backfill (never done, or older than {Refresh} days); queueing",
+                toBackfill.Count, this.backfillService.Days, BackfillRefreshDays);
         }
 
         return toBackfill;

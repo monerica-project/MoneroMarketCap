@@ -69,5 +69,15 @@ public class Coin : AuditableEntity
     [Column("NodeSupplyUpdatedAt")]
     public DateTime? NodeSupplyUpdatedAt { get; set; }
 
+    /// <summary>
+    /// When the one-year daily ("1d") history backfill last completed for this coin.
+    /// Null means it has never been backfilled — i.e. a new entrant that still needs
+    /// its year of history. This is the guard that stops a coin younger than the
+    /// backfill threshold from being re-fetched from CoinGecko on every cycle
+    /// (it can never accumulate enough rows to satisfy a row-count test).
+    /// </summary>
+    [Column("DailyHistoryBackfilledAtUtc")]
+    public DateTime? DailyHistoryBackfilledAtUtc { get; set; }
+
     public ICollection<CoinPriceHistory> PriceHistory { get; set; } = new List<CoinPriceHistory>();
 }

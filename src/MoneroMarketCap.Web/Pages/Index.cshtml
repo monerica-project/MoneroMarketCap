@@ -171,7 +171,7 @@ else
          data-currency-decimals="@cur.Decimals"
          data-currency-culture="@cur.Culture"
          data-rate-per-usd="@(rate.ToString(System.Globalization.CultureInfo.InvariantCulture))">
-        <table class="table market-table">
+        <table class="table market-table" data-rank-offset="@Model.RankOffset">
             <thead>
                 <tr>
                     <th class="col-rank sortable" data-sort="mcap"># <span class="sort-indicator">▼</span></th>
@@ -187,7 +187,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var coin in Model.Coins.OrderByDescending(c => MoneroSupplyDisplay.EffectiveMarketCapUsd(c)))
+                @foreach (var coin in Model.PagedCoins)
                 {
                     var effectiveMcap = MoneroSupplyDisplay.EffectiveMarketCapUsd(coin);
                     var effectiveSupply = MoneroSupplyDisplay.EffectiveCirculatingSupply(coin);
@@ -265,6 +265,44 @@ else
             </tbody>
         </table>
     </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        var firstRank = Model.RankOffset + 1;
+        var lastRank = Model.RankOffset + Model.PagedCoins.Count;
+
+        <nav class="coin-pager d-flex flex-wrap align-items-center justify-content-center gap-2 my-3"
+             aria-label="Coin list pages">
+            @if (Model.PageNumber > 1)
+            {
+                <a class="btn btn-sm btn-outline-secondary"
+                   href="@(Model.PageNumber - 1 == 1 ? "/" : $"/?p={Model.PageNumber - 1}")"
+                   rel="prev">&larr; Prev</a>
+            }
+
+            @for (var i = 1; i <= Model.TotalPages; i++)
+            {
+                if (i == Model.PageNumber)
+                {
+                    <span class="btn btn-sm btn-primary disabled" aria-current="page">@i</span>
+                }
+                else
+                {
+                    <a class="btn btn-sm btn-outline-secondary" href="@(i == 1 ? "/" : $"/?p={i}")">@i</a>
+                }
+            }
+
+            @if (Model.PageNumber < Model.TotalPages)
+            {
+                <a class="btn btn-sm btn-outline-secondary"
+                   href="/?p=@(Model.PageNumber + 1)" rel="next">Next &rarr;</a>
+            }
+
+            <span class="text-muted small ms-2">
+                @firstRank&ndash;@lastRank of @Model.Coins.Count
+            </span>
+        </nav>
+    }
 }
 
 
@@ -385,9 +423,10 @@ else
                 return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
             });
 
+            const rankOffset = parseInt(tbody.closest('table')?.dataset.rankOffset || '0', 10) || 0;
             rows.forEach((row, idx) => {
                 const rankCell = row.querySelector('.cell-rank');
-                if (rankCell) rankCell.textContent = idx + 1;
+                if (rankCell) rankCell.textContent = rankOffset + idx + 1;
                 tbody.appendChild(row);
             });
 
