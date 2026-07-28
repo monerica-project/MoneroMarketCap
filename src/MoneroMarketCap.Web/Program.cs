@@ -180,7 +180,14 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     using var scope = scopeFactory.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    var cutoff = DateTime.UtcNow.Date.AddDays(-364);
+    // We display ~1 year, but also return up to 200 extra days of older history so
+    // the client can seed moving averages (SMA 200, etc.) from the first visible
+    // day rather than only 200 points in. The client slices the display back to a
+    // year; these older rows feed the indicator math only. When a coin has less
+    // than a year+warm-up of history, this simply returns whatever exists.
+    const int visibleDays = 364;
+    const int indicatorWarmupDays = 200;
+    var cutoff = DateTime.UtcNow.Date.AddDays(-(visibleDays + indicatorWarmupDays));
 
     var history = await db.CoinPriceHistories
         .Where(h => h.Coin.CoinGeckoId == coinGeckoId

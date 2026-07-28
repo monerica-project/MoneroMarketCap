@@ -715,8 +715,16 @@
 
         let chartInstance = null;
         let rawCoin    = null;   // [[ts, priceInSelectedCurrency], ...]  active (range-sliced) view
+        let rawCoinExt = null;   // same as rawCoin but with up to WARMUP_DAYS of extra
+                                 // leading history, so moving averages can be seeded
+                                 // from the first visible day (daily 1Y range only)
         let rawXmr     = null;   // XMR in selected currency, range-sliced
         let rawCoinUsd = null;   // this coin in USD, range-sliced (baseline for "vs USD")
+
+        // Max indicator period (SMA 200). We fetch this many extra days before the
+        // visible window so the longest MA is fully populated across the chart when
+        // that much history exists; if it doesn't, we warm up with whatever we have.
+        const WARMUP_DAYS = 200;
 
         // Full series as fetched from the server (~365 daily points). The range
         // selector slices these into the raw* views above without re-fetching.
@@ -753,10 +761,21 @@
             return days >= series.length ? series : series.slice(series.length - days);
         }
 
+        // Status label for the loaded history. fullCoin may hold up to a year of
+        // warm-up beyond the visible window, so cap the reported count at 1 year.
+        function daysLabel() {
+            const n = fullCoin ? Math.min(fullCoin.length, 365) : 0;
+            return n + ' days';
+        }
+
         // Slice every full series to the active range, then rebuild the chart.
         // The 24h range swaps in the intraday series and is handled in setRange.
         function applyRange() {
             rawCoin    = tail(fullCoin, range.days);
+            // Extended view: include up to WARMUP_DAYS extra points ahead of the
+            // visible window (capped by however much history the server returned).
+            // buildChart computes MAs on this, then slices back to the visible span.
+            rawCoinExt = tail(fullCoin, range.days + WARMUP_DAYS);
             rawXmr     = tail(fullXmr, range.days);
             rawCoinUsd = tail(fullCoinUsd, range.days);
             buildChart();
@@ -941,14 +960,20 @@
                     yAxisID: 'y'
                 }];
 
-                // Overlay any active moving averages, computed on the same
-                // selected-currency price array so they sit directly on the line.
-                const prices = rawCoin.map(p => p[1]);
+                // Overlay any active moving averages. Compute them on the extended
+                // array (visible window + warm-up history) so a value exists for the
+                // first visible day, then drop the warm-up head so the series lines
+                // up 1:1 with the visible price points. Warm-up applies to the daily
+                // range only; fine/intraday use the plain visible array.
+                const extRaw   = (range.fine || range.intraday || !rawCoinExt) ? rawCoin : rawCoinExt;
+                const extPrices = extRaw.map(p => p[1]);
+                const warmCount = extPrices.length - rawCoin.length;   // ≥0
                 for (const ind of INDICATORS) {
                     if (!activeIndicators.has(ind.id)) continue;
-                    const series = ind.type === 'ema'
-                        ? ema(prices, ind.period)
-                        : sma(prices, ind.period);
+                    const full = ind.type === 'ema'
+                        ? ema(extPrices, ind.period)
+                        : sma(extPrices, ind.period);
+                    const series = warmCount > 0 ? full.slice(warmCount) : full;
                     datasets.push({
                         label: ind.label,
                         data: series,
@@ -1295,7 +1320,7 @@
                         // daily slice so the range still renders.
                         if (!res || res.status === 204 || !res.ok) {
                             document.getElementById('chart-status').textContent =
-                                (fullCoin ? fullCoin.length : '') + ' days';
+                                daysLabel();
                             applyRange();
                             return;
                         }
@@ -1316,7 +1341,7 @@
                         // Fine data unavailable (e.g. the box can't reach CoinGecko) —
                         // fall back to the daily tail slice for this range.
                         document.getElementById('chart-status').textContent =
-                            (fullCoin ? fullCoin.length : '') + ' days';
+                            daysLabel();
                         applyRange();
                         return;
                     }
@@ -1324,7 +1349,7 @@
 
                 if (!fineCoin[r.id] || !fineCoin[r.id].length) {
                     document.getElementById('chart-status').textContent =
-                        (fullCoin ? fullCoin.length : '') + ' days';
+                        daysLabel();
                     applyRange();
                     return;
                 }
@@ -1339,7 +1364,7 @@
 
             // Day-range: restore the status line and slice the daily series.
             document.getElementById('chart-status').textContent =
-                (fullCoin ? fullCoin.length : '') + ' days';
+                daysLabel();
             applyRange();
         }
 
@@ -1437,7 +1462,7 @@
                     return;
                 }
 
-                document.getElementById('chart-status').textContent = fullCoin.length + ' days';
+                document.getElementById('chart-status').textContent = daysLabel();
                 initModeSwitch();
                 initRangeSwitch();
                 initIndicatorToolbar();
