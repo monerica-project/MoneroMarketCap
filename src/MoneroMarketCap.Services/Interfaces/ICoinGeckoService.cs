@@ -17,4 +17,12 @@ public interface ICoinGeckoService
     /// lines instead of the sparse one-point-per-day series.
     /// </summary>
     Task<string?> GetMarketChartHourlyAsync(string coinGeckoId, int days);
+
+    /// <summary>
+    /// The English description from /coins/{id}. Returns the raw description.en string
+    /// (may be empty when CoinGecko has none), or null on request failure so the caller
+    /// can distinguish "no description" from "couldn't fetch". Heavy sub-payloads
+    /// (tickers, market_data, community/developer data) are turned off.
+    /// </summary>
+    Task<string?> GetCoinDescriptionAsync(string coinGeckoId, CancellationToken ct = default);
 }

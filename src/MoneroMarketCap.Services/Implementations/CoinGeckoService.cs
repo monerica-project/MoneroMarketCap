@@ -110,6 +110,40 @@ public class CoinGeckoService : ICoinGeckoService
         }
     }
 
+    public async Task<string?> GetCoinDescriptionAsync(string coinGeckoId, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"coins/{Uri.EscapeDataString(coinGeckoId)}" +
+                      "?localization=false&tickers=false&market_data=false" +
+                      "&community_data=false&developer_data=false&sparkline=false";
+
+            var res = await _http.GetAsync(url, ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Description fetch failed {Status} for {Id}", (int)res.StatusCode, coinGeckoId);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
+            if (doc.RootElement.TryGetProperty("description", out var desc)
+                && desc.ValueKind == JsonValueKind.Object
+                && desc.TryGetProperty("en", out var en)
+                && en.ValueKind == JsonValueKind.String)
+            {
+                return en.GetString() ?? string.Empty;
+            }
+
+            return string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GetCoinDescriptionAsync exception for {Id}", coinGeckoId);
+            return null;
+        }
+    }
+
     public async Task<List<CoinGeckoSearchResult>> SearchCoinsAsync(string query)
     {
         try

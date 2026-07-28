@@ -97,6 +97,10 @@ builder.Services.AddHostedService<HourlyHistoryBackfillService>();
 // Ongoing: reconciles top N, upserts coin rows, upserts today's history row each cycle.
 builder.Services.AddHostedService<CoinPriceUpdateService>();
 
+// Slow backfill/refresh of each coin's description from /coins/{id}. One call per coin
+// on a long cadence — descriptions change rarely, so this adds negligible CoinGecko usage.
+builder.Services.AddHostedService<CoinDescriptionBackfillService>();
+
 // ── ChangeNOW affiliate-link resolution ──────────────────────────────────
 // Resolves a "from" ticker for each NEW coin (once). Same IPv4-forcing handler
 // as the clients above: api.changenow.io is Cloudflare-fronted and this VPS's

@@ -80,6 +80,19 @@ public class Coin : AuditableEntity
     public DateTime? DailyHistoryBackfilledAtUtc { get; set; }
 
     /// <summary>
+    /// Sanitized English description from CoinGecko's /coins/{id} endpoint (plain text,
+    /// HTML stripped). Null = never fetched; empty = fetched but CoinGecko has none for
+    /// this coin (e.g. Monero itself). Rendered in the "About" section of the coin page.
+    /// </summary>
+    [Column("Description")]
+    public string? Description { get; set; }
+
+    /// <summary>When <see cref="Description"/> was last fetched. Drives the slow refresh
+    /// cadence and stops re-fetching descriptions CoinGecko simply doesn't have.</summary>
+    [Column("DescriptionUpdatedAtUtc")]
+    public DateTime? DescriptionUpdatedAtUtc { get; set; }
+
+    /// <summary>
     /// Last time this coin appeared in the CoinGecko top N. Drives the tracking
     /// lifecycle: still in the list = Active; out but stamped within
     /// CoinGecko:TrackingGraceDays = Grace (kept, not indexed); older = Retired

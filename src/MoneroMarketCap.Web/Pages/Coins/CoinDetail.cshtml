@@ -439,6 +439,24 @@
     </div>
 }
 
+@{
+    var descParas = MoneroMarketCap.Services.Display.CoinDescriptionSanitizer
+        .ToParagraphs(coin.Description);
+}
+@if (descParas.Count > 0)
+{
+    <section id="about" class="card mb-4">
+        <div class="card-header"><h2 class="h5 mb-0">About @coin.Name</h2></div>
+        <div class="card-body coin-description">
+            @foreach (var para in descParas)
+            {
+                <p>@para</p>
+            }
+            <p class="text-muted small mb-0 mt-2">Description data from CoinGecko.</p>
+        </div>
+    </section>
+}
+
 @if (Model.ExTotal > 0)
 {
     var exSlug = CoinRoute.Key(coin);
