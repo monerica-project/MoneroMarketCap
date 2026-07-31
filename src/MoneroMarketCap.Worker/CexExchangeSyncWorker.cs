@@ -90,15 +90,9 @@ public class CexExchangeSyncWorker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var coinRows = await db.Coins.AsNoTracking().Select(c => new { c.Id, c.Symbol }).ToListAsync(ct);
-        var coinIdByTicker = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var c in coinRows)
-        {
-            if (!string.IsNullOrWhiteSpace(c.Symbol))
-            {
-                coinIdByTicker[c.Symbol] = c.Id;
-            }
-        }
+        // Deterministic ticker -> coin id (shared with the SwapRaven sync) so a shared
+        // symbol resolves to the same coin in both workers. See CoinTickerMap.
+        var coinIdByTicker = await CoinTickerMap.BuildAsync(db, ct);
 
         await SyncOneAsync(db, coinIdByTicker, Kraken, await SafeFetch(() => FetchKrakenSymbolsAsync(http, ct), Kraken.Name), ct);
         await SyncOneAsync(db, coinIdByTicker, Coinbase, await SafeFetch(() => FetchCoinbaseSymbolsAsync(http, ct), Coinbase.Name), ct);

@@ -32,8 +32,8 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
     {
         _logger.LogInformation("SwapRavenExchangeSyncWorker starting");
 
-        var days = _config.GetValue<int>("SwapRaven:SyncIntervalDays", 7);
-        var interval = TimeSpan.FromDays(days < 1 ? 7 : days);
+        var days = _config.GetValue<int>("SwapRaven:SyncIntervalDays", 1);
+        var interval = TimeSpan.FromDays(days < 1 ? 1 : days);
 
         // Let the coin list settle after boot before the first (preload) run.
         try
@@ -91,21 +91,19 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
             return;
         }
 
-        // Ticker -> MMC coin id (case-insensitive; last wins on any dup).
-        var coinRows = await db.Coins.AsNoTracking().Select(c => new { c.Id, c.Symbol }).ToListAsync(ct);
-        var coinIdByTicker = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var c in coinRows)
-        {
-            if (!string.IsNullOrWhiteSpace(c.Symbol))
-            {
-                coinIdByTicker[c.Symbol] = c.Id;
-            }
-        }
+        // Ticker -> MMC coin id, deterministic on collisions (see CoinTickerMap).
+        var coinIdByTicker = await CoinTickerMap.BuildAsync(db, ct);
 
-        // Only reconcile SwapRaven-sourced rows; CEX exchanges (Kraken/Coinbase) are
-        // managed by their own worker and must never be removed here.
+        // Reconcile every non-CEX exchange, keyed by slug. This worker owns all
+        // catalog exchanges; CEX exchanges (Kraken/Coinbase, Source="Cex") are managed
+        // by their own worker and must never be loaded, updated, or removed here.
+        // NOTE: match on "not Cex" rather than Source == "SwapRaven": historically these
+        // rows carried an empty Source, so a Source == "SwapRaven" filter matched nothing
+        // and every run tried to re-INSERT the whole catalog, dying on the unique Slug
+        // index (duplicate key) — which silently froze all exchange data. Upsert below
+        // normalizes Source back to "SwapRaven".
         var existing = await db.Exchanges
-            .Where(e => e.Source == "SwapRaven")
+            .Where(e => e.Source == null || e.Source != "Cex")
             .Include(e => e.ExchangeCoins)
             .Include(e => e.Contacts)
             .ToListAsync(ct);
@@ -118,6 +116,12 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
         var now = DateTime.UtcNow;
         var seenSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int added = 0, updated = 0, order = 0;
+
+        // Coverage telemetry: how many of the catalog's distinct coin tickers actually
+        // matched an MMC coin. A low ratio flags either a stale coin set or ticker
+        // mismatches — visible in the logs instead of silently under-listing coins.
+        var catalogTickers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var matchedTickers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var dto in catalog)
         {
@@ -139,6 +143,7 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
                 updated++;
             }
 
+            ex.Source = "SwapRaven";
             ex.Name = dto.Name;
             ex.Kind = dto.Kind;
             ex.Description = dto.Description;
@@ -163,9 +168,17 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
             var wanted = new HashSet<int>();
             foreach (var ticker in dto.Coins)
             {
-                if (!string.IsNullOrWhiteSpace(ticker) && coinIdByTicker.TryGetValue(ticker, out var cid))
+                var t = ticker?.Trim();
+                if (string.IsNullOrWhiteSpace(t))
+                {
+                    continue;
+                }
+
+                catalogTickers.Add(t);
+                if (coinIdByTicker.TryGetValue(t, out var cid))
                 {
                     wanted.Add(cid);
+                    matchedTickers.Add(t);
                 }
             }
 
@@ -208,5 +221,8 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
         _logger.LogInformation(
             "SwapRaven catalog sync done: {Total} exchanges in catalog (+{Added} ~{Updated} -{Removed})",
             catalog.Count, added, updated, removed);
+        _logger.LogInformation(
+            "SwapRaven coin match: {Matched}/{Total} distinct catalog tickers matched an MMC coin",
+            matchedTickers.Count, catalogTickers.Count);
     }
 }
