@@ -110,7 +110,7 @@
                             <div class="vs-xmr-value" id="vs-xmr-best">
                                 @if (!string.IsNullOrEmpty(bestVsXmr.Coin.ImageUrl))
                                 {
-                                    <img src="@bestVsXmr.Coin.ImageUrl" width="18" height="18" class="coin-icon" />
+                                    <img src="@bestVsXmr.Coin.ImageUrl.Replace("/large/", "/thumb/")" width="18" height="18" class="coin-icon" alt="" />
                                 }
                                 <span class="vs-xmr-symbol">@bestVsXmr.Coin.Symbol</span>
                                 <span class="text-success mono vs-xmr-pct">
@@ -125,7 +125,7 @@
                             <div class="vs-xmr-value" id="vs-xmr-worst">
                                 @if (!string.IsNullOrEmpty(worstVsXmr.Coin.ImageUrl))
                                 {
-                                    <img src="@worstVsXmr.Coin.ImageUrl" width="18" height="18" class="coin-icon" />
+                                    <img src="@worstVsXmr.Coin.ImageUrl.Replace("/large/", "/thumb/")" width="18" height="18" class="coin-icon" alt="" />
                                 }
                                 <span class="vs-xmr-symbol">@worstVsXmr.Coin.Symbol</span>
                                 <span class="text-danger mono vs-xmr-pct">
@@ -215,8 +215,8 @@ else
                             <div class="coin-name-cell">
                                 @if (!string.IsNullOrEmpty(coin.ImageUrl))
                                 {
-                                    <a href="/coins/@CoinRoute.Key(coin)">
-                                        <img src="@coin.ImageUrl" width="20" height="20" class="coin-icon" />
+                                    <a href="/coins/@CoinRoute.Key(coin)" aria-label="@coin.Name">
+                                        <img src="@coin.ImageUrl.Replace("/large/", "/thumb/")" width="20" height="20" class="coin-icon" alt="@coin.Name" loading="lazy" />
                                     </a>
                                 }
                                 <a href="/coins/@CoinRoute.Key(coin)" class="coin-symbol coin-link">@coin.Symbol</a>
@@ -571,14 +571,14 @@ else
                         const worstCard = document.getElementById('vs-xmr-worst');
                         if (bestCard) {
                             bestCard.innerHTML =
-                                (best.imageUrl ? `<img src="${best.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
+                                (best.imageUrl ? `<img src="${best.imageUrl.replace('/large/','/thumb/')}" width="18" height="18" class="coin-icon" alt="" />` : '') +
                                 `<span class="vs-xmr-symbol">${best.symbol}</span>` +
                                 `<span class="text-success mono vs-xmr-pct">▲ ${best.vsXmr.toFixed(2)}%</span>`;
                             bestCard.parentElement.parentElement.href = '/coins/' + best.symbol.toLowerCase();
                         }
                         if (worstCard) {
                             worstCard.innerHTML =
-                                (worst.imageUrl ? `<img src="${worst.imageUrl}" width="18" height="18" class="coin-icon" />` : '') +
+                                (worst.imageUrl ? `<img src="${worst.imageUrl.replace('/large/','/thumb/')}" width="18" height="18" class="coin-icon" alt="" />` : '') +
                                 `<span class="vs-xmr-symbol">${worst.symbol}</span>` +
                                 `<span class="text-danger mono vs-xmr-pct">▼ ${Math.abs(worst.vsXmr).toFixed(2)}%</span>`;
                             worstCard.parentElement.parentElement.href = '/coins/' + worst.symbol.toLowerCase();

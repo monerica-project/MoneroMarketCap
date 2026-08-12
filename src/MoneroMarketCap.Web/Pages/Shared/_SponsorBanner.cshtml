@@ -1,13 +1,58 @@
+@using MoneroMarketCap.Web.Services
+@inject ISponsorFeed SponsorFeed
+@functions {
+    static string Trunc(string? t, int max)
+    {
+        if (string.IsNullOrEmpty(t) || t.Length <= max) { return t ?? string.Empty; }
+        var cut = t.Substring(0, max);
+        var sp = cut.LastIndexOf(' ');
+        return (sp > 0 ? cut.Substring(0, sp) : cut) + "…";
+    }
+    static (string Css, string Label) Badge(string type) => type switch
+    {
+        "MainSponsor" => ("sp-main", "Main"),
+        "CategorySponsor" => ("sp-cat", "Category"),
+        "SubcategorySponsor" => ("sp-sub", "Subcategory"),
+        _ => (string.Empty, string.Empty),
+    };
+}
 @{
     var rotateInterval = (ViewBag.SponsorRotateIntervalSeconds != null
         ? (int)ViewBag.SponsorRotateIntervalSeconds > 0 ? (int)ViewBag.SponsorRotateIntervalSeconds : 30
         : 30) * 1000;
+
+    // Server-rendered first page — so sponsors are visible with JavaScript disabled.
+    // The script below enhances this (rotation) for JS visitors.
+    static int TypeRank(string t) => t == "MainSponsor" ? 0 : t == "CategorySponsor" ? 1 : 2;
+    var ssr = (await SponsorFeed.GetSponsorsAsync())
+        .OrderBy(s => TypeRank(s.SponsorshipType))
+        .ThenByDescending(s => s.ExpirationDate)
+        .Take(5)
+        .ToList();
 }
 
 <div class="sponsor-banner mb-3" id="sponsor-banner">
     <span class="sponsor-label">Sponsors</span>
     <div class="sponsor-track" id="sponsor-track">
-        <div class="sponsor-loading" id="sponsor-loading">Loading sponsors...</div>
+        @if (ssr.Count > 0)
+        {
+            foreach (var s in ssr)
+            {
+                var badge = Badge(s.SponsorshipType);
+                <a class="sponsor-card" href="@s.Link" target="_blank" rel="noopener sponsored">
+                    @if (!string.IsNullOrEmpty(badge.Label))
+                    {
+                        <span class="sp-badge @badge.Css">@badge.Label</span>
+                    }
+                    <span class="sp-name">@s.Name</span>
+                    <span class="sp-desc">@Trunc(s.Description, 120)</span>
+                </a>
+            }
+        }
+        else
+        {
+            <div class="sponsor-loading" id="sponsor-loading">Loading sponsors...</div>
+        }
     </div>
 </div>
 
@@ -51,21 +96,30 @@
             sponsorPage = 0;
         }
 
-        function renderSponsors() {
+        function paint(slice) {
             const track = document.getElementById('sponsor-track');
-            if (!track || pages.length === 0) return;
-            const slice = pages[sponsorPage] || [];
-            track.style.opacity = '0';
-            setTimeout(() => {
-                track.innerHTML = slice.map(s => `
+            track.innerHTML = slice.map(s => `
                         <a class="sponsor-card" href="${s.link}" target="_blank" rel="noopener sponsored">
                             ${sponsorTypeBadge(s.sponsorshipType)}
                             <span class="sp-name">${s.name}</span>
                             <span class="sp-desc">${truncateWords(s.description, 120)}</span>
                         </a>
                     `).join('');
+        }
+
+        // `immediate` paints without the fade — used when there's no server-rendered content
+        // to preserve. Rotation (no arg) fades out, swaps, fades in.
+        function renderSponsors(immediate) {
+            const track = document.getElementById('sponsor-track');
+            if (!track || pages.length === 0) return;
+            const slice = pages[sponsorPage] || [];
+            if (immediate === true) {
+                paint(slice);
                 track.style.opacity = '1';
-            }, 200);
+            } else {
+                track.style.opacity = '0';
+                setTimeout(() => { paint(slice); track.style.opacity = '1'; }, 200);
+            }
             sponsorPage = (sponsorPage + 1) % pages.length;
         }
 
@@ -77,7 +131,7 @@
         async function loadSponsors() {
             try {
                 const res = await fetch('/api/sponsors');
-                if (!res.ok) { hideBanner(); return; }
+                if (!res.ok) { return; }   // leave the server-rendered cards in place
                 const data = await res.json();
                 if (!data || data.length === 0) { hideBanner(); return; }
                 sponsors = data.sort((a, b) => {
@@ -86,12 +140,22 @@
                     return new Date(b.expirationDate) - new Date(a.expirationDate);
                 });
                 buildPages();
+                // If the server already rendered sponsor cards, DON'T repaint them on load —
+                // that caused a visible flash (fade-out → identical content → fade-in). Leave
+                // the SSR cards untouched and let the rotation timer take over from page 2.
+                const hadSsr = !!document.querySelector('#sponsor-track .sponsor-card');
                 document.getElementById('sponsor-loading')?.remove();
-                renderSponsors();
-                if (sponsorTimer) clearInterval(sponsorTimer);
-                sponsorTimer = setInterval(renderSponsors, ROTATE_MS);
+                if (hadSsr) {
+                    sponsorPage = pages.length > 1 ? 1 % pages.length : 0;
+                } else {
+                    renderSponsors(true); // JS-only (no SSR): paint immediately, no fade
+                }
+                if (pages.length > 1) {
+                    if (sponsorTimer) clearInterval(sponsorTimer);
+                    sponsorTimer = setInterval(renderSponsors, ROTATE_MS);
+                }
             } catch (e) {
-                hideBanner();
+                // network error — keep whatever is already on screen (server-rendered cards)
             }
         }
 

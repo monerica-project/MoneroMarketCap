@@ -2,6 +2,12 @@
 # deploy.sh
 # Run from the CI folder: ./deploy.sh
 #
+# ⚠️⚠️  LEGACY / OLD HOST.  This script is written for the OLD Docker-nginx box
+# (docker exec nginx, generated_nginx_certs volume) and GENERATES appsettings.json from
+# deploy-config.sh values. MoneroMarketCap moved to monerica-vps (host nginx, systemd,
+# SSH :56777) on 2026-07-29 — this script does NOT reach the live site and cannot run
+# there as-is. To deploy production use:  CI/deploy-monerica.sh
+#
 # Flags:
 #   --skip-build    skip dotnet publish steps
 #   --web-only      only deploy the web app

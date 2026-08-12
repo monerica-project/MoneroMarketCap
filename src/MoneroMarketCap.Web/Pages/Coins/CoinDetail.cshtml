@@ -291,6 +291,14 @@
         </div>
     </div>
     <div class="card-body chart-canvas-wrap">
+        <noscript>
+            @* Without JavaScript the canvas can't be drawn, so hide the stuck "Loading…"
+               and the empty canvas, and explain what's needed. *@
+            <style>#chart-status,.chart-canvas-wrap #price-chart{display:none !important;}</style>
+            <div class="chart-noscript" style="padding:2.5rem 1rem;text-align:center;color:var(--xmr-text-muted);font-size:.95rem;line-height:1.6;">
+                📈 The interactive price chart requires JavaScript.<br />Enable JavaScript to view charts.
+            </div>
+        </noscript>
         <div id="ma-toolbar" class="ma-toolbar d-none"></div>
         <canvas id="price-chart"></canvas>
     </div>

@@ -8,6 +8,7 @@ using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Implementations;
 using MoneroMarketCap.Services.Interfaces;
 using MoneroMarketCap.Services.Models;
+using MoneroMarketCap.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,6 +63,9 @@ builder.Services.AddHttpClient<IFiatRateHistoryService, FiatRateHistoryService>(
 // no background work here (resolution lives in the Worker). AddHttpClient() stays for
 // the sponsor proxy; this singleton never makes a network call in this process.
 builder.Services.AddHttpClient();
+
+// Cached Monerica sponsor feed — used by /api/sponsors AND server-rendered so no-JS visitors see sponsors.
+builder.Services.AddSingleton<ISponsorFeed, SponsorFeed>();
 builder.Services.AddSingleton<IChangeNowLinkService, ChangeNowLinkService>();
 
 builder.Services.AddAuthentication("CookieAuth")
@@ -426,12 +430,7 @@ app.MapGet("/api/coin/{coinGeckoId}/chartfine", async (
     return Results.Content(json, "application/json");
 });
 
-// ── Sponsor proxy (/api/sponsors) ────────────────────────────────────────────
-var _sponsorCache = string.Empty;
-var _sponsorCachedAt = DateTime.MinValue;
-var _sponsorCacheTtl = TimeSpan.FromMinutes(
-    builder.Configuration.GetValue<int>("Sponsors:CacheTtlMinutes", 60));
-var _sponsorLock = new SemaphoreSlim(1, 1);
+// ── Sponsor proxy (/api/sponsors) — cache now lives in ISponsorFeed ──────────
 
 // ── Spot price by ticker (/api/price/{symbol}) ───────────────────────────────
 // Returns the latest fiat price for a coin by its ticker symbol. The price is
@@ -667,36 +666,11 @@ app.MapGet("/robots.txt", () => Results.Text(
     "User-agent: *\nAllow: /\n\nSitemap: https://moneromarketcap.com/sitemap.xml\n",
     "text/plain"));
 
-app.MapGet("/api/sponsors", async (HttpContext ctx, IHttpClientFactory httpFactory, CancellationToken cancel) =>
+app.MapGet("/api/sponsors", async (ISponsorFeed feed, HttpContext ctx, CancellationToken cancel) =>
 {
     ctx.Response.Headers["Cache-Control"] = "public, max-age=1200";
-
-    if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
-    {
-        return Results.Content(_sponsorCache, "application/json");
-    }
-
-    await _sponsorLock.WaitAsync(cancel);
-    try
-    {
-        if (!string.IsNullOrEmpty(_sponsorCache) && DateTime.UtcNow - _sponsorCachedAt < _sponsorCacheTtl)
-        {
-            return Results.Content(_sponsorCache, "application/json");
-        }
-
-        var url = app.Configuration["Sponsors:SourceUrl"];
-        var client = httpFactory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(10);
-        var json = await client.GetStringAsync(url, cancel);
-        _sponsorCache = json;
-        _sponsorCachedAt = DateTime.UtcNow;
-        return Results.Content(json, "application/json");
-    }
-    catch
-    {
-        return Results.Content(string.IsNullOrEmpty(_sponsorCache) ? "[]" : _sponsorCache, "application/json");
-    }
-    finally { _sponsorLock.Release(); }
+    var json = await feed.GetRawJsonAsync(cancel);
+    return Results.Content(string.IsNullOrEmpty(json) ? "[]" : json, "application/json");
 });
 
 // ── HTTP pipeline ─────────────────────────────────────────────────────────────
