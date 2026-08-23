@@ -24,11 +24,17 @@
     // Server-rendered first page — so sponsors are visible with JavaScript disabled.
     // The script below enhances this (rotation) for JS visitors.
     static int TypeRank(string t) => t == "MainSponsor" ? 0 : t == "CategorySponsor" ? 1 : 2;
-    var ssr = (await SponsorFeed.GetSponsorsAsync())
+    var allSponsors = (await SponsorFeed.GetSponsorsAsync())
         .OrderBy(s => TypeRank(s.SponsorshipType))
         .ThenByDescending(s => s.ExpirationDate)
-        .Take(5)
         .ToList();
+
+    // The FIRST frame shown is ALWAYS main sponsors only (even if fewer than 5) — it must match
+    // the JS rotation's page 0. Only when there are no main sponsors at all do we fall back to the
+    // first group of category/subcategory sponsors. From there the script cycles the rest in groups
+    // of 5 and loops back to the main sponsors.
+    var mainOnly = allSponsors.Where(s => s.SponsorshipType == "MainSponsor").ToList();
+    var ssr = (mainOnly.Count > 0 ? mainOnly : allSponsors).Take(5).ToList();
 }
 
 <div class="sponsor-banner mb-3" id="sponsor-banner">
