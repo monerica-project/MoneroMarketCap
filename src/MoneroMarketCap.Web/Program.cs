@@ -22,6 +22,14 @@ builder.Services.AddRazorPages(options =>
     // Clean path-based pagination for the coin page's exchange table:
     // /coins/{symbol}/exchanges/{page}. Page 1 stays the plain /coins/{symbol}.
     options.Conventions.AddPageRoute("/Coins/CoinDetail", "coins/{symbol}/exchanges/{xp:int}");
+
+    // Defense-in-depth: require authentication for the ENTIRE /Portfolios folder (private
+    // holdings + transactions) and the AdminOnly policy for the ENTIRE /Admin folder, so a
+    // new page added under either can never be accidentally left anonymous. This is on top of
+    // the per-page [Authorize]/[Authorize(Policy="AdminOnly")] already on each page. Public
+    // pages (coins, exchanges, login, etc.) are unaffected — only these folders are gated.
+    options.Conventions.AuthorizeFolder("/Portfolios");
+    options.Conventions.AuthorizeFolder("/Admin", "AdminOnly");
 });
 
 builder.Services.AddRouting(options =>
@@ -73,6 +81,15 @@ builder.Services.AddAuthentication("CookieAuth")
     {
         options.LoginPath = "/Login";
         options.LogoutPath = "/Logout";
+
+        // Harden the auth cookie so a stolen/observed cookie can't be used to read a
+        // user's portfolio: not readable from JavaScript (blunts XSS theft), only sent
+        // over HTTPS, and Lax same-site to limit cross-site sends.
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.SlidingExpiration = true;
+        options.ExpireTimeSpan = TimeSpan.FromDays(14);
     });
 
 var keysPath = builder.Environment.IsDevelopment()
