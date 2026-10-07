@@ -35,6 +35,40 @@
     </div>
 </div>
 
+@{
+    var pc = Model.PortfolioCoin;
+    var avgBuy = pc.TotalAmount > 0 ? pc.TotalCostBasis / pc.TotalAmount : 0m;
+    var pnl = pc.UnrealizedPnl;
+    var pnlPct = pc.TotalCostBasis > 0 ? (pnl / pc.TotalCostBasis) * 100m : 0m;
+    var pnlClass = pnl >= 0 ? "text-success" : "text-danger";
+    var pnlSign = pnl >= 0 ? "+" : "";
+}
+<div class="card mb-3" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card-body py-3 d-flex flex-wrap gap-4 align-items-end">
+        <div>
+            <div style="color:var(--xmr-text-muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">Balance</div>
+            <div style="font-size:1.4rem;font-weight:600;line-height:1.2">
+                @Mask(pc.TotalAmount.ToString("#,##0.########", usd)) <span style="font-size:1rem;color:var(--xmr-text-muted)">@pc.Coin.Symbol</span>
+            </div>
+        </div>
+        <div>
+            <div style="color:var(--xmr-text-muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">Value</div>
+            <div style="font-size:1.4rem;font-weight:600;line-height:1.2">@Mask("$" + pc.TotalValueUsd.ToString("#,##0.00", usd))</div>
+        </div>
+        <div>
+            <div style="color:var(--xmr-text-muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">Avg Buy</div>
+            <div style="font-size:1.05rem;line-height:1.4">@Mask("$" + avgBuy.ToString("#,##0.########", usd))</div>
+        </div>
+        <div>
+            <div style="color:var(--xmr-text-muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">Unrealized P&amp;L</div>
+            <div class="@pnlClass" style="font-size:1.05rem;line-height:1.4">
+                @Mask(pnlSign + "$" + pnl.ToString("#,##0.00", usd))
+                <span style="font-size:.85rem">(@Mask(pnlSign + pnlPct.ToString("0.0", usd) + "%"))</span>
+            </div>
+        </div>
+    </div>
+</div>
+
 @if (!string.IsNullOrEmpty(Model.ImportMessage))
 {
     <div class="alert @(Model.ImportSuccess ? "alert-success" : "alert-warning") mb-3">

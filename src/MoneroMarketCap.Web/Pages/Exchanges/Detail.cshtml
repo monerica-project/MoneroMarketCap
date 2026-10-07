@@ -41,6 +41,10 @@
             <tbody>
                 <tr><th>KYC</th><td>@Humanize(ex.Kyc)</td></tr>
                 <tr><th>AML policy</th><td>@Humanize(ex.Aml)</td></tr>
+                @if (!string.IsNullOrWhiteSpace(ex.Liquidity))
+                {
+                    <tr><th>Liquidity</th><td>@ex.Liquidity</td></tr>
+                }
                 <tr><th>Fees</th><td class="mono">@MoneroMarketCap.Pages.Coins.DetailModel.FormatFees(ex)</td></tr>
                 @if (ex.ProcessingTimeMinutes is int mins)
                 {
@@ -51,6 +55,13 @@
                     <td><a href="@(Model.GoUrl.Length > 0 ? Model.GoUrl : ex.WebsiteUrl)" target="_blank"
                            rel="@(Model.GoIsAffiliate ? "sponsored noopener" : "noopener")">@ex.WebsiteUrl</a></td>
                 </tr>
+                @if (!string.IsNullOrWhiteSpace(ex.MonericaSlug))
+                {
+                    <tr>
+                        <th>Monerica</th>
+                        <td><a href="https://monerica.com/site/@ex.MonericaSlug" target="_blank" rel="noopener">Reviews &amp; details &rarr;</a></td>
+                    </tr>
+                }
                 @if (!string.IsNullOrWhiteSpace(ex.TorUrl))
                 {
                     <tr><th>Tor</th><td class="mono text-break">@ex.TorUrl</td></tr>

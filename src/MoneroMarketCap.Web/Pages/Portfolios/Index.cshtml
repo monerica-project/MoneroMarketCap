@@ -90,6 +90,25 @@
 }
 else
 {
+    @if (Model.HasValueHistory)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <h5 class="card-title mb-0">Portfolio Value Over Time</h5>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Chart currency">
+                        <button type="button" class="btn btn-primary" id="pvCurUsd">USD</button>
+                        <button type="button" class="btn btn-outline-primary" id="pvCurXmr">XMR</button>
+                    </div>
+                </div>
+                <div style="position:relative;height:280px">
+                    <canvas id="portfolioValueChart"></canvas>
+                </div>
+                <div class="small text-muted mt-1">Total value of all holdings over the last year (or since this portfolio started).</div>
+            </div>
+        </div>
+    }
+
     @if (Model.Allocations.Any() && totalAlloc > 0)
     {
         <div class="card mb-4">
@@ -575,3 +594,57 @@ else
         setInterval(tick, 1000);
     })();
 </script>
+
+@if (Model.HasValueHistory)
+{
+<script>
+(function () {
+    var DATA = @Html.Raw(Model.ValueHistoryJson);
+    var PRIVACY = @(Model.PrivacyMode ? "true" : "false");
+    function init() {
+        var el = document.getElementById('portfolioValueChart');
+        if (!el || !window.Chart) return;
+        var labels = DATA.map(function (p) { return p.d; });
+        var usd = DATA.map(function (p) { return p.u; });
+        var xmr = DATA.map(function (p) { return p.x; });
+        var mode = 'usd';
+        function fmt(v) {
+            if (PRIVACY) return '••••';
+            v = Number(v);
+            return mode === 'usd'
+                ? '$' + v.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                : v.toLocaleString(undefined, { maximumFractionDigits: 4 }) + ' XMR';
+        }
+        var axisColor = getComputedStyle(document.body).color;
+        var ctx = el.getContext('2d');
+        var chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: [{ data: usd, borderColor: '#ff6600', backgroundColor: 'rgba(255,102,0,0.08)', fill: true, tension: 0.15, pointRadius: 0, borderWidth: 2 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return fmt(c.parsed.y); } } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 8, autoSkip: true, color: axisColor } },
+                    y: { grid: { color: 'rgba(128,128,128,0.15)' }, ticks: { display: !PRIVACY, color: axisColor, callback: function (v) { return fmt(v); } } }
+                }
+            }
+        });
+        function setMode(m) {
+            mode = m;
+            chart.data.datasets[0].data = (m === 'usd') ? usd : xmr;
+            document.getElementById('pvCurUsd').className = 'btn ' + (m === 'usd' ? 'btn-primary' : 'btn-outline-primary');
+            document.getElementById('pvCurXmr').className = 'btn ' + (m === 'xmr' ? 'btn-primary' : 'btn-outline-primary');
+            chart.update();
+        }
+        document.getElementById('pvCurUsd').addEventListener('click', function () { setMode('usd'); });
+        document.getElementById('pvCurXmr').addEventListener('click', function () { setMode('xmr'); });
+    }
+    function ready() {
+        if (window.Chart) { init(); }
+        else { var s = document.createElement('script'); s.src = '/js/chart.umd.min.js'; s.onload = init; document.body.appendChild(s); }
+    }
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', ready); } else { ready(); }
+})();
+</script>
+}

@@ -39,6 +39,15 @@ public class Exchange
     public string? Kyc { get; set; }
     public string? Aml { get; set; }
 
+    /// <summary>Monerica directory profile slug (/site/{slug}) when this exchange has a public
+    /// Monerica listing, else null. We link there for reviews + further details. Enriched from
+    /// the Monerica directory by matching website domain (name fallback); null = no link.</summary>
+    public string? MonericaSlug { get; set; }
+
+    /// <summary>Where the exchange's swap liquidity comes from, from its Monerica listing:
+    /// "Own", "Mixed", "Third Party", "Varies By Provider". Null when unknown/not applicable.</summary>
+    public string? Liquidity { get; set; }
+
     public decimal? FeeMinPercent { get; set; }
     public decimal? FeeMaxPercent { get; set; }
     public bool FeeVariesByProvider { get; set; }
