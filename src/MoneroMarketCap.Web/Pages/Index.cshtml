@@ -32,18 +32,18 @@
 {
     var xmr = Model.Monero;
     <div class="xmr-stat-bar mb-4">
-        <div class="xmr-stat">
+        <a class="xmr-stat xmr-stat-link" href="/coins/@CoinRoute.Key(xmr)" aria-label="Monero price: view the Monero page">
             <span class="stat-label">XMR Price</span>
             <span class="stat-value" id="xmr-price">@MoneyFormatter.FormatPrice(xmr.PriceUsd, cur, rate)</span>
             <span id="xmr-change-24h" class="stat-change @(xmr.PriceChangePercent24h >= 0 ? "text-success" : "text-danger")">
                 @(xmr.PriceChangePercent24h >= 0 ? "▲" : "▼") @Math.Abs(xmr.PriceChangePercent24h).ToString("N2")% 24h
             </span>
-        </div>
-        <div class="xmr-stat">
+        </a>
+        <a class="xmr-stat xmr-stat-link" href="/coins/@CoinRoute.Key(xmr)" aria-label="Monero market cap: view the Monero page">
             <span class="stat-label">Market Cap</span>
             <span class="stat-value" id="xmr-mcap">@MoneyFormatter.FormatLarge(MoneroSupplyDisplay.EffectiveMarketCapUsd(xmr), cur, rate)</span>
             <span id="xmr-rank" class="stat-change text-muted">Rank #@xmr.MarketCapRank</span>
-        </div>
+        </a>
         <div class="xmr-stat xmr-stat--wide">
             <span class="stat-label">Price Change</span>
             <div class="price-changes">

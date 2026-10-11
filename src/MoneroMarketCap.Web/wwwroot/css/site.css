@@ -436,6 +436,22 @@ div[style*="border:1px solid green"] {
     min-width: 160px;
 }
 
+/* Stat boxes that link to a coin page: orange outline on hover/focus. */
+a.xmr-stat-link {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+a.xmr-stat-link:hover,
+a.xmr-stat-link:focus-visible {
+    color: inherit;
+    border-color: var(--xmr-orange);
+    box-shadow: 0 0 0 1px var(--xmr-orange);
+    outline: none;
+}
+
 .xmr-stat--wide {
     flex: 2 1 320px;
     min-width: 320px;
