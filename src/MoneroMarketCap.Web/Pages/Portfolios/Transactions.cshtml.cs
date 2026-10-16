@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
+using MoneroMarketCap.Data.Helpers;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
 using System.Globalization;
@@ -127,33 +128,7 @@ public class TransactionsModel : PageModel
             .Select(e => e.Entity)
             .ToList();
 
-        var combined = persisted.Concat(pending).OrderBy(t => t.TransactedAt).ToList();
-
-        decimal totalAmount = 0;
-        decimal totalCostBasis = 0;
-
-        foreach (var t in combined)
-        {
-            if (t.Type == TransactionType.Buy)
-            {
-                totalAmount += t.Amount;
-                totalCostBasis += t.TotalUsd;
-            }
-            else
-            {
-                if (totalAmount > 0)
-                {
-                    var proportion = Math.Min(t.Amount / totalAmount, 1m);
-                    totalCostBasis -= totalCostBasis * proportion;
-                }
-                totalAmount -= t.Amount;
-                if (totalAmount < 0) totalAmount = 0;
-                if (totalCostBasis < 0) totalCostBasis = 0;
-            }
-        }
-
-        portfolioCoin.TotalAmount = totalAmount;
-        portfolioCoin.TotalCostBasis = totalCostBasis;
+        PortfolioTotalsCalculator.Apply(portfolioCoin, persisted.Concat(pending));
     }
 
     public async Task<IActionResult> OnGetAsync(int portfolioCoinId, int pageNumber = 1)

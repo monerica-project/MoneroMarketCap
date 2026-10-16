@@ -53,7 +53,11 @@
     <form method="post"
           asp-page-handler="DeletePortfolio"
           asp-route-id="@Model.Portfolio.Id"
-          onsubmit="return confirm('Delete portfolio \'@Model.Portfolio.Name\'? This cannot be undone.')">
+          data-portfolio-name="@Model.Portfolio.Name"
+          onsubmit="return confirm('Delete portfolio \u201C' + this.dataset.portfolioName + '\u201D? This cannot be undone.')">
+        @* The name is user-controlled: it goes in an HTML-encoded data- attribute and is read
+           as a plain string, never spliced into the JS source (an apostrophe used to break the
+           handler and submit the delete with no confirmation, and allowed script injection). *@
         @Html.AntiForgeryToken()
         <button type="submit" class="btn btn-danger btn-sm">🗑 Delete Portfolio</button>
     </form>

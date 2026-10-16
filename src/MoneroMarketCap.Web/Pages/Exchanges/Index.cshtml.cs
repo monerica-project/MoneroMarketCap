@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
+using MoneroMarketCap.Data.Models;
 
 namespace MoneroMarketCap.Pages.Exchanges;
 
@@ -21,9 +22,10 @@ public class IndexModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(int p = 1)
     {
-        Total = await _db.Exchanges.CountAsync(HttpContext.RequestAborted);
+        var listed = _db.Exchanges.Where(e => Exchange.ListedGrades.Contains(e.Grade!));
+        Total = await listed.CountAsync(HttpContext.RequestAborted);
         PageNum = Math.Clamp(p, 1, Math.Max(1, TotalPages));
-        Rows = await _db.Exchanges.AsNoTracking()
+        Rows = await listed.AsNoTracking()
             .OrderBy(e => e.Name)
             .Skip((PageNum - 1) * PageSize)
             .Take(PageSize)

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
+using MoneroMarketCap.Data.Helpers;
 
 namespace MoneroMarketCap.Worker;
 
@@ -12,7 +13,8 @@ namespace MoneroMarketCap.Worker;
 ///      (e.g. "AKE"). Last-wins picked whichever duplicate happened to sort last, so an
 ///      exchange's coins could be attached to a coin whose page nobody sees, and the two
 ///      sync workers could even disagree. Here the tracked coin with the best market-cap
-///      rank always wins, so the choice is stable across runs and workers.
+///      rank always wins, so the choice is stable across runs and workers — and it is the
+///      same shared ordering (CoinRules.OrderCanonical) the coin page and /api/price use.
 ///   2. Whitespace-tolerant. Symbols are trimmed so a stray space can't turn an exact
 ///      ticker match into a miss.
 /// </summary>
@@ -21,13 +23,23 @@ internal static class CoinTickerMap
     public static async Task<Dictionary<string, int>> BuildAsync(AppDbContext db, CancellationToken ct)
     {
         var rows = await db.Coins.AsNoTracking()
-            .Select(c => new { c.Id, c.Symbol, c.MarketCapRank, c.IsActive })
+            .Select(c => new CoinTickerRow(c.Id, c.Symbol, c.MarketCapRank, c.MarketCapUsd, c.IsActive))
             .ToListAsync(ct);
 
-        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var best = new Dictionary<string, (bool Active, int Rank)>(StringComparer.OrdinalIgnoreCase);
+        return Build(rows);
+    }
 
-        foreach (var c in rows)
+    /// <summary>
+    /// Pure map builder. Rows are walked in the shared canonical order (CoinRules: active
+    /// first, ranked before unranked, best rank, then larger market cap, then Id) and the
+    /// first coin per ticker wins — the same coin the coin page and /api/price resolve the
+    /// ticker to, so exchange support is attached to the coin whose page visitors see.
+    /// </summary>
+    public static Dictionary<string, int> Build(IEnumerable<CoinTickerRow> rows)
+    {
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var c in rows.OrderCanonical(r => r.IsActive, r => r.MarketCapRank, r => r.MarketCapUsd, r => r.Id))
         {
             var ticker = c.Symbol?.Trim();
             if (string.IsNullOrWhiteSpace(ticker))
@@ -35,27 +47,11 @@ internal static class CoinTickerMap
                 continue;
             }
 
-            // Rank 1 is the biggest coin; unranked (0) sorts last.
-            var rank = c.MarketCapRank > 0 ? c.MarketCapRank : int.MaxValue;
-            var candidate = (Active: c.IsActive, Rank: rank);
-
-            if (best.TryGetValue(ticker, out var current))
-            {
-                // An active (tracked) coin beats an inactive one; otherwise the higher-cap
-                // (lower rank number) coin wins. Deterministic either way.
-                var better = candidate.Active != current.Active
-                    ? candidate.Active
-                    : candidate.Rank < current.Rank;
-                if (!better)
-                {
-                    continue;
-                }
-            }
-
-            best[ticker] = candidate;
-            map[ticker] = c.Id;
+            map.TryAdd(ticker, c.Id);
         }
 
         return map;
     }
+
+    internal sealed record CoinTickerRow(int Id, string? Symbol, int MarketCapRank, decimal MarketCapUsd, bool IsActive);
 }

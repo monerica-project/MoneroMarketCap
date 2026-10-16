@@ -170,6 +170,14 @@ public class HourlyHistoryBackfillService : BackgroundService
             }
         }
 
+        // One row per timestamp (unique index on CoinId+Interval+RecordedAt): if CoinGecko
+        // ever repeats a timestamp, the later point wins.
+        points = points
+            .GroupBy(p => p.At)
+            .Select(g => g.Last())
+            .OrderBy(p => p.At)
+            .ToList();
+
         if (points.Count == 0) return 0;
 
         var existing = await db.CoinPriceHistories

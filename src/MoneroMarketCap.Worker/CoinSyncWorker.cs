@@ -54,7 +54,8 @@ public class CoinSyncWorker : BackgroundService
         var topCount = _config.GetValue<int>("CoinGecko:TopCount", 100);
 
         // 1. Live top N from CoinGecko — source of truth
-        var topCoins = await gecko.GetTopCoinsAsync(topCount);
+        var top = await gecko.GetTopCoinsAsync(topCount);
+        var topCoins = top.Coins;
         if (topCoins == null || topCoins.Count == 0)
         {
             _logger.LogWarning("CoinGecko returned no top coins; skipping cycle");
@@ -93,7 +94,7 @@ public class CoinSyncWorker : BackgroundService
         foreach (var coin in existing)
         {
             if (string.IsNullOrEmpty(coin.CoinGeckoId)) continue;
-            if (!topIds.Contains(coin.CoinGeckoId) && coin.IsActive)
+            if (top.IsComplete && coin.IsActiveOverride != true && !topIds.Contains(coin.CoinGeckoId) && coin.IsActive)
             {
                 coin.IsActive = false;
                 deactivated++;

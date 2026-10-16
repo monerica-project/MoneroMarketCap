@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
+using MoneroMarketCap.Data.Helpers;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Interfaces;
@@ -117,7 +118,7 @@ public class DetailModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(string symbol, int xp = 1)
     {
-        var graceDays = _config.GetValue<int>("CoinGecko:TrackingGraceDays", 90);
+        var graceDays = _config.GetValue<int>("CoinGecko:TrackingGraceDays", CoinRules.DefaultGraceDays);
         var all = await _coins.GetActiveAndGraceAsync(graceDays);
         var key = (symbol ?? string.Empty).Trim();
 
@@ -146,12 +147,12 @@ public class DetailModel : PageModel
             DataWarning =
                 $"{Coin.Name} is no longer in the top {_config.GetValue<int>("CoinGecko:TopCount", 300)} " +
                 $"coins we track continuously, so the figures below are not being updated.{since} " +
-                $"Last updated {Coin.UpdatedAt:d MMMM yyyy}.";
+                $"Last updated {Coin.PriceAsOfUtc:d MMMM yyyy}.";
         }
-        else if (Coin.UpdatedAt < DateTime.UtcNow.AddMinutes(-StaleAfterMinutes))
+        else if (Coin.PriceAsOfUtc < DateTime.UtcNow.AddMinutes(-StaleAfterMinutes))
         {
             DataWarning =
-                $"Price data for {Coin.Name} was last updated {Coin.UpdatedAt:d MMMM yyyy HH:mm} UTC " +
+                $"Price data for {Coin.Name} was last updated {Coin.PriceAsOfUtc:d MMMM yyyy HH:mm} UTC " +
                 "and may be delayed.";
         }
 
@@ -168,10 +169,10 @@ public class DetailModel : PageModel
 
         // Exchanges that support this coin (synced weekly from SwapRaven), graded
         // best-first, 25 per page.
-        ExTotal = await _db.ExchangeCoins.CountAsync(ec => ec.CoinId == Coin.Id, HttpContext.RequestAborted);
+        var listedLinks = _db.ExchangeCoins.Where(ec => ec.CoinId == Coin.Id && Exchange.ListedGrades.Contains(ec.Exchange!.Grade!));
+        ExTotal = await listedLinks.CountAsync(HttpContext.RequestAborted);
         ExPage = Math.Clamp(xp, 1, Math.Max(1, ExTotalPages));
-        Exchanges = await _db.ExchangeCoins.AsNoTracking()
-            .Where(ec => ec.CoinId == Coin.Id)
+        Exchanges = await listedLinks.AsNoTracking()
             .Select(ec => ec.Exchange!)
             .OrderBy(e => e.Name)
             .Skip((ExPage - 1) * ExPageSize)

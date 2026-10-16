@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using MoneroMarketCap.Data.Helpers;
 using MoneroMarketCap.Data.Models;
 
 namespace MoneroMarketCap.Data.Repositories;
@@ -44,7 +45,13 @@ public class PortfolioRepository : IPortfolioRepository
         await _db.SaveChangesAsync();
     }
 
-    // PortfolioRepository
+    /// <summary>
+    /// Deletes a single transaction and recomputes the parent PortfolioCoin's totals with
+    /// <see cref="PortfolioTotalsCalculator"/> (the same average-cost rule the portfolio
+    /// pages use). The PortfolioCoin itself is removed only when it has no transactions
+    /// left — a zero/negative running balance is NOT a reason to drop it, because removing
+    /// it would cascade-delete the user's remaining transaction history.
+    /// </summary>
     public async Task DeleteTransactionAsync(int transactionId)
     {
         var tx = await _db.CoinTransactions
@@ -55,18 +62,18 @@ public class PortfolioRepository : IPortfolioRepository
 
         _db.CoinTransactions.Remove(tx);
 
-        // Recalculate rolled-up totals on the parent PortfolioCoin
         var pc = tx.PortfolioCoin;
         var remaining = await _db.CoinTransactions
             .Where(t => t.PortfolioCoinId == pc.Id && t.Id != transactionId)
             .ToListAsync();
 
-        pc.TotalAmount = remaining.Sum(t => t.Type == TransactionType.Buy ? t.Amount : -t.Amount);
-        pc.TotalCostBasis = remaining.Where(t => t.Type == TransactionType.Buy).Sum(t => t.TotalUsd);
-
-        if (pc.TotalAmount <= 0)
+        if (remaining.Count == 0)
         {
             _db.PortfolioCoins.Remove(pc);
+        }
+        else
+        {
+            PortfolioTotalsCalculator.Apply(pc, remaining);
         }
 
         await _db.SaveChangesAsync();

@@ -58,6 +58,12 @@ public class Exchange
     /// <summary>Graded best-first ordering (Ungraded last), as served by SwapRaven.</summary>
     public int SortOrder { get; set; }
 
+    /// <summary>Only exchanges graded A, B or C are shown on the site; D, F and ungraded ones
+    /// (including the CEX feed) stay in the database but are hidden everywhere.</summary>
+    public static readonly string[] ListedGrades = { "A", "B", "C" };
+
+    public static bool IsListedGrade(string? grade) => grade is not null && ListedGrades.Contains(grade);
+
     public DateTime UpdatedAt { get; set; }
 
     public ICollection<ExchangeCoin> ExchangeCoins { get; set; } = new List<ExchangeCoin>();

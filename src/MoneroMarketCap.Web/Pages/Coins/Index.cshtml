@@ -36,7 +36,7 @@ else
                     <td>@MoneyFormatter.FormatPrice(coin.PriceUsd, cur, rate)</td>
                     <td>@MoneyFormatter.FormatLarge(coin.MarketCapUsd, cur, rate)</td>
                     <td>@coin.CirculatingSupply.ToString("N0")</td>
-                    <td>@coin.UpdatedAt.ToShortDateString()</td>
+                    <td>@coin.PriceAsOfUtc.ToShortDateString()</td>
                 </tr>
             }
         </tbody>

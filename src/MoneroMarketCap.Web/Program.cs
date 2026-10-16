@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Constants;
+using MoneroMarketCap.Data.Helpers;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Implementations;
 using MoneroMarketCap.Services.Interfaces;
 using MoneroMarketCap.Services.Models;
+using MoneroMarketCap.Web.Helpers;
 using MoneroMarketCap.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -76,6 +78,9 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<ISponsorFeed, SponsorFeed>();
 builder.Services.AddSingleton<IChangeNowLinkService, ChangeNowLinkService>();
 
+// Registration captcha answers live server-side (one-time tokens), never in a cookie.
+builder.Services.AddSingleton<ICaptchaStore, CaptchaStore>();
+
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>
     {
@@ -90,6 +95,14 @@ builder.Services.AddAuthentication("CookieAuth")
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromDays(14);
+
+        // Roles are baked into the cookie at login. Re-check the user against the DB
+        // (short cache) so deleting a user or revoking a role takes effect promptly
+        // instead of surviving for the cookie's whole sliding lifetime.
+        options.Events = new Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationEvents
+        {
+            OnValidatePrincipal = CookiePrincipalValidator.ValidateAsync,
+        };
     });
 
 var keysPath = builder.Environment.IsDevelopment()
@@ -194,6 +207,10 @@ app.MapGet("/api/coin/{coinGeckoId}/chart", async (
     if (!CurrencyCatalog.IsSupported(currencyCode))
         currencyCode = "USD";
 
+    // Only ids of coins we track — never fetch or cache for arbitrary URL input.
+    if (!await KnownCoinIds.IsKnownAsync(coinGeckoId, scopeFactory, cache))
+        return Results.NotFound();
+
     var cacheKey = $"chart_{coinGeckoId}_{currencyCode}";
     if (cache.TryGetValue(cacheKey, out string? cached))
         return Results.Content(cached!, "application/json");
@@ -289,6 +306,10 @@ app.MapGet("/api/coin/{coinGeckoId}/chart24h", async (
     if (!CurrencyCatalog.IsSupported(currencyCode))
         currencyCode = "USD";
 
+    // Only ids of coins we track — never fetch or cache for arbitrary URL input.
+    if (!await KnownCoinIds.IsKnownAsync(coinGeckoId, scopeFactory, cache, ctx.RequestAborted))
+        return Results.NotFound();
+
     var cacheKey = $"chart24h_{coinGeckoId}_{currencyCode}";
     if (cache.TryGetValue(cacheKey, out string? cached))
         return Results.Content(cached!, "application/json");
@@ -377,6 +398,10 @@ app.MapGet("/api/coin/{coinGeckoId}/chartfine", async (
 
     // Only the short ranges that benefit from hourly data.
     var windowDays = days <= 7 ? 7 : 30;
+
+    // Only ids of coins we track — never fetch or cache for arbitrary URL input.
+    if (!await KnownCoinIds.IsKnownAsync(coinGeckoId, scopeFactory, cache, ctx.RequestAborted))
+        return Results.NotFound();
 
     var cacheKey = $"chartfine_{coinGeckoId}_{currencyCode}_{windowDays}";
     if (cache.TryGetValue(cacheKey, out string? cached))
@@ -485,21 +510,20 @@ app.MapGet("/api/price/{symbol}", async (
     using var scope = scopeFactory.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Canonical coin for this ticker: prefer active, then the best-ranked
-    // (rank 0 = unranked, sorted last), then highest market cap as a tiebreak.
+    // Canonical coin for this ticker (shared CoinRules order): prefer active, then the
+    // best-ranked (rank 0 = unranked, sorted last), then highest market cap.
     var coin = await db.Coins
         .Where(c => c.Symbol == ticker)
-        .OrderByDescending(c => c.IsActive)
-        .ThenBy(c => c.MarketCapRank == 0)
-        .ThenBy(c => c.MarketCapRank)
-        .ThenByDescending(c => c.MarketCapUsd)
+        .OrderCanonical()
         .Select(c => new
         {
             c.Symbol,
             c.Name,
             c.PriceUsd,
             c.MarketCapRank,
-            c.UpdatedAt
+
+            // When the PRICE was refreshed — not UpdatedAt, which any edit bumps.
+            LastUpdated = c.PriceUpdatedAtUtc ?? c.UpdatedAt
         })
         .FirstOrDefaultAsync();
 
@@ -530,7 +554,7 @@ app.MapGet("/api/price/{symbol}", async (
         priceUsd = coin.PriceUsd,
         rate,
         marketCapRank = coin.MarketCapRank,
-        lastUpdated = coin.UpdatedAt
+        lastUpdated = coin.LastUpdated
     });
 
     cache.Set(cacheKey, result, TimeSpan.FromSeconds(30));
@@ -644,7 +668,7 @@ app.MapGet("/sitemap-pages.xml", () =>
 app.MapGet("/sitemap-exchanges.xml", async (AppDbContext db) =>
 {
     var exchanges = await db.Exchanges.AsNoTracking()
-        .Where(e => e.Slug != "")
+        .Where(e => e.Slug != "" && Exchange.ListedGrades.Contains(e.Grade!))
         .OrderBy(e => e.SortOrder).ThenBy(e => e.Name)
         .Select(e => new { e.Slug, e.UpdatedAt })
         .ToListAsync();
@@ -764,27 +788,13 @@ app.MapGet("/api/coins/suggest", async (
     using var scope = scopeFactory.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    var like = $"%{term}%";
-    var matches = await db.Coins
-        .Where(c => EF.Functions.ILike(c.Symbol, like) || EF.Functions.ILike(c.Name, like))
-        .OrderByDescending(c => c.IsActive)
-        .ThenBy(c => c.MarketCapRank == 0)
-        .ThenBy(c => c.MarketCapRank)
-        .ThenByDescending(c => c.MarketCapUsd)
+    // Filtering, match-quality ranking and the limit all run in SQL; the term is
+    // LIKE-escaped so "%"/"_" match literally (see CoinSuggest).
+    var matches = await CoinSuggest.Query(db.Coins.AsNoTracking(), term, 10)
         .Select(c => new { c.Symbol, c.Name, c.ImageUrl, c.CoinGeckoId })
-        .ToListAsync();
-
-    // Match-quality rank, in memory (the filtered set is small). OrderBy is stable,
-    // so the market-cap ordering above is preserved within each rank tier.
-    int Rank(string sym, string name) =>
-        string.Equals(sym, term, StringComparison.OrdinalIgnoreCase) ? 0
-        : sym.StartsWith(term, StringComparison.OrdinalIgnoreCase) ? 1
-        : name.StartsWith(term, StringComparison.OrdinalIgnoreCase) ? 2
-        : 3;
+        .ToListAsync(ctx.RequestAborted);
 
     var results = matches
-        .OrderBy(c => Rank(c.Symbol, c.Name))
-        .Take(10)
         .Select(c => new
         {
             symbol = c.Symbol,

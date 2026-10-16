@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using MoneroMarketCap.Data;
+using MoneroMarketCap.Data.Helpers;
 using MoneroMarketCap.Data.Models;
 
 namespace MoneroMarketCap.Pages.Exchanges;
@@ -9,8 +10,13 @@ namespace MoneroMarketCap.Pages.Exchanges;
 public class DetailModel : PageModel
 {
     private readonly AppDbContext _db;
+    private readonly IConfiguration _config;
 
-    public DetailModel(AppDbContext db) => _db = db;
+    public DetailModel(AppDbContext db, IConfiguration config)
+    {
+        _db = db;
+        _config = config;
+    }
 
     public Exchange Exchange { get; set; } = default!;
 
@@ -24,14 +30,19 @@ public class DetailModel : PageModel
     public int CoinTotalPages => (int)Math.Ceiling(CoinTotal / (double)CoinPageSize);
     public List<CoinRow> Coins { get; set; } = new();
 
-    public record CoinRow(string Symbol, string Name, string? CoinGeckoId);
+    /// <param name="HasPage">
+    /// True when /coins/{key} would resolve for this coin (active, or inside the
+    /// CoinGecko:TrackingGraceDays window — the same rule as the coin page). Retired
+    /// coins are shown without a link instead of linking to a 404.
+    /// </param>
+    public record CoinRow(string Symbol, string Name, string? CoinGeckoId, bool HasPage);
 
     public async Task<IActionResult> OnGetAsync(string slug, int cp = 1)
     {
         var ex = await _db.Exchanges.AsNoTracking()
             .Include(e => e.Contacts)
             .FirstOrDefaultAsync(e => e.Slug == slug, HttpContext.RequestAborted);
-        if (ex is null)
+        if (ex is null || !Data.Models.Exchange.IsListedGrade(ex.Grade))
         {
             return NotFound();
         }
@@ -42,14 +53,22 @@ public class DetailModel : PageModel
 
         CoinTotal = await _db.ExchangeCoins.CountAsync(ec => ec.ExchangeId == ex.Id, HttpContext.RequestAborted);
         CoinPage = Math.Clamp(cp, 1, Math.Max(1, CoinTotalPages));
-        Coins = await _db.ExchangeCoins.AsNoTracking()
+        var graceCutoff = CoinRules.GraceCutoff(
+            _config.GetValue<int>("CoinGecko:TrackingGraceDays", CoinRules.DefaultGraceDays), DateTime.UtcNow);
+        Coins = (await _db.ExchangeCoins.AsNoTracking()
             .Where(ec => ec.ExchangeId == ex.Id)
             .Select(ec => ec.Coin!)
             .OrderBy(c => c.Symbol)
             .Skip((CoinPage - 1) * CoinPageSize)
             .Take(CoinPageSize)
-            .Select(c => new CoinRow(c.Symbol, c.Name, c.CoinGeckoId))
-            .ToListAsync(HttpContext.RequestAborted);
+            .Select(c => new { c.Symbol, c.Name, c.CoinGeckoId, c.IsActive, c.LastInTopNUtc })
+            .ToListAsync(HttpContext.RequestAborted))
+            .Select(c => new CoinRow(
+                c.Symbol,
+                c.Name,
+                c.CoinGeckoId,
+                CoinRules.IsResolvable(c.IsActive, c.LastInTopNUtc, graceCutoff)))
+            .ToList();
 
         return Page();
     }

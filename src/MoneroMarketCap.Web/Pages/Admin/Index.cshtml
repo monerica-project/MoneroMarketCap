@@ -14,7 +14,7 @@
 
     @* Tracking health. StaleCoinCount > 0 means the worker is behind or down. *@
     <p class="mb-3">
-        <span class="badge bg-secondary">@Model.Coins.Count tracked</span>
+        <span class="badge bg-secondary">@Model.ActiveCount tracked</span>
         <span class="badge @(Model.StaleCoinCount > 0 ? "bg-danger" : "bg-success")">
             @Model.StaleCoinCount stale (&gt;1h)
         </span>
@@ -78,7 +78,7 @@ else
                         @(coin.PriceChangePercent24h >= 0 ? "+" : "")@coin.PriceChangePercent24h.ToString("N2")%
                     </td>
                     <td class="text-end" style="font-size:0.8rem;color:var(--xmr-text-muted)">
-                        @coin.UpdatedAt.ToString("g")
+                        @coin.PriceAsOfUtc.ToString("g")
                     </td>
                     <td>
                         @if (!string.IsNullOrEmpty(coin.TradeUrl))
@@ -98,6 +98,20 @@ else
                                 @(coin.IsActive ? "Deactivate" : "Activate")
                             </button>
                         </form>
+                        @* Manual override: the worker leaves IsActive alone while this is set. *@
+                        @if (coin.IsActiveOverride != null)
+                        {
+                            <div class="d-flex align-items-center gap-1 mt-1">
+                                <span class="badge @(coin.IsActiveOverride == true ? "bg-info" : "bg-warning text-dark")"
+                                      title="Manual override — the worker will not change this coin's active state">
+                                    @(coin.IsActiveOverride == true ? "pinned active" : "pinned hidden")
+                                </span>
+                                <form method="post" asp-page-handler="ClearOverride">
+                                    <input type="hidden" name="id" value="@coin.Id" />
+                                    <button class="btn btn-link btn-sm p-0" title="Return to automatic top-N tracking">Auto</button>
+                                </form>
+                            </div>
+                        }
                     </td>
                     <td>
                         <a asp-page="/Admin/EditCoin" asp-route-id="@coin.Id"

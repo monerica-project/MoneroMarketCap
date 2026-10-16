@@ -54,6 +54,7 @@
 
                     <form method="post">
                         @Html.AntiForgeryToken()
+                        <input type="hidden" name="CaptchaToken" value="@Model.CaptchaToken" />
 
                         <div class="mb-3">
                             <label class="form-label">@Model.CaptchaQuestion</label>

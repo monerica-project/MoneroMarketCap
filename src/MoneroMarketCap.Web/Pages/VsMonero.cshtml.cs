@@ -44,7 +44,7 @@ public class VsMoneroModel : PageModel
 
         if (coins.Any())
         {
-            LastUpdated = coins.Max(c => c.UpdatedAt);
+            LastUpdated = coins.Max(c => c.PriceAsOfUtc);
         }
 
         var xmr = Monero;

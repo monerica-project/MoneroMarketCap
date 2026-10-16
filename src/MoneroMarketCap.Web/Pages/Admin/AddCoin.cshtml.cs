@@ -85,13 +85,36 @@ public class AddCoinModel : PageModel
         return RedirectToPage("/Admin/Index");
     }
 
+    /// <summary>
+    /// Adds (or re-activates) a coin by its CoinGecko id and pins it active with
+    /// <see cref="Coin.IsActiveOverride"/> = true, so the worker keeps it — and keeps
+    /// pricing it via the markets ids= query — even when it is outside the top N.
+    /// De-duplicates on CoinGeckoId (tickers are NOT unique across coins).
+    /// </summary>
     private async Task AddCoinByIdAsync(string geckoId)
     {
+        geckoId = (geckoId ?? string.Empty).Trim();
+        if (geckoId.Length == 0) return;
+
         var m = await _gecko.GetMarketDataAsync(geckoId);
         if (m == null) { Skipped.Add(geckoId); return; }
 
-        var existing = await _coins.GetBySymbolAsync(m.Symbol.ToUpper());
-        if (existing != null) { Skipped.Add(m.Symbol.ToUpper()); return; }
+        var existing = await _coins.GetByCoinGeckoIdAsync(m.Id);
+        if (existing != null)
+        {
+            if (existing.IsActive && existing.IsActiveOverride != false)
+            {
+                Skipped.Add(m.Symbol.ToUpper());
+                return;
+            }
+
+            // Known but inactive (dropped out of the top N, or pinned hidden): bring it back.
+            existing.IsActive = true;
+            existing.IsActiveOverride = true;
+            await _coins.SaveChangesAsync();
+            Added.Add($"{m.Symbol.ToUpper()} (re-activated)");
+            return;
+        }
 
         await _coins.AddAsync(new Coin
         {
@@ -116,7 +139,9 @@ public class AddCoinModel : PageModel
             AtlChangePercentage = m.AtlChangePercentage ?? 0,
             AtlDate = m.AtlDate,
             PriceChangePercent24h = m.PriceChangePercentage24h ?? 0,
-            IsActive = true
+            PriceUpdatedAtUtc = DateTime.UtcNow,
+            IsActive = true,
+            IsActiveOverride = true
         });
         await _coins.SaveChangesAsync();
         Added.Add(m.Symbol.ToUpper());

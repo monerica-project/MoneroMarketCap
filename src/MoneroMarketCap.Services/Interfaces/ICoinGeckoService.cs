@@ -7,7 +7,13 @@ public interface ICoinGeckoService
     Task<List<CoinGeckoSearchResult>> SearchCoinsAsync(string query);
     Task<CoinGeckoMarketData?> GetMarketDataAsync(string coinGeckoId);
     Task<Dictionary<string, CoinGeckoMarketData>> GetMarketDataBatchAsync(IEnumerable<string> coinGeckoIds);
-    Task<List<CoinGeckoMarketData>> GetTopCoinsAsync(int count = 500);
+
+    /// <summary>
+    /// The top <paramref name="count"/> coins by market cap. <see cref="TopCoinsResult.IsComplete"/>
+    /// is false when a page failed, in which case the list is partial and must not be
+    /// treated as the full top N.
+    /// </summary>
+    Task<TopCoinsResult> GetTopCoinsAsync(int count = 500);
 
     Task<string?> GetMarketChartAsync(string coinGeckoId, int days = 365);
 

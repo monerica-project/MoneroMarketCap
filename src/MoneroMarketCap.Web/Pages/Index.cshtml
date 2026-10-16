@@ -146,8 +146,8 @@
         <span class="text-muted">Data updated:</span>
         <span id="last-updated-bar"
               class="cursor-default"
-              title="@(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "")">
-            @(Model.Coins.Any() ? Model.Coins.Max(c => c.UpdatedAt).ToString("HH:mm:ss") + " UTC" : "pending...")
+              title="@(Model.Coins.Any() ? Model.Coins.Max(c => c.PriceAsOfUtc).ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "")">
+            @(Model.Coins.Any() ? Model.Coins.Max(c => c.PriceAsOfUtc).ToString("HH:mm:ss") + " UTC" : "pending...")
         </span>
     </span>
     <span>

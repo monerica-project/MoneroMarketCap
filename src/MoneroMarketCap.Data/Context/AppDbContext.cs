@@ -40,6 +40,13 @@ public class AppDbContext : DbContext
             .HasIndex(pc => new { pc.PortfolioId, pc.CoinId })
             .IsUnique();
 
+        // One row per coin per interval per timestamp. Daily ("1d") rows are written at
+        // midnight UTC, so this is "one daily row per coin per day"; it is what stops the
+        // per-cycle upsert and the history backfill from both inserting the same day.
+        modelBuilder.Entity<CoinPriceHistory>()
+            .HasIndex(h => new { h.CoinId, h.Interval, h.RecordedAt })
+            .IsUnique();
+
         modelBuilder.Entity<CoinTransaction>()
             .Property(t => t.Type)
             .HasConversion<string>();

@@ -17,7 +17,11 @@ public class IndexModel : PageModel
     private readonly ICoinGeckoService _gecko;
     private readonly AppDbContext _db;
 
+    /// <summary>Active coins, plus inactive coins an admin has pinned hidden (so they can be restored).</summary>
     public IReadOnlyList<Coin> Coins { get; set; } = new List<Coin>();
+
+    /// <summary>Number of active (tracked) coins.</summary>
+    public int ActiveCount { get; set; }
 
     /// <summary>Active coins whose market data has not refreshed in the last hour.</summary>
     public int StaleCoinCount { get; set; }
@@ -34,11 +38,16 @@ public class IndexModel : PageModel
 
     public async Task OnGetAsync()
     {
-        Coins = await _coins.GetAllAsync();
+        Coins = await _db.Coins
+            .Where(c => c.IsActive || c.IsActiveOverride != null)
+            .OrderBy(c => c.MarketCapRank)
+            .ToListAsync();
+        ActiveCount = Coins.Count(c => c.IsActive);
 
         // Pipeline health at a glance: if the worker stops, StaleCoinCount climbs.
+        // Based on PriceUpdatedAtUtc, which only real price refreshes move.
         StaleCoinCount = await _coins.CountStaleActiveAsync(DateTime.UtcNow.AddHours(-1));
-        GraceCoinCount = (await _coins.GetActiveAndGraceAsync(90)).Count - Coins.Count;
+        GraceCoinCount = (await _coins.GetActiveAndGraceAsync(90)).Count - ActiveCount;
     }
 
     public async Task<IActionResult> OnPostRefreshAllAsync()
@@ -48,6 +57,7 @@ public class IndexModel : PageModel
             .ToList();
 
         var data = await _gecko.GetMarketDataBatchAsync(coins.Select(c => c.CoinGeckoId));
+        var now = DateTime.UtcNow;
 
         foreach (var coin in coins)
         {
@@ -61,7 +71,7 @@ public class IndexModel : PageModel
             coin.Low24h = m.Low24h ?? 0;
             coin.MarketCapRank = m.MarketCapRank ?? 0;
             coin.ImageUrl = m.Image ?? coin.ImageUrl;
-            coin.UpdatedAt = DateTime.UtcNow;
+            coin.PriceUpdatedAtUtc = now;
         }
         await _db.SaveChangesAsync();
 
@@ -69,21 +79,41 @@ public class IndexModel : PageModel
         return RedirectToPage();
     }
 
+    /// <summary>
+    /// Flips a coin's active state AND pins it with <see cref="Coin.IsActiveOverride"/>, so
+    /// the worker (which re-derives IsActive from the top N every cycle) doesn't undo it.
+    /// Use "Auto" (<see cref="OnPostClearOverrideAsync"/>) to hand control back to the worker.
+    /// </summary>
     public async Task<IActionResult> OnPostToggleActiveAsync(int id)
     {
         var coin = await _coins.GetByIdAsync(id);
         if (coin != null)
         {
-            coin.IsActive = !coin.IsActive;
-            coin.UpdatedAt = DateTime.UtcNow;
+            var makeActive = !coin.IsActive;
+            coin.IsActive = makeActive;
+            coin.IsActiveOverride = makeActive;
             await _coins.SaveChangesAsync();
+            TempData["Status"] = $"{coin.Symbol} pinned {(makeActive ? "active" : "hidden")} (manual override).";
+        }
+        return RedirectToPage();
+    }
+
+    /// <summary>Removes the manual override; the worker re-derives IsActive from the top N next cycle.</summary>
+    public async Task<IActionResult> OnPostClearOverrideAsync(int id)
+    {
+        var coin = await _coins.GetByIdAsync(id);
+        if (coin != null)
+        {
+            coin.IsActiveOverride = null;
+            await _coins.SaveChangesAsync();
+            TempData["Status"] = $"{coin.Symbol} returned to automatic (top-N) tracking; takes effect next worker cycle.";
         }
         return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostSyncTopCoinsAsync(int count = 500)
     {
-        var topCoins = await _gecko.GetTopCoinsAsync(count);
+        var topCoins = (await _gecko.GetTopCoinsAsync(count)).Coins;
         int added = 0, updated = 0;
 
         foreach (var m in topCoins)
@@ -131,7 +161,8 @@ public class IndexModel : PageModel
         Atl = m.Atl ?? 0,
         AtlChangePercentage = m.AtlChangePercentage ?? 0,
         AtlDate = m.AtlDate,
-        IsActive = true
+        IsActive = true,
+        PriceUpdatedAtUtc = DateTime.UtcNow
     };
 
     private static void UpdateCoin(Coin coin, CoinGeckoMarketData m)
@@ -148,6 +179,6 @@ public class IndexModel : PageModel
         coin.TotalSupply = m.TotalSupply ?? coin.TotalSupply;
         coin.MaxSupply = m.MaxSupply ?? coin.MaxSupply;
         coin.ImageUrl = m.Image ?? coin.ImageUrl;
-        coin.UpdatedAt = DateTime.UtcNow;
+        coin.PriceUpdatedAtUtc = DateTime.UtcNow;
     }
 }

@@ -11,4 +11,5 @@
   <Project Path="MoneroMarketCap.Services/MoneroMarketCap.Services.csproj" />
   <Project Path="MoneroMarketCap.Web/MoneroMarketCap.Web.csproj" />
   <Project Path="MoneroMarketCap.Worker/MoneroMarketCap.Worker.csproj" />
+  <Project Path="MoneroMarketCap.Tests/MoneroMarketCap.Tests.csproj" />
 </Solution>

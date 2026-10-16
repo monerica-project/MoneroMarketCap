@@ -189,21 +189,33 @@ public class CoinGeckoService : ICoinGeckoService
 
     public async Task<Dictionary<string, CoinGeckoMarketData>> GetMarketDataBatchAsync(IEnumerable<string> coinGeckoIds)
     {
+        var result = new Dictionary<string, CoinGeckoMarketData>();
         try
         {
-            var idList = coinGeckoIds.ToList();
-            if (!idList.Any()) return new();
+            var idList = coinGeckoIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (!idList.Any()) return result;
 
-            var ids = string.Join(",", idList.Select(Uri.EscapeDataString));
-            var url = BuildMarketsUrl(ids: ids, perPage: 250, page: 1);
-            var response = await _http.GetStringAsync(url);
-            var list = JsonSerializer.Deserialize<List<CoinGeckoMarketData>>(response, _jsonOptions);
-            return list?.ToDictionary(c => c.Id, c => c) ?? new();
+            // per_page caps at 250, so ask in chunks of 250 ids.
+            foreach (var chunk in idList.Chunk(250))
+            {
+                var ids = string.Join(",", chunk.Select(Uri.EscapeDataString));
+                var url = BuildMarketsUrl(ids: ids, perPage: 250, page: 1);
+                var response = await _http.GetStringAsync(url);
+                var list = JsonSerializer.Deserialize<List<CoinGeckoMarketData>>(response, _jsonOptions);
+                if (list == null) continue;
+                foreach (var c in list)
+                    result[c.Id] = c;
+            }
+
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CoinGecko batch fetch failed");
-            return new();
+            return result;
         }
     }
 
@@ -221,12 +233,20 @@ public class CoinGeckoService : ICoinGeckoService
     ///
     /// 250 is CoinGecko's maximum per_page, so this is also the cheapest way to page:
     /// 300 coins costs 2 calls per cycle rather than 3 at per_page=100.
+    ///
+    /// <para>
+    /// If any page fails, the result is flagged incomplete (IsComplete = false) instead
+    /// of silently returning the pages that did arrive: a short list used to look like
+    /// "coins 251-300 left the top N", which deactivated them and cleared their backfill
+    /// stamps when they "re-entered" on the next good cycle.
+    /// </para>
     /// </remarks>
-    public async Task<List<CoinGeckoMarketData>> GetTopCoinsAsync(int count = 500)
+    public async Task<TopCoinsResult> GetTopCoinsAsync(int count = 500)
     {
         const int perPage = 250;
 
         var results = new List<CoinGeckoMarketData>();
+        var complete = true;
         int pages = (int)Math.Ceiling((double)count / perPage);
 
         for (int page = 1; page <= pages; page++)
@@ -237,6 +257,8 @@ public class CoinGeckoService : ICoinGeckoService
                 var response = await _http.GetStringAsync(url);
                 var batch = JsonSerializer.Deserialize<List<CoinGeckoMarketData>>(response, _jsonOptions);
 
+                // An empty page means CoinGecko has no more coins — a genuine end of the
+                // list, not a failure.
                 if (batch == null || !batch.Any()) break;
                 results.AddRange(batch);
 
@@ -247,15 +269,18 @@ public class CoinGeckoService : ICoinGeckoService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "CoinGecko GetTopCoins failed on page {Page}", page);
+                _logger.LogError(ex, "CoinGecko GetTopCoins failed on page {Page}; result is incomplete", page);
+                complete = false;
                 break;
             }
         }
 
         // Trim: the last page overshoots whenever count isn't a multiple of per_page.
-        return results.Count > count
+        var trimmed = results.Count > count
             ? results.Take(count).ToList()
             : results;
+
+        return new TopCoinsResult(trimmed, complete);
     }
 
     private static string BuildMarketsUrl(string? ids = null, int perPage = 100, int page = 1)

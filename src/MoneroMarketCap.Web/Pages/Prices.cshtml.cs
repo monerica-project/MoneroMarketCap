@@ -48,7 +48,7 @@ public class PricesModel : PageModel
             c.Ath,
             c.AthChangePercentage,
             c.MaxSupply,
-            UpdatedAt = c.UpdatedAt.ToString("HH:mm:ss"),
+            UpdatedAt = c.PriceAsOfUtc.ToString("HH:mm:ss"),
         });
 
         return new JsonResult(new

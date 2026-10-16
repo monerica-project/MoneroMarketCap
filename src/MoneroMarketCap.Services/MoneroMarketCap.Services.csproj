@@ -27,4 +27,8 @@
 	<PropertyGroup>
 		<CodeAnalysisRuleSet>..\stylecop.ruleset</CodeAnalysisRuleSet>
 	</PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="MoneroMarketCap.Tests" />
+  </ItemGroup>
+
 </Project>

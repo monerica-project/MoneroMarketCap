@@ -2,10 +2,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
+using MoneroMarketCap.Web.Services;
+using System.Security.Cryptography;
 
 public class RegisterModel : PageModel
 {
     private readonly IUserRepository _users;
+    private readonly ICaptchaStore _captcha;
     public string? GeneratedUsername { get; set; }
     public string? GeneratedPassword { get; set; }
     public string CaptchaQuestion { get; set; } = string.Empty;
@@ -14,7 +17,15 @@ public class RegisterModel : PageModel
     [BindProperty]
     public int CaptchaAnswer { get; set; }
 
-    public RegisterModel(IUserRepository users) => _users = users;
+    /// <summary>Opaque one-time token referencing the server-side answer (see ICaptchaStore).</summary>
+    [BindProperty]
+    public string? CaptchaToken { get; set; }
+
+    public RegisterModel(IUserRepository users, ICaptchaStore captcha)
+    {
+        _users = users;
+        _captcha = captcha;
+    }
 
     public void OnGet()
     {
@@ -23,9 +34,8 @@ public class RegisterModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
-        var expected = TempData["CaptchaAnswer"] as int?;
-
-        if (expected == null || CaptchaAnswer != expected.Value)
+        // One-time check: the token is consumed whether or not the answer is right.
+        if (!_captcha.TryConsume(CaptchaToken, CaptchaAnswer))
         {
             CaptchaError = "Incorrect answer, please try again.";
             GenerateCaptcha();
@@ -49,11 +59,11 @@ public class RegisterModel : PageModel
 
     private void GenerateCaptcha()
     {
-        var rng = Random.Shared;
-        int a = rng.Next(2, 20);
-        int b = rng.Next(2, 20);
+        int a = RandomNumberGenerator.GetInt32(2, 20);
+        int b = RandomNumberGenerator.GetInt32(2, 20);
         CaptchaQuestion = $"What is {a} + {b}?";
-        TempData["CaptchaAnswer"] = a + b;
-        TempData.Keep("CaptchaAnswer"); // persist across the GET so it survives to POST
+
+        // The answer stays on the server; the form only carries the token.
+        CaptchaToken = _captcha.Create(a + b);
     }
 }

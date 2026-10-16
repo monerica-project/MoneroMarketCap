@@ -24,7 +24,7 @@
     // Server-rendered first page — so sponsors are visible with JavaScript disabled.
     // The script below enhances this (rotation) for JS visitors.
     static int TypeRank(string t) => t == "MainSponsor" ? 0 : t == "CategorySponsor" ? 1 : 2;
-    var allSponsors = (await SponsorFeed.GetSponsorsAsync())
+    var allSponsors = (await SponsorFeed.GetSponsorsAsync(Context.RequestAborted))
         .OrderBy(s => TypeRank(s.SponsorshipType))
         .ThenByDescending(s => s.ExpirationDate)
         .ToList();

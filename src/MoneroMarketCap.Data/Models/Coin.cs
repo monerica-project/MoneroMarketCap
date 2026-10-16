@@ -101,5 +101,34 @@ public class Coin : AuditableEntity
     [Column("LastInTopNUtc")]
     public DateTime? LastInTopNUtc { get; set; }
 
+    /// <summary>
+    /// When the price/market fields were last refreshed from CoinGecko. Set ONLY by
+    /// paths that write real market data (the Worker's price cycle, plus the admin
+    /// "refresh"/"add coin" actions that fetch live data). Unlike
+    /// <see cref="AuditableEntity.UpdatedAt"/>, which moves on ANY modification
+    /// (supply worker, description backfill, history stamps, admin edits), this is
+    /// what staleness checks and API "lastUpdated" values must use.
+    /// Null = never priced (rows that predate the column are backfilled from UpdatedAt).
+    /// </summary>
+    [Column("PriceUpdatedAtUtc")]
+    public DateTime? PriceUpdatedAtUtc { get; set; }
+
+    /// <summary>
+    /// When the displayed price was last refreshed: <see cref="PriceUpdatedAtUtc"/>, or
+    /// UpdatedAt for a row that has never been priced since the column was added.
+    /// In-memory only — inside a LINQ-to-SQL query write the coalesce out instead.
+    /// </summary>
+    [NotMapped]
+    public DateTime PriceAsOfUtc => PriceUpdatedAtUtc ?? UpdatedAt;
+
+    /// <summary>
+    /// Admin override of the worker-derived <see cref="IsActive"/> flag. Null = automatic
+    /// (active exactly while in the CoinGecko top N). True = keep active even outside the
+    /// top N (e.g. a coin added by hand on Admin → Add Coin; the worker still refreshes
+    /// its price via the markets ids= query). False = keep hidden even while in the top N.
+    /// </summary>
+    [Column("IsActiveOverride")]
+    public bool? IsActiveOverride { get; set; }
+
     public ICollection<CoinPriceHistory> PriceHistory { get; set; } = new List<CoinPriceHistory>();
 }

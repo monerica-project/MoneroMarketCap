@@ -17,7 +17,7 @@ namespace MoneroMarketCap.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -124,6 +124,10 @@ namespace MoneroMarketCap.Data.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool?>("IsActiveOverride")
+                        .HasColumnType("boolean")
+                        .HasColumnName("IsActiveOverride");
+
                     b.Property<DateTime?>("LastInTopNUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("LastInTopNUtc");
@@ -170,6 +174,10 @@ namespace MoneroMarketCap.Data.Migrations
 
                     b.Property<decimal>("PriceChangePercent7d")
                         .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("PriceUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("PriceUpdatedAtUtc");
 
                     b.Property<decimal>("PriceUsd")
                         .HasColumnType("numeric");
@@ -230,7 +238,8 @@ namespace MoneroMarketCap.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CoinId");
+                    b.HasIndex("CoinId", "Interval", "RecordedAt")
+                        .IsUnique();
 
                     b.ToTable("CoinPriceHistories");
                 });

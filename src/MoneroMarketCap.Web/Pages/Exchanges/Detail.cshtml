@@ -115,7 +115,15 @@
             <div class="d-flex flex-wrap gap-2">
                 @foreach (var c in Model.Coins)
                 {
-                    <a class="badge bg-secondary text-decoration-none" href="/coins/@CoinRoute.Key(c.Symbol, c.CoinGeckoId)" title="@c.Name">@c.Symbol</a>
+                    @if (c.HasPage)
+                    {
+                        <a class="badge bg-secondary text-decoration-none" href="/coins/@CoinRoute.Key(c.Symbol, c.CoinGeckoId)" title="@c.Name">@c.Symbol</a>
+                    }
+                    else
+                    {
+                        @* No longer tracked: its coin page 404s, so don't link it. *@
+                        <span class="badge bg-secondary opacity-50" title="@c.Name (no longer tracked)">@c.Symbol</span>
+                    }
                 }
             </div>
 

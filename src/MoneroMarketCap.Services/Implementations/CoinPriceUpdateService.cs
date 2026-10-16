@@ -4,8 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MoneroMarketCap.Data;
+using MoneroMarketCap.Data.Helpers;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Services.Interfaces;
+using MoneroMarketCap.Services.Models;
 
 namespace MoneroMarketCap.Services.Implementations;
 
@@ -77,28 +79,54 @@ public class CoinPriceUpdateService : BackgroundService
     /// Reconciles top N, upserts today's history. Returns the list of Coin IDs
     /// whose 1d history is below the backfill threshold and needs filling in.
     /// </summary>
-    private async Task<List<int>> UpdatePricesAsync()
+    /// <remarks>
+    /// Active-state rules (see <see cref="Coin.IsActiveOverride"/>):
+    ///   * null override  → active exactly while in the top N (the old behaviour);
+    ///   * true override  → always active; if outside the top N its price is fetched
+    ///                      separately via the markets ids= query so it never goes stale;
+    ///   * false override → never active, even while in the top N.
+    /// Deactivation only happens on a COMPLETE top-N list. When CoinGecko fails part-way
+    /// through paging, the coins that did arrive are still priced, but nothing is
+    /// deactivated — a missing page is not evidence that coins left the top N.
+    /// </remarks>
+    internal async Task<List<int>> UpdatePricesAsync()
     {
         using var scope = this.scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var geckoService = scope.ServiceProvider.GetRequiredService<ICoinGeckoService>();
 
-        var topCoins = await geckoService.GetTopCoinsAsync(this.topCount);
+        var top = await geckoService.GetTopCoinsAsync(this.topCount);
+        var topCoins = top?.Coins;
         if (topCoins == null || topCoins.Count == 0)
         {
             this.logger.LogWarning("CoinGecko returned no top coins; skipping this cycle");
             return new();
         }
 
+        var isComplete = top!.IsComplete;
+        if (!isComplete)
+        {
+            this.logger.LogWarning(
+                "CoinGecko top-{Top} list is INCOMPLETE ({Got} received, a page failed): updating prices for the coins received but skipping deactivation this cycle",
+                this.topCount, topCoins.Count);
+        }
+
         var topIds = topCoins.Select(c => c.Id).ToHashSet();
 
         var existing = await db.Coins.ToListAsync();
+
+        // Lowest Id wins if two rows ever share a CoinGecko id, rather than throwing.
         var existingById = existing
             .Where(c => !string.IsNullOrEmpty(c.CoinGeckoId))
-            .ToDictionary(c => c.CoinGeckoId, c => c);
+            .GroupBy(c => c.CoinGeckoId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Id).First());
 
-        var today = DateTime.UtcNow.Date;
-        int added = 0, updated = 0, reactivated = 0, deactivated = 0, reEntered = 0;
+        var now = DateTime.UtcNow;
+        var today = now.Date;
+        int added = 0, updated = 0, reactivated = 0, deactivated = 0, reEntered = 0, manual = 0;
+
+        // Every coin whose market data was refreshed this cycle (top N + manual).
+        var pricedThisCycle = new List<Coin>();
 
         foreach (var m in topCoins)
         {
@@ -109,15 +137,16 @@ public class CoinPriceUpdateService : BackgroundService
                     CoinGeckoId = m.Id,
                     Symbol = m.Symbol?.ToUpper() ?? "",
                     Name = m.Name ?? "",
-                    CreatedAt = DateTime.UtcNow,
-                    LastInTopNUtc = DateTime.UtcNow
+                    CreatedAt = now,
+                    LastInTopNUtc = now
                 };
                 db.Coins.Add(coin);
+                existingById[m.Id] = coin;
                 added++;
             }
             else
             {
-                if (!coin.IsActive)
+                if (!coin.IsActive && coin.IsActiveOverride != false)
                 {
                     reactivated++;
 
@@ -133,34 +162,32 @@ public class CoinPriceUpdateService : BackgroundService
                 updated++;
             }
 
-            coin.IsActive = true;
-            coin.LastInTopNUtc = DateTime.UtcNow;
-            coin.PriceUsd = m.CurrentPrice ?? 0;
-            coin.MarketCapUsd = m.MarketCap ?? 0;
-            coin.CirculatingSupply = m.CirculatingSupply ?? 0;
-            coin.PriceChangePercent24h = m.PriceChangePercentage24h ?? 0;
-            coin.TotalVolume = m.TotalVolume ?? 0;
-            coin.High24h = m.High24h ?? 0;
-            coin.Low24h = m.Low24h ?? 0;
-            coin.MarketCapRank = m.MarketCapRank ?? 0;
-            coin.ImageUrl = m.Image ?? coin.ImageUrl;
-            coin.PriceChangePercent1h = m.PriceChangePercentage1h ?? coin.PriceChangePercent1h;
-            coin.PriceChangePercent7d = m.PriceChangePercentage7d ?? coin.PriceChangePercent7d;
-            coin.PriceChangePercent30d = m.PriceChangePercentage30d ?? coin.PriceChangePercent30d;
-            coin.PriceChangePercent1y = m.PriceChangePercentage1y ?? coin.PriceChangePercent1y;
+            coin.IsActive = coin.IsActiveOverride ?? true;
+            coin.LastInTopNUtc = now;
+            ApplyMarketData(coin, m, now);
+            pricedThisCycle.Add(coin);
+        }
 
-            coin.Ath = m.Ath ?? coin.Ath;
-            coin.AthChangePercentage = m.AthChangePercentage ?? coin.AthChangePercentage;
-            coin.AthDate = m.AthDate ?? coin.AthDate;
-            coin.Atl = m.Atl ?? coin.Atl;
-            coin.AtlChangePercentage = m.AtlChangePercentage ?? coin.AtlChangePercentage;
-            coin.AtlDate = m.AtlDate ?? coin.AtlDate;
-
-            coin.TotalSupply = m.TotalSupply ?? coin.TotalSupply;
-            coin.MaxSupply = m.MaxSupply ?? coin.MaxSupply;
-            coin.FullyDilutedValuation = m.FullyDilutedValuation ?? coin.FullyDilutedValuation;
-
-            coin.UpdatedAt = DateTime.UtcNow;
+        // Manually-activated coins outside the top N: the markets list never contains
+        // them, so fetch their prices by id (one extra call per 250 such coins).
+        var manualCoins = existing
+            .Where(c => c.IsActiveOverride == true
+                        && !string.IsNullOrEmpty(c.CoinGeckoId)
+                        && !topIds.Contains(c.CoinGeckoId))
+            .ToList();
+        if (manualCoins.Count > 0)
+        {
+            var extra = await geckoService.GetMarketDataBatchAsync(manualCoins.Select(c => c.CoinGeckoId));
+            foreach (var coin in manualCoins)
+            {
+                coin.IsActive = true;
+                if (extra.TryGetValue(coin.CoinGeckoId, out var m))
+                {
+                    ApplyMarketData(coin, m, now);
+                    pricedThisCycle.Add(coin);
+                    manual++;
+                }
+            }
         }
 
         await db.SaveChangesAsync();
@@ -168,15 +195,31 @@ public class CoinPriceUpdateService : BackgroundService
         foreach (var coin in existing)
         {
             if (string.IsNullOrEmpty(coin.CoinGeckoId)) continue;
-            if (!topIds.Contains(coin.CoinGeckoId) && coin.IsActive)
+
+            if (coin.IsActiveOverride == false)
+            {
+                if (coin.IsActive)
+                {
+                    coin.IsActive = false;
+                    deactivated++;
+                }
+
+                continue;
+            }
+
+            if (isComplete
+                && coin.IsActiveOverride != true
+                && !topIds.Contains(coin.CoinGeckoId)
+                && coin.IsActive)
             {
                 coin.IsActive = false;
                 deactivated++;
             }
         }
 
-        var activeCoins = db.Coins.Local
-            .Where(c => c.IsActive && topIds.Contains(c.CoinGeckoId))
+        var activeCoins = pricedThisCycle
+            .Where(c => c.IsActive)
+            .Distinct()
             .ToList();
         var activeIds = activeCoins.Select(c => c.Id).ToList();
 
@@ -186,7 +229,9 @@ public class CoinPriceUpdateService : BackgroundService
                      && activeIds.Contains(h.CoinId))
             .ToListAsync();
 
-        var todaysByCoinId = todaysRows.ToDictionary(h => h.CoinId, h => h);
+        // Tolerant of legacy duplicates (pre unique index): use the lowest-Id row per coin,
+        // the same row the dedupe migration keeps.
+        var todaysByCoinId = PickDailyRowPerCoin(todaysRows);
 
         int historyAdded = 0, historyUpdated = 0;
 
@@ -214,7 +259,26 @@ public class CoinPriceUpdateService : BackgroundService
             }
         }
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (DbErrors.IsUniqueViolation(ex))
+        {
+            // Someone else wrote today's row between our read and insert (the unique
+            // index on CoinId+Interval+RecordedAt caught it). Drop our pending inserts —
+            // the next cycle updates the existing row — and keep the rest of the save.
+            this.logger.LogWarning("Today's 1d row already existed for some coins; skipping those inserts this cycle");
+            foreach (var entry in db.ChangeTracker.Entries<CoinPriceHistory>()
+                         .Where(e => e.State == EntityState.Added)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+                historyAdded--;
+            }
+
+            await db.SaveChangesAsync();
+        }
 
         // ── Intraday (5m) snapshots for the 24h chart ────────────────────────────
         // We already have fresh prices for every active coin in hand this cycle,
@@ -250,8 +314,8 @@ public class CoinPriceUpdateService : BackgroundService
             activeCoins.Count, staleSnaps.Count);
 
         this.logger.LogInformation(
-            "Top {Top} refresh complete. Coins added: {Added}, updated: {Updated}, reactivated: {Reactivated} ({ReEntered} queued for gap repair), deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
-            this.topCount, added, updated, reactivated, reEntered, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
+            "Top {Top} refresh complete ({Completeness}). Coins added: {Added}, updated: {Updated}, manual: {Manual}, reactivated: {Reactivated} ({ReEntered} queued for gap repair), deactivated: {Deactivated}. History added: {HAdded}, updated: {HUpdated}. Interval: {Interval}min",
+            this.topCount, isComplete ? "complete" : "INCOMPLETE", added, updated, manual, reactivated, reEntered, deactivated, historyAdded, historyUpdated, this.interval.TotalMinutes);
 
         // Which active coins still need their one-year daily backfill?
         //
@@ -284,6 +348,10 @@ public class CoinPriceUpdateService : BackgroundService
 
     private async Task BackfillCoinsAsync(List<int> coinIds, CancellationToken ct)
     {
+        // Re-checked per coin under the backfill service's lock, so a coin the startup
+        // pass finished a moment ago is skipped rather than fetched (and inserted) twice.
+        var refreshBefore = DateTime.UtcNow.AddDays(-BackfillRefreshDays);
+
         this.logger.LogInformation("Backfilling history for {Count} coin(s)", coinIds.Count);
 
         int rowsTotal = 0, failed = 0;
@@ -291,8 +359,9 @@ public class CoinPriceUpdateService : BackgroundService
         {
             if (ct.IsCancellationRequested) break;
 
-            var result = await this.backfillService.BackfillCoinAsync(coinId, ct);
+            var result = await this.backfillService.BackfillCoinAsync(coinId, skipIfStampedAtOrAfterUtc: refreshBefore, ct);
             if (result.Status == BackfillStatus.Failed) failed++;
+            if (result.Status == BackfillStatus.NotDue) continue;
             rowsTotal += result.RowsInserted;
 
             if (coinIds.Count > 1)
@@ -302,4 +371,47 @@ public class CoinPriceUpdateService : BackgroundService
         this.logger.LogInformation("Per-cycle backfill done: {Rows} rows across {Count} coin(s), {Failed} failed",
             rowsTotal, coinIds.Count, failed);
     }
+
+    /// <summary>
+    /// Copies CoinGecko market data onto a coin and stamps <see cref="Coin.PriceUpdatedAtUtc"/>
+    /// — the only "price is fresh" signal (UpdatedAt moves on any edit).
+    /// </summary>
+    internal static void ApplyMarketData(Coin coin, CoinGeckoMarketData m, DateTime nowUtc)
+    {
+        coin.PriceUsd = m.CurrentPrice ?? 0;
+        coin.MarketCapUsd = m.MarketCap ?? 0;
+        coin.CirculatingSupply = m.CirculatingSupply ?? 0;
+        coin.PriceChangePercent24h = m.PriceChangePercentage24h ?? 0;
+        coin.TotalVolume = m.TotalVolume ?? 0;
+        coin.High24h = m.High24h ?? 0;
+        coin.Low24h = m.Low24h ?? 0;
+        coin.MarketCapRank = m.MarketCapRank ?? 0;
+        coin.ImageUrl = m.Image ?? coin.ImageUrl;
+        coin.PriceChangePercent1h = m.PriceChangePercentage1h ?? coin.PriceChangePercent1h;
+        coin.PriceChangePercent7d = m.PriceChangePercentage7d ?? coin.PriceChangePercent7d;
+        coin.PriceChangePercent30d = m.PriceChangePercentage30d ?? coin.PriceChangePercent30d;
+        coin.PriceChangePercent1y = m.PriceChangePercentage1y ?? coin.PriceChangePercent1y;
+
+        coin.Ath = m.Ath ?? coin.Ath;
+        coin.AthChangePercentage = m.AthChangePercentage ?? coin.AthChangePercentage;
+        coin.AthDate = m.AthDate ?? coin.AthDate;
+        coin.Atl = m.Atl ?? coin.Atl;
+        coin.AtlChangePercentage = m.AtlChangePercentage ?? coin.AtlChangePercentage;
+        coin.AtlDate = m.AtlDate ?? coin.AtlDate;
+
+        coin.TotalSupply = m.TotalSupply ?? coin.TotalSupply;
+        coin.MaxSupply = m.MaxSupply ?? coin.MaxSupply;
+        coin.FullyDilutedValuation = m.FullyDilutedValuation ?? coin.FullyDilutedValuation;
+
+        coin.PriceUpdatedAtUtc = nowUtc;
+    }
+
+    /// <summary>
+    /// One daily row per coin, tolerating duplicates: the lowest Id wins (the same row
+    /// the dedupe migration keeps). Never throws on duplicate CoinIds.
+    /// </summary>
+    internal static Dictionary<int, CoinPriceHistory> PickDailyRowPerCoin(IEnumerable<CoinPriceHistory> rows) =>
+        rows
+            .GroupBy(h => h.CoinId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(h => h.Id).First());
 }
