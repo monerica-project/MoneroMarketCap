@@ -1,5 +1,6 @@
 ﻿@page
 @using MoneroMarketCap.Web.Helpers
+@using MoneroMarketCap.Data.Models
 @model MoneroMarketCap.Pages.Portfolios.IndexModel
 @{
     ViewData["Title"] = "My Portfolios";
@@ -96,15 +97,38 @@ else
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                     <h5 class="card-title mb-0">Portfolio Value Over Time</h5>
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Chart currency">
-                        <button type="button" class="btn btn-primary" id="pvCurUsd">USD</button>
-                        <button type="button" class="btn btn-outline-primary" id="pvCurXmr">XMR</button>
+                    <div class="d-flex flex-wrap gap-2">
+                        <form method="post" asp-page-handler="ChartRange" class="btn-group btn-group-sm" role="group" aria-label="Chart time range">
+                            @foreach (var (value, label) in new[] { (PortfolioChartRanges.AllTime, "All time"), (PortfolioChartRanges.LastYear, "1 year"), (PortfolioChartRanges.LastMonth, "1 month") })
+                            {
+                                var active = Model.ChartRange == value;
+                                <button type="submit" name="range" value="@value"
+                                        class="btn @(active ? "btn-primary" : "btn-outline-primary")"
+                                        aria-pressed="@(active ? "true" : "false")">@label</button>
+                            }
+                        </form>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Chart currency">
+                            <button type="button" class="btn btn-primary" id="pvCurUsd">USD</button>
+                            <button type="button" class="btn btn-outline-primary" id="pvCurXmr">XMR</button>
+                        </div>
                     </div>
                 </div>
                 <div style="position:relative;height:280px">
                     <canvas id="portfolioValueChart"></canvas>
                 </div>
-                <div class="small text-muted mt-1">Total value of all holdings over the last year (or since this portfolio started).</div>
+                <div class="small text-muted mt-1">
+                    Total value of all holdings
+                    @(Model.ChartRange switch
+                    {
+                        PortfolioChartRanges.LastYear => "over the last year (or since this portfolio started).",
+                        PortfolioChartRanges.LastMonth => "over the last month (or since this portfolio started).",
+                        _ => "since this portfolio started."
+                    })
+                    @if (Model.ChartStartLimitedTo is DateTime limited)
+                    {
+                        <text>Price history starts @limited.ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture), so the chart begins there.</text>
+                    }
+                </div>
             </div>
         </div>
     }

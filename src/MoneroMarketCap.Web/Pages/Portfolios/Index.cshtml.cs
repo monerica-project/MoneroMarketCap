@@ -33,11 +33,17 @@ public class IndexModel : PageModel
     public bool AtPortfolioLimit => Portfolios.Count >= MaxPortfoliosPerUser;
     public string DataVersion { get; set; } = "";
 
-    // Total-portfolio value over the last year (or since the portfolio started, if younger),
-    // one point per day in USD and XMR, as JSON: [{"d":"yyyy-MM-dd","u":<usd>,"x":<xmr>}].
-    // Rendered as a line chart with a USD/XMR toggle.
+    // Total-portfolio value over the user's chosen range (all time / last year / last month,
+    // never earlier than the first transaction), one point per day in USD and XMR, as JSON:
+    // [{"d":"yyyy-MM-dd","u":<usd>,"x":<xmr>}]. Rendered as a line chart with a USD/XMR toggle.
     public string ValueHistoryJson { get; set; } = "[]";
     public bool HasValueHistory { get; set; }
+
+    // Saved per account (AppUser.PortfolioChartRange); defaults to all time.
+    public string ChartRange { get; set; } = PortfolioChartRanges.AllTime;
+
+    // Set when the chart had to start later than requested because price history begins then.
+    public DateTime? ChartStartLimitedTo { get; set; }
 
     public CurrencyInfo Currency { get; set; } = CurrencyCatalog.Default;
     public decimal RatePerUsd { get; set; } = 1m;
@@ -78,14 +84,33 @@ public class IndexModel : PageModel
         TotalPnl = snapshot.TotalPnl;
         DataVersion = snapshot.Version;
 
-        await BuildValueHistoryAsync(GetUserId());
+        ChartRange = PortfolioChartRanges.Normalize(await _db.Users
+            .Where(u => u.Id == GetUserId())
+            .Select(u => u.PortfolioChartRange)
+            .FirstOrDefaultAsync());
+
+        await BuildValueHistoryAsync(GetUserId(), ChartRange);
+    }
+
+    // Saves the chart range choice to the account, so the chart keeps opening on it.
+    public async Task<IActionResult> OnPostChartRangeAsync(string? range)
+    {
+        var user = await _db.Users.FindAsync(GetUserId());
+        if (user == null) return NotFound();
+
+        user.PortfolioChartRange = PortfolioChartRanges.Normalize(range);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return RedirectToPage();
     }
 
     // Reconstructs the daily total value of ALL the user's holdings over the window
-    // [max(firstTxDate, 1 year ago) .. today]. Holdings on each day come from the running
+    // [max(firstTxDate, range start) .. today], where range start is unbounded for all time,
+    // 1 year ago for "1y" and 1 month ago for "1m". Holdings on each day come from the running
     // buy/sell balance; prices come from CoinPriceHistory ("1d", forward-filled); XMR value
-    // divides the USD total by XMR's price that day. Cheap: O(days * coins), window <= ~366 days.
-    private async Task BuildValueHistoryAsync(int userId, CancellationToken ct = default)
+    // divides the USD total by XMR's price that day. Cheap: O(days * coins).
+    private async Task BuildValueHistoryAsync(int userId, string range, CancellationToken ct = default)
     {
         var txs = await _db.CoinTransactions
             .Where(t => t.PortfolioCoin.Portfolio.UserId == userId)
@@ -101,12 +126,29 @@ public class IndexModel : PageModel
 
         var today = DateTime.UtcNow.Date;
         var firstDate = txs[0].TransactedAt.Date;
-        var startDate = firstDate > today.AddDays(-365) ? firstDate : today.AddDays(-365);
+        DateTime? rangeStart = range switch
+        {
+            PortfolioChartRanges.LastYear => today.AddYears(-1),
+            PortfolioChartRanges.LastMonth => today.AddMonths(-1),
+            _ => null
+        };
+        var startDate = rangeStart is DateTime rs && rs > firstDate ? rs : firstDate;
+        if (startDate > today) startDate = today;
 
         var coinIds = txs.Select(t => t.CoinId).Distinct().ToList();
         var xmrId = await _db.Coins.Where(c => c.Symbol.ToUpper() == "XMR").Select(c => (int?)c.Id).FirstOrDefaultAsync(ct);
         var priceIds = coinIds.ToList();
         if (xmrId is int xid && !priceIds.Contains(xid)) priceIds.Add(xid);
+
+        // Daily prices only go back so far; starting earlier would draw a flat, made-up line.
+        var earliestPrice = await _db.CoinPriceHistories
+            .Where(h => priceIds.Contains(h.CoinId) && h.Interval == "1d")
+            .MinAsync(h => (DateTime?)h.RecordedAt, ct);
+        if (earliestPrice is DateTime ep && ep.Date > startDate && ep.Date <= today)
+        {
+            startDate = ep.Date;
+            ChartStartLimitedTo = startDate;
+        }
 
         var histFrom = startDate.AddDays(-35);
         var rawHist = await _db.CoinPriceHistories

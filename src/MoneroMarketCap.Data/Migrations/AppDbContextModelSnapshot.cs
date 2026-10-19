@@ -43,6 +43,10 @@ namespace MoneroMarketCap.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PortfolioChartRange")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("PrivacyMode")
                         .HasColumnType("boolean");
 
