@@ -40,7 +40,6 @@ public class DetailModel : PageModel
     public async Task<IActionResult> OnGetAsync(string slug, int cp = 1)
     {
         var ex = await _db.Exchanges.AsNoTracking()
-            .Include(e => e.Contacts)
             .FirstOrDefaultAsync(e => e.Slug == slug, HttpContext.RequestAborted);
         if (ex is null || !Data.Models.Exchange.IsListedGrade(ex.Grade))
         {
@@ -71,23 +70,5 @@ public class DetailModel : PageModel
             .ToList();
 
         return Page();
-    }
-
-    /// <summary>mailto: for emails, the raw value for URLs, otherwise null (plain text).</summary>
-    public static string? ContactHref(ExchangeContact c)
-    {
-        var v = (c.Value ?? string.Empty).Trim();
-        if (v.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            v.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            return v;
-        }
-
-        if (string.Equals(c.Type, "Email", StringComparison.OrdinalIgnoreCase) && v.Contains('@'))
-        {
-            return "mailto:" + v;
-        }
-
-        return null;
     }
 }

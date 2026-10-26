@@ -3,7 +3,7 @@
 @{
     var ex = Model.Exchange;
     ViewData["Title"] = $"{ex.Name} — exchange profile";
-    ViewData["Description"] = $"{ex.Name}: the coins it supports, grade, KYC/AML posture, fees and contact info. {Model.CoinTotal} coins.";
+    ViewData["Description"] = $"{ex.Name}: the coins it supports, grade, KYC/AML posture and fees, with links to the exchange and its Monerica profile. {Model.CoinTotal} coins.";
     string Humanize(string? s) => MoneroMarketCap.Pages.Coins.DetailModel.Humanize(s);
     Func<int, string> coinUrl = p => (p <= 1 ? $"/exchanges/{ex.Slug}" : $"/exchanges/{ex.Slug}?cp={p}") + "#coins";
     ViewBag.SponsorRotateIntervalSeconds = 30;
@@ -70,36 +70,6 @@
         </table>
     </div>
 </div>
-
-@if (ex.Contacts.Any())
-{
-    <div class="card mb-4">
-        <div class="card-header"><h2 class="h6 mb-0">Contact</h2></div>
-        <div class="card-body p-0">
-            <table class="table table-sm mb-0 stats-table">
-                <tbody>
-                    @foreach (var c in ex.Contacts.OrderBy(c => c.Type))
-                    {
-                        var href = MoneroMarketCap.Pages.Exchanges.DetailModel.ContactHref(c);
-                        <tr>
-                            <th>@(string.IsNullOrEmpty(c.Label) ? c.Type : c.Label)</th>
-                            <td class="text-break">
-                                @if (href is not null)
-                                {
-                                    <a href="@href" rel="noopener nofollow" target="_blank">@c.Value</a>
-                                }
-                                else
-                                {
-                                    <span class="mono">@c.Value</span>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
-}
 
 <div id="coins" class="card mb-4">
     <div class="card-header">
