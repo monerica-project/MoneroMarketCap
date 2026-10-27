@@ -46,6 +46,11 @@
 <div class="d-flex gap-2 mb-4 flex-wrap">
     <a asp-page="/Portfolios/Index" class="btn btn-secondary btn-sm">← Back</a>
     <button type="button"
+            class="btn btn-outline-secondary btn-sm"
+            onclick="const p=document.getElementById('rename-panel');p.style.display=p.style.display==='none'?'':'none';if(p.style.display==='')p.querySelector('input[name=newName]').focus();">
+        ✏ Rename
+    </button>
+    <button type="button"
             class="btn btn-outline-warning btn-sm"
             onclick="const p=document.getElementById('import-panel');p.style.display=p.style.display==='none'?'':'none';">
         ⬆ Import from Monero GUI
@@ -61,6 +66,17 @@
         @Html.AntiForgeryToken()
         <button type="submit" class="btn btn-danger btn-sm">🗑 Delete Portfolio</button>
     </form>
+</div>
+
+<div id="rename-panel" class="card mb-4" style="display:none;background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card-body">
+        <form method="post" asp-page-handler="RenamePortfolio" asp-route-id="@Model.Portfolio.Id" class="d-flex gap-2 flex-wrap align-items-center">
+            <label for="newName" class="mb-0">Portfolio name</label>
+            <input id="newName" name="newName" class="form-control form-control-sm" style="max-width:22rem"
+                   value="@Model.Portfolio.Name" maxlength="@MoneroMarketCap.Pages.Portfolios.DetailModel.MaxPortfolioNameLength" required />
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        </form>
+    </div>
 </div>
 
 <div id="import-panel" class="card mb-4" style="display:none;background:var(--xmr-surface);border-color:var(--xmr-border)">

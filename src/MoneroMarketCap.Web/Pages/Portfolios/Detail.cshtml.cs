@@ -155,6 +155,36 @@ public class DetailModel : PageModel
         return RedirectToPage("/Portfolios/Index");
     }
 
+    public const int MaxPortfolioNameLength = 100;
+
+    public async Task<IActionResult> OnPostRenamePortfolioAsync(int id, string? newName)
+    {
+        if (!await LoadPortfolio(id))
+            return NotFound();
+
+        var name = (newName ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            TempData["ImportMessage"] = "Portfolio name can't be empty.";
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { id });
+        }
+
+        if (name.Length > MaxPortfolioNameLength)
+            name = name[..MaxPortfolioNameLength];
+
+        var tracked = await _db.Portfolios.FirstAsync(p => p.Id == id);
+        if (tracked.Name != name)
+        {
+            tracked.Name = name;
+            await _db.SaveChangesAsync();
+        }
+
+        TempData["ImportMessage"] = "Portfolio renamed.";
+        TempData["ImportSuccess"] = true;
+        return RedirectToPage(new { id });
+    }
+
     public async Task<IActionResult> OnPostAddTransactionAsync(int id)
     {
         if (!await LoadPortfolio(id))

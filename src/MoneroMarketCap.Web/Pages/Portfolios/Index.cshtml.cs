@@ -17,7 +17,7 @@ namespace MoneroMarketCap.Pages.Portfolios;
 [Authorize]
 public class IndexModel : PageModel
 {
-    public const int MaxPortfoliosPerUser = 6;
+    public const int MaxPortfoliosPerUser = 9;
 
     private readonly IPortfolioRepository _portfolios;
     private readonly ICoinRepository _coins;
