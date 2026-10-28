@@ -190,6 +190,13 @@ public class DetailModel : PageModel
         if (!await LoadPortfolio(id))
             return NotFound();
 
+        if (Amount <= 0)
+        {
+            TempData["ImportMessage"] = "Amount must be greater than 0.";
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { id });
+        }
+
         var portfolioCoin = Portfolio!.PortfolioCoins.FirstOrDefault(pc => pc.CoinId == CoinId);
         if (portfolioCoin == null)
         {

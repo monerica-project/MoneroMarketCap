@@ -390,6 +390,13 @@ public class TransactionsModel : PageModel
         if (!await LoadPortfolioCoin(portfolioCoinId))
             return Forbid();
 
+        if (Amount <= 0)
+        {
+            TempData["ImportMessage"] = "Amount must be greater than 0.";
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId });
+        }
+
         var tx = new CoinTransaction
         {
             PortfolioCoinId = PortfolioCoin!.Id,
@@ -418,6 +425,13 @@ public class TransactionsModel : PageModel
 
         if (tx == null)
             return NotFound();
+
+        if (EditAmount <= 0)
+        {
+            TempData["ImportMessage"] = "Amount must be greater than 0.";
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId, pageNumber });
+        }
 
         tx.Type = EditType;
         tx.Amount = EditAmount;

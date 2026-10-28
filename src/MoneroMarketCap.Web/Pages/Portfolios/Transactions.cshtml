@@ -150,7 +150,7 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label">Amount</label>
-                <input asp-for="Amount" type="number" step="any" min="0" class="form-control" />
+                <input asp-for="Amount" type="number" step="any" min="0.000000000001" class="form-control" required title="Amount must be greater than 0" />
             </div>
             <div class="col-md-2">
                 <label class="form-label">Price at Time (USD)</label>
@@ -256,7 +256,7 @@ else
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label" style="font-size:0.75rem">Amount</label>
-                                    <input type="number" step="any" min="0" name="EditAmount"
+                                    <input type="number" step="any" min="0.000000000001" title="Amount must be greater than 0" name="EditAmount"
                                            class="form-control form-control-sm"
                                            value="@t.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)" required />
                                 </div>

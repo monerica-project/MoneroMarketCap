@@ -733,7 +733,8 @@ app.Use(async (context, next) =>
         && path != null
         && path != path.ToLowerInvariant())
     {
-        var lower = path.ToLowerInvariant();
+        // Exactly one leading slash: "//Evil.com" must not become a protocol-relative redirect off-site.
+        var lower = "/" + path.ToLowerInvariant().TrimStart('/', '\\');
         context.Response.StatusCode = 308;
         // Percent-encode so a non-ASCII path never produces an invalid (non-ASCII) header.
         context.Response.Headers.Location =

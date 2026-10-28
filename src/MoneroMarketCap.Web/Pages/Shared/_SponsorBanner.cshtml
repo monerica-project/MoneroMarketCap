@@ -1,6 +1,11 @@
 @using MoneroMarketCap.Web.Services
 @inject ISponsorFeed SponsorFeed
 @functions {
+    // Sponsor data comes from an external feed: only ever link to http(s) URLs.
+    static string SafeLink(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps)
+            ? url! : "#";
+
     static string Trunc(string? t, int max)
     {
         if (string.IsNullOrEmpty(t) || t.Length <= max) { return t ?? string.Empty; }
@@ -45,7 +50,7 @@
             foreach (var s in ssr)
             {
                 var badge = Badge(s.SponsorshipType);
-                <a class="sponsor-card" href="@s.Link" target="_blank" rel="noopener sponsored">
+                <a class="sponsor-card" href="@SafeLink(s.Link)" target="_blank" rel="noopener sponsored">
                     @if (!string.IsNullOrEmpty(badge.Label))
                     {
                         <span class="sp-badge @badge.Css">@badge.Label</span>
@@ -102,13 +107,23 @@
             sponsorPage = 0;
         }
 
+        // The sponsor feed is external data: escape every field and only allow http(s) links.
+        function bannerEsc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+        function bannerUrl(u) {
+            return /^https?:\/\//i.test(String(u || '')) ? bannerEsc(u) : '#';
+        }
+
         function paint(slice) {
             const track = document.getElementById('sponsor-track');
             track.innerHTML = slice.map(s => `
-                        <a class="sponsor-card" href="${s.link}" target="_blank" rel="noopener sponsored">
+                        <a class="sponsor-card" href="${bannerUrl(s.link)}" target="_blank" rel="noopener sponsored">
                             ${sponsorTypeBadge(s.sponsorshipType)}
-                            <span class="sp-name">${s.name}</span>
-                            <span class="sp-desc">${truncateWords(s.description, 120)}</span>
+                            <span class="sp-name">${bannerEsc(s.name)}</span>
+                            <span class="sp-desc">${bannerEsc(truncateWords(s.description, 120))}</span>
                         </a>
                     `).join('');
         }

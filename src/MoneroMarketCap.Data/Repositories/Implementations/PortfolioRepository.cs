@@ -86,6 +86,9 @@ public class PortfolioRepository : IPortfolioRepository
 
     public async Task AddTransactionAsync(int portfolioId, int coinId, TransactionType type, decimal amount, decimal priceUsdAtTime, string? notes = null)
     {
+        if (amount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be greater than 0.");
+
         var portfolioCoin = await _db.PortfolioCoins
             .FirstOrDefaultAsync(pc => pc.PortfolioId == portfolioId && pc.CoinId == coinId);
 
