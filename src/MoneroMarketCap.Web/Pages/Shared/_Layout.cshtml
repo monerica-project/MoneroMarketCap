@@ -36,9 +36,9 @@
         <meta name="robots" content="@metaRobots" />
     }
     <meta name="description" content="@metaDescription" />
-    <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
-    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+    <link rel="icon" href="/favicon.ico?v=7" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg?v=7" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=7" />
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
@@ -58,7 +58,10 @@
     <header>
         <nav class="navbar navbar-expand-sm navbar-light border-bottom mb-3">
             <div class="container">
-                <a class="navbar-brand" asp-page="/Index">MoneroMarketCap</a>
+                <a class="navbar-brand d-inline-flex align-items-center" asp-page="/Index">
+                    <img class="brand-mark" src="/img/logo-mark.svg?v=5" width="30" height="30" alt="" />
+                    <span><span class="brand-monero">Monero</span><span class="brand-rest">MarketCap</span></span>
+                </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-label="Toggle navigation" aria-controls="navbarCollapse" aria-expanded="false">
                     <span class="navbar-toggler-icon"></span>
                 </button>

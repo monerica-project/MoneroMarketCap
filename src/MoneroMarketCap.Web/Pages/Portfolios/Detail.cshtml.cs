@@ -663,11 +663,24 @@ public class DetailModel : PageModel
 
             var pnlXmr = xmrPriceThisDay > 0 ? pnlUsd / xmrPriceThisDay : 0;
 
+            // XMR actually held that day (the accumulation), across any XMR holdings.
+            decimal xmrHeld = 0;
+            foreach (var kv in holdings)
+            {
+                if (kv.Value > 0 && xmrGeckoId != null && coinIdToGeckoId[kv.Key] == xmrGeckoId)
+                    xmrHeld += kv.Value;
+            }
+
             result.Add(new PnlPoint
             {
                 TimestampMs = new DateTimeOffset(day, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 PnlUsd = (double)pnlUsd,
-                PnlXmr = (double)pnlXmr
+                PnlXmr = (double)pnlXmr,
+                ValueUsd = (double)valueUsd,
+                BasisUsd = (double)totalBasis,
+                ValueXmr = xmrPriceThisDay > 0 ? (double)(valueUsd / xmrPriceThisDay) : 0,
+                BasisXmr = xmrPriceThisDay > 0 ? (double)(totalBasis / xmrPriceThisDay) : 0,
+                XmrHeld = (double)xmrHeld,
             });
         }
 
@@ -685,5 +698,17 @@ public class DetailModel : PageModel
         public long TimestampMs { get; set; }
         public double PnlUsd { get; set; }
         public double PnlXmr { get; set; }
+
+        /// <summary>Total portfolio value that day (holdings x that day's prices).</summary>
+        public double ValueUsd { get; set; }
+
+        /// <summary>Money put in (cost basis of what is still held) that day.</summary>
+        public double BasisUsd { get; set; }
+
+        public double ValueXmr { get; set; }
+        public double BasisXmr { get; set; }
+
+        /// <summary>Amount of XMR held that day.</summary>
+        public double XmrHeld { get; set; }
     }
 }

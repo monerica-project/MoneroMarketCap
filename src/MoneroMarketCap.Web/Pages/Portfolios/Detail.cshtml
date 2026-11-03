@@ -128,10 +128,17 @@
                 <div class="card h-100" style="background:var(--xmr-surface);border-color:var(--xmr-border)">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="card-title mb-0">P&amp;L Over Time</h5>
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-primary active" id="pnl-toggle-usd">@cur.Code</button>
-                                <button type="button" class="btn btn-outline-primary" id="pnl-toggle-xmr">XMR</button>
+                            <h5 class="card-title mb-0" id="pnl-title">Total Value Over Time</h5>
+                            <div class="d-flex gap-2 flex-wrap justify-content-end">
+                                <div class="btn-group btn-group-sm" role="group" aria-label="What to chart">
+                                    <button type="button" class="btn btn-outline-primary" id="pnl-view-pnl" title="Profit and loss over time">P&amp;L</button>
+                                    <button type="button" class="btn btn-outline-primary active" id="pnl-view-value" title="Total portfolio value over time, vs. the amount you put in">Total value</button>
+                                    <button type="button" class="btn btn-outline-primary" id="pnl-view-held" title="How much XMR you held each day">XMR held</button>
+                                </div>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Units" id="pnl-unit-group">
+                                    <button type="button" class="btn btn-outline-primary active" id="pnl-toggle-usd">@cur.Code</button>
+                                    <button type="button" class="btn btn-outline-primary" id="pnl-toggle-xmr">XMR</button>
+                                </div>
                             </div>
                         </div>
                         <div style="position:relative;height:280px">
@@ -413,31 +420,46 @@ else
         const canvas = document.getElementById('pnlChart');
         if (!canvas) return;
 
-        // Modes: 'fiat' (display currency) or 'xmr'. Kept old 'usd' id for backwards compat.
+        // view: 'pnl' | 'value' (portfolio value vs. amount put in) | 'held' (XMR amount held).
+        // unit: 'fiat' (display currency) or 'xmr' — applies to 'pnl' and 'value'. Values are
+        // stored in USD and multiplied by the FX rate for the display currency.
+        let view = 'value'; // default: total value over time
         let mode = 'fiat';
         const labels = pnlSeries.map(p => new Date(p.timestampMs).toISOString().slice(0, 10));
+        const titles = { pnl: 'P&L Over Time', value: 'Total Value Over Time', held: 'XMR Held Over Time' };
+        const inFiat = v => v * C.rate;
 
-        function dataFor(m) {
-            // pnlUsd is canonical from server; multiply by FX rate for display currency.
-            return pnlSeries.map(p => m === 'fiat' ? p.pnlUsd * C.rate : p.pnlXmr);
+        function fmtVal(v, digits) {
+            if (view === 'held' || mode === 'xmr') return v.toFixed(view === 'held' ? 4 : 4) + ' XMR';
+            return wrapMoney(v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+        }
+
+        function datasetsFor() {
+            const line = (label, data, color, fill, dashed) => ({
+                label: label, data: data, borderColor: color,
+                backgroundColor: fill ? color.replace('1)', '0.1)') : 'transparent',
+                borderWidth: 2, borderDash: dashed ? [6, 4] : [], fill: fill,
+                tension: 0.2, pointRadius: 0, pointHoverRadius: 4,
+                stepped: false
+            });
+            const unit = mode === 'fiat' ? C.code : 'XMR';
+            if (view === 'held') {
+                const d = line('XMR held', pnlSeries.map(p => p.xmrHeld), 'rgba(255, 102, 0, 1)', true, false);
+                d.stepped = 'before'; d.tension = 0;
+                return [d];
+            }
+            if (view === 'value') {
+                return [
+                    line('Total value (' + unit + ')', pnlSeries.map(p => mode === 'fiat' ? inFiat(p.valueUsd) : p.valueXmr), 'rgba(255, 102, 0, 1)', true, false),
+                    line('Amount put in (' + unit + ')', pnlSeries.map(p => mode === 'fiat' ? inFiat(p.basisUsd) : p.basisXmr), 'rgba(160, 160, 160, 1)', false, true)
+                ];
+            }
+            return [line('P&L (' + unit + ')', pnlSeries.map(p => mode === 'fiat' ? inFiat(p.pnlUsd) : p.pnlXmr), 'rgba(255, 102, 0, 1)', true, false)];
         }
 
         const chart = new Chart(canvas.getContext('2d'), {
         type: 'line',
-        data: {
-        labels: labels,
-        datasets: [{
-        label: 'P&L (' + C.code + ')',
-        data: dataFor('fiat'),
-        borderColor: '#ff6600',
-        backgroundColor: 'rgba(255, 102, 0, 0.1)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.2,
-        pointRadius: 0,
-        pointHoverRadius: 4
-        }]
-        },
+        data: { labels: labels, datasets: datasetsFor() },
         options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -451,21 +473,20 @@ else
         ticks: {
         color: getComputedStyle(document.body).color,
         callback: function(val) {
-        if (mode === 'fiat') return wrapMoney(val.toLocaleString('en-US', { maximumFractionDigits: 0 }));
-        return val.toFixed(4) + ' XMR';
+        if (view === 'held' || mode === 'xmr') return val.toFixed(view === 'held' ? 2 : 4) + ' XMR';
+        return wrapMoney(val.toLocaleString('en-US', { maximumFractionDigits: 0 }));
         }
         },
         grid: { color: 'rgba(128,128,128,0.15)' }
         }
         },
         plugins: {
-        legend: { display: false },
+        legend: { display: false, labels: { color: getComputedStyle(document.body).color, boxWidth: 18 } },
         tooltip: {
         callbacks: {
         label: function(c) {
-        const v = c.parsed.y;
-        if (mode === 'fiat') return 'P&L: ' + wrapMoney(v.toLocaleString('en-US', { minimumFractionDigits: C.decimals, maximumFractionDigits: C.decimals }));
-        return 'P&L: ' + v.toFixed(4) + ' XMR';
+        const name = view === 'held' ? 'XMR held' : (view === 'value' ? c.dataset.label.replace(/ \(.*\)$/, '') : 'P&L');
+        return name + ': ' + fmtVal(c.parsed.y, C.decimals);
         }
         }
         }
@@ -473,16 +494,20 @@ else
         }
         });
 
-        function setMode(newMode) {
-        mode = newMode;
-        chart.data.datasets[0].label = 'P&L (' + (mode === 'fiat' ? C.code : 'XMR') + ')';
-        chart.data.datasets[0].data = dataFor(mode);
+        function render() {
+        chart.data.datasets = datasetsFor();
+        chart.options.plugins.legend.display = view === 'value';
         chart.update();
+        document.getElementById('pnl-title').textContent = titles[view];
         document.getElementById('pnl-toggle-usd').classList.toggle('active', mode === 'fiat');
         document.getElementById('pnl-toggle-xmr').classList.toggle('active', mode === 'xmr');
+        document.getElementById('pnl-unit-group').style.visibility = view === 'held' ? 'hidden' : 'visible';
+        ['pnl', 'value', 'held'].forEach(v => document.getElementById('pnl-view-' + v).classList.toggle('active', view === v));
         }
-        document.getElementById('pnl-toggle-usd').addEventListener('click', () => setMode('fiat'));
-        document.getElementById('pnl-toggle-xmr').addEventListener('click', () => setMode('xmr'));
+        document.getElementById('pnl-toggle-usd').addEventListener('click', () => { mode = 'fiat'; render(); });
+        document.getElementById('pnl-toggle-xmr').addEventListener('click', () => { mode = 'xmr'; render(); });
+        ['pnl', 'value', 'held'].forEach(v => document.getElementById('pnl-view-' + v).addEventListener('click', () => { view = v; render(); }));
+        render(); // apply the default view (legend, title, buttons)
         })();
 
         // ─── Existing: price auto-fill on coin select ──────────

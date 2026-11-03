@@ -61,6 +61,14 @@ body {
         color: var(--xmr-orange-light) !important;
     }
 
+/* Logo: orange chart badge + two-tone name ("Monero" orange, "MarketCap" in the text color). */
+.navbar-brand { gap: 0.55rem; }
+.navbar-brand .brand-mark { display: block; flex: 0 0 auto; transition: transform 0.15s; }
+.navbar-brand:hover .brand-mark { transform: scale(1.06); }
+.navbar-brand .brand-monero { color: var(--xmr-orange); }
+.navbar-brand .brand-rest { color: var(--xmr-text, #f0f0f0); }
+.navbar-brand:hover .brand-rest { color: var(--xmr-orange-light); }
+
 .nav-link {
     color: var(--xmr-text) !important;
     transition: color 0.15s;
