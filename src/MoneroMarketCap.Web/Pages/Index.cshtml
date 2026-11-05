@@ -144,11 +144,18 @@
 <div class="table-meta">
     <span>
         <span class="text-muted">Data updated:</span>
-        <span id="last-updated-bar"
-              class="cursor-default"
-              title="@(Model.Coins.Any() ? Model.Coins.Max(c => c.PriceAsOfUtc).ToString("yyyy-MM-dd HH:mm:ss") + " UTC" : "")">
-            @(Model.Coins.Any() ? Model.Coins.Max(c => c.PriceAsOfUtc).ToString("HH:mm:ss") + " UTC" : "pending...")
-        </span>
+        @* UTC time without JS; site.js turns it into "X min ago" with the UTC time on hover. *@
+        @if (Model.Coins.Any())
+        {
+            var asOf = Model.Coins.Max(c => c.PriceAsOfUtc);
+            <time id="last-updated-bar" class="cursor-default time-ago"
+                  datetime="@asOf.ToString("yyyy-MM-ddTHH:mm:ssZ")"
+                  title="@asOf.ToString("yyyy-MM-dd HH:mm:ss") UTC">@asOf.ToString("HH:mm:ss") UTC</time>
+        }
+        else
+        {
+            <span id="last-updated-bar">pending...</span>
+        }
     </span>
     <span>
         <span class="text-muted">Next update in:</span>
@@ -454,6 +461,8 @@ else
 
         applySort();
 
+        let latestDataUtc = null;
+
         async function refreshPrices() {
             try {
                 const res = await fetch('/api/Prices');
@@ -472,6 +481,13 @@ else
                     };
                 }
                 if (!coins) return;
+
+                // Newest real data time across the coins (used for "Data updated").
+                latestDataUtc = coins
+                    .map(c => c.updatedAtUtc ? new Date(c.updatedAtUtc) : null)
+                    .filter(d => d && !isNaN(d.getTime()))
+                    .reduce((a, b) => (!a || b > a ? b : a), null);
+
                 const xmr = coins.find(c => c.symbol === 'XMR');
                 if (!xmr) return;
 
@@ -601,11 +617,13 @@ else
             if (seconds <= 0) {
                 seconds = 60;
                 refreshPrices().then(() => {
-                    const now = new Date();
-                    const timeStr = now.toUTCString().split(' ')[4] + ' UTC';
-                    if (lastUpdatedBar) {
-                        lastUpdatedBar.textContent = timeStr;
-                        lastUpdatedBar.title = now.toUTCString();
+                    // Only move "Data updated" when the data itself is newer (its real timestamp),
+                    // not just because the page re-fetched.
+                    if (lastUpdatedBar && window.timeAgo && latestDataUtc) {
+                        const shown = new Date(lastUpdatedBar.getAttribute('datetime') || 0);
+                        if (isNaN(shown.getTime()) || latestDataUtc > shown) {
+                            window.timeAgo.set(lastUpdatedBar, latestDataUtc);
+                        }
                     }
                 });
             }

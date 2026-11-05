@@ -49,6 +49,9 @@ public class PricesModel : PageModel
             c.AthChangePercentage,
             c.MaxSupply,
             UpdatedAt = c.PriceAsOfUtc.ToString("HH:mm:ss"),
+
+            // Full UTC timestamp, so the page can show "X min ago" from the data's real time.
+            UpdatedAtUtc = DateTime.SpecifyKind(c.PriceAsOfUtc, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ssZ"),
         });
 
         return new JsonResult(new

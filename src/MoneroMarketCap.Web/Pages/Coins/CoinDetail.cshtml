@@ -273,10 +273,9 @@
 <div class="table-meta mb-3">
     <span>
         <span class="text-muted">Data updated:</span>
-        <span class="cursor-default"
-              title="@coin.PriceAsOfUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC">
-            @coin.PriceAsOfUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC
-        </span>
+        <time class="cursor-default time-ago"
+              datetime="@coin.PriceAsOfUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")"
+              title="@coin.PriceAsOfUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC">@coin.PriceAsOfUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</time>
     </span>
 </div>
 

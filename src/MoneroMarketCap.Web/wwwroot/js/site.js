@@ -146,3 +146,49 @@
         }
     });
 })();
+
+// "Data updated": show how long ago (e.g. "3 min ago"), with the exact UTC time on hover.
+// The server renders the UTC time as the no-JS fallback; <time class="time-ago" datetime="...Z">.
+(function () {
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+    function utcText(d) {
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' +
+            pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()) + ' UTC';
+    }
+
+    function agoText(d) {
+        var s = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
+        if (s < 60) { return 'just now'; }
+        var m = Math.floor(s / 60);
+        if (m < 60) { return m + ' min ago'; }
+        var h = Math.floor(m / 60);
+        if (h < 48) { return h + (h === 1 ? ' hour ago' : ' hours ago'); }
+        var days = Math.floor(h / 24);
+        return days + ' days ago';
+    }
+
+    function render(el) {
+        var d = new Date(el.getAttribute('datetime'));
+        if (isNaN(d.getTime())) { return; }   // leave the server's UTC text as is
+        el.textContent = agoText(d);
+        el.title = utcText(d);
+    }
+
+    function renderAll() {
+        var els = document.querySelectorAll('time.time-ago[datetime]');
+        for (var i = 0; i < els.length; i++) { render(els[i]); }
+    }
+
+    window.timeAgo = {
+        set: function (el, date) {
+            el.classList.add('time-ago');
+            el.setAttribute('datetime', date.toISOString());
+            render(el);
+        },
+        refresh: renderAll
+    };
+
+    renderAll();
+    setInterval(renderAll, 30000);
+})();

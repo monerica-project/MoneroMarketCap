@@ -87,9 +87,7 @@ else
         {
             <span>
                 <span class="text-muted">Data updated:</span>
-                <span class="mono" title="@Model.LastUpdated.Value.ToString("yyyy-MM-dd HH:mm:ss") UTC">
-                    @Model.LastUpdated.Value.ToString("HH:mm:ss") UTC
-                </span>
+                <time class="mono time-ago" datetime="@Model.LastUpdated.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")" title="@Model.LastUpdated.Value.ToString("yyyy-MM-dd HH:mm:ss") UTC">@Model.LastUpdated.Value.ToString("HH:mm:ss") UTC</time>
             </span>
         }
     </div>
