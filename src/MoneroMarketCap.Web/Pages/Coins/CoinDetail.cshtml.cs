@@ -43,6 +43,17 @@ public class DetailModel : PageModel
     public int ExTotal { get; set; }
     public int ExTotalPages => (int)Math.Ceiling(ExTotal / (double)ExPageSize);
 
+    // SEO copy helpers for the "{COIN} to XMR" intent most coin-page searches have
+    // (e.g. "sol to xmr", "xmr to ada"). All computed from data we already hold.
+    /// <summary>Listed exchanges that support BOTH this coin and XMR (a direct COIN ⇄ XMR swap).</summary>
+    public int PairTotal { get; set; }
+    /// <summary>Of <see cref="PairTotal"/>, how many SwapRaven rates as KYC "Never" or "Rare".</summary>
+    public int PairNoKycCount { get; set; }
+    /// <summary>Median listed processing time (minutes) across <see cref="PairTotal"/>, when known.</summary>
+    public int? PairMedianMinutes { get; set; }
+    /// <summary>Other top coins to link as "{SYM} to XMR" (internal links between pair pages).</summary>
+    public List<Coin> RelatedPairs { get; set; } = new();
+
     // Affiliate link actually rendered by the view. Admin TradeUrl wins; otherwise
     // built from the coin's resolved ChangeNOW ticker + the config template.
     public string? EffectiveTradeUrl { get; set; }
@@ -174,10 +185,34 @@ public class DetailModel : PageModel
         ExPage = Math.Clamp(xp, 1, Math.Max(1, ExTotalPages));
         Exchanges = await listedLinks.AsNoTracking()
             .Select(ec => ec.Exchange!)
-            .OrderBy(e => e.Name)
+            // Graded best-first (SwapRaven's SortOrder), as the section copy promises.
+            .OrderBy(e => e.SortOrder)
+            .ThenBy(e => e.Name)
             .Skip((ExPage - 1) * ExPageSize)
             .Take(ExPageSize)
             .ToListAsync(HttpContext.RequestAborted);
+
+        // Direct COIN ⇄ XMR swap venues: listed exchanges that also list Monero.
+        if (Monero != null && Coin.Id != Monero.Id)
+        {
+            var xmrId = Monero.Id;
+            var pairFacts = await listedLinks
+                .Where(ec => _db.ExchangeCoins.Any(x => x.ExchangeId == ec.ExchangeId && x.CoinId == xmrId))
+                .Select(ec => new { ec.Exchange!.Kyc, ec.Exchange.ProcessingTimeMinutes })
+                .ToListAsync(HttpContext.RequestAborted);
+            PairTotal = pairFacts.Count;
+            PairNoKycCount = pairFacts.Count(f => f.Kyc == "Never" || f.Kyc == "Rare");
+            var speeds = pairFacts.Where(f => f.ProcessingTimeMinutes is > 0)
+                .Select(f => f.ProcessingTimeMinutes!.Value).OrderBy(m => m).ToList();
+            PairMedianMinutes = speeds.Count >= 3 ? speeds[speeds.Count / 2] : null;
+        }
+
+        // Internal links to other pair pages: the top tracked coins by market cap.
+        RelatedPairs = all
+            .Where(c => c.IsActive && c.Id != Coin.Id && c.Symbol.ToUpper() != "XMR" && c.MarketCapRank > 0)
+            .OrderBy(c => c.MarketCapRank)
+            .Take(16)
+            .ToList();
 
         Currency = CurrencyResolver.Resolve(HttpContext);
         var rates = await _fxRates.GetRatesAsync(HttpContext.RequestAborted);

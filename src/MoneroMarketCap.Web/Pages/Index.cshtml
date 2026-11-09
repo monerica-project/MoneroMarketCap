@@ -5,7 +5,9 @@
 @model MoneroMarketCap.Pages.IndexModel
 @{
     ViewData["Title"] = $"Market Cap — Valued in Monero ({Model.Currency.Code})";
-    ViewData["MetaDescription"] = "Live cryptocurrency market caps and prices valued in Monero (XMR). Compare every major coin against Monero, track gainers and losers versus XMR, and convert any coin to Monero.";
+    // Brand first: "moneromarket" / "monero market cap" searches land here.
+    ViewData["FullTitle"] = "MoneroMarketCap: Crypto Prices & Market Caps in Monero (XMR)";
+    ViewData["MetaDescription"] = "Live crypto prices and market caps valued in Monero (XMR). Compare every coin against Monero, track gainers and losers vs XMR, and convert any coin to XMR.";
     ViewBag.SponsorRotateIntervalSeconds = Model.SponsorRotateIntervalSeconds;
     var cur = Model.Currency;
     var rate = Model.RatePerUsd;

@@ -6,7 +6,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="format-detection" content="telephone=no">
-    <title>@ViewData["Title"] - MoneroMarketCap</title>
+    @* A page can set ViewData["FullTitle"] to own the whole <title> (e.g. the home page,
+       which leads with the brand so brand searches like "moneromarket" match). *@
+    <title>@(ViewData["FullTitle"] as string ?? (ViewData["Title"] + " - MoneroMarketCap"))</title>
     @{
         // Canonical URL — always the production host, path only. Query strings are
         // dropped so currency/sort/privacy variants and .onion/IP/localhost hosts all

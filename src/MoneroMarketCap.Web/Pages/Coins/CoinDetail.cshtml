@@ -12,12 +12,28 @@
     var exSeoSuffix = exCount > 0
         ? $" Compare {exCount} exchange{(exCount == 1 ? "" : "s")} that support {Model.Coin?.Symbol} — grades, KYC/AML policy and fees."
         : string.Empty;
-    ViewData["Title"] = exCount > 0
-        ? $"{Model.Coin?.Symbol} — {Model.Coin?.Name} price & exchanges"
-        : $"{Model.Coin?.Symbol} — {Model.Coin?.Name}";
-    ViewData["MetaDescription"] = (Model.Coin?.Symbol?.ToUpperInvariant() == "XMR")
+    // Almost every search that reaches a coin page is a pair query in one direction or the
+    // other ("sol to xmr", "convert xmr to ada", "swap ton to xmr"), so the title, H1 and
+    // description lead with "{COIN} to XMR" rather than "{COIN} price". The layout appends
+    // " - MoneroMarketCap" (18 chars), so keep the page part <= 52 for a ~70-char title.
+    var seoSym = Model.Coin?.Symbol ?? string.Empty;
+    var seoName = Model.Coin?.Name ?? string.Empty;
+    var seoIsXmr = seoSym.ToUpperInvariant() == "XMR";
+    var pairCount = Model.PairTotal;
+    // "Solana (SOL)", but just "BNB" when the name is the ticker.
+    var seoLabel = string.Equals(seoName, seoSym, StringComparison.OrdinalIgnoreCase) ? seoSym : $"{seoName} ({seoSym})";
+    string pairTitle = $"{seoLabel} to XMR: Live Rate, Converter & Swaps";
+    if (pairTitle.Length > 52) pairTitle = $"{seoSym} to XMR: Live Rate, Converter & Swaps";
+    ViewData["Title"] = seoIsXmr
+        ? "Monero (XMR) Price, Market Cap & Exchanges"
+        : pairTitle;
+    string pairDesc = pairCount > 0
+        ? $"Convert {seoLabel} to Monero (XMR) and back at the live rate. Compare {pairCount} exchange{(pairCount == 1 ? "" : "s")} that swap {seoSym} ⇄ XMR by grade, KYC and fees."
+        : $"Convert {seoLabel} to Monero (XMR) and back at the live rate, and track the {seoSym}/XMR price, market cap and performance vs Monero.";
+    if (pairDesc.Length > 160) pairDesc = pairDesc.Replace(seoLabel, seoSym);
+    ViewData["MetaDescription"] = seoIsXmr
         ? $"Monero (XMR) live price, market cap and charts on MoneroMarketCap — track XMR and value the entire crypto market in Monero.{exSeoSuffix}"
-        : $"{Model.Coin?.Name} ({Model.Coin?.Symbol}) live price, market cap and charts valued in Monero (XMR). See how {Model.Coin?.Symbol} performs against Monero and convert {Model.Coin?.Symbol} to XMR.{exSeoSuffix}";
+        : pairDesc;
     // Coins we no longer track continuously keep a working URL but are not indexed.
     if (Model.NoIndex)
     {
@@ -141,7 +157,8 @@
         <img src="@coin.ImageUrl" width="48" height="48" class="coin-icon" />
     }
     <div>
-        <h2 class="mb-0">@coin.Name <span class="coin-symbol-secondary">@coin.Symbol</span></h2>
+        @* The page's only H1 (it was an h2 before, so the page had no H1). Same size via .h2. *@
+        <h1 class="h2 mb-0">@coin.Name <span class="coin-symbol-secondary">@coin.Symbol@(isXmr ? "" : " to XMR")</span></h1>
         <span class="coin-rank-label">Rank #@coin.MarketCapRank</span>
     </div>
     <div class="ms-auto text-end">
@@ -169,6 +186,23 @@
 
 @* Per-coin "Trade for Monero" button retired: the exchange table further down
    (synced from SwapRaven) now lists every exchange that supports this coin. *@
+
+@{
+    // Readable amount: fewer decimals for big numbers, more for tiny ones.
+    string Amt(decimal v) => v >= 100 ? v.ToString("N2", usd) : v >= 1 ? v.ToString("N4", usd) : v.ToString("N8", usd);
+}
+@if (!isXmr && canConvert)
+{
+    @* One-sentence answer to the pair query, in plain text, right under the H1. *@
+    <p class="coin-pair-intro mb-4">
+        <strong>1 @coin.Symbol = @Amt(priceInXmr) XMR</strong> and <strong>1 XMR = @Amt(coinsPerXmr) @coin.Symbol</strong>
+        at the current spot price. Use the converter to price any amount of @coin.Name in Monero, or Monero in @coin.Symbol.
+        @if (Model.PairTotal > 0)
+        {
+            <text>Then compare the <a href="#exchanges">@Model.PairTotal exchange@(Model.PairTotal == 1 ? "" : "s") that swap @coin.Symbol to XMR and XMR to @coin.Symbol</a>@(Model.PairNoKycCount > 0 ? $" — {Model.PairNoKycCount} of them are rated \"never\" or \"rarely\" for KYC." : ".")</text>
+        }
+    </p>
+}
 
 
 <!-- Converter -->
@@ -473,7 +507,7 @@
     Func<int, string> exUrl = p => (p <= 1 ? $"/coins/{exSlug}" : $"/coins/{exSlug}/exchanges/{p}") + "#exchanges";
     <div id="exchanges" class="card mb-4">
         <div class="card-header">
-            <h2 class="h5 mb-0">Where to buy &amp; swap @coin.Name (@coin.Symbol)</h2>
+            <h2 class="h5 mb-0">@(isXmr ? $"Where to buy & swap {coin.Name} ({coin.Symbol})" : $"Where to swap {coin.Symbol} to XMR (and XMR to {coin.Symbol})")</h2>
         </div>
         <div class="card-body">
             <p class="text-muted small mb-3">
@@ -530,6 +564,89 @@
             }
         </div>
     </div>
+}
+
+@if (!isXmr && canConvert)
+{
+    var sym = coin.Symbol;
+    <section id="how-to-swap" class="card mb-4">
+        <div class="card-header"><h2 class="h5 mb-0">How to swap @sym to XMR (and back)</h2></div>
+        <div class="card-body">
+            <ol class="mb-3">
+                <li>Pick an exchange from the <a href="#exchanges">list above</a>. Check its grade, KYC and AML policy and fees first.</li>
+                <li>Choose @sym as the coin you send and XMR as the coin you receive. Pick a fixed rate if you want the quote locked, or a floating rate if you accept small moves.</li>
+                <li>Paste your own Monero wallet address. Standard addresses start with 4, subaddresses with 8. Using a fresh subaddress for each swap helps your privacy.</li>
+                <li>Send the exact @sym amount to the deposit address the exchange gives you. If it also shows a memo, tag or network, include and match it.</li>
+                <li>Wait for the swap to finish. Monero can be spent after 10 confirmations, about 20 minutes.</li>
+            </ol>
+            <p class="mb-0 text-muted small">
+                Going the other way, XMR to @sym, works the same: send XMR and paste your @coin.Name address.
+                Want to compare live XMR quotes first? <a href="https://moneropricenow.com/" target="_blank" rel="noopener">Monero Price Now</a>
+                shows buy and sell rates across exchanges. Not financial advice.
+            </p>
+        </div>
+    </section>
+
+    <section id="faq" class="card mb-4">
+        <div class="card-header"><h2 class="h5 mb-0">@sym to XMR: common questions</h2></div>
+        <div class="card-body coin-faq">
+            <h3 class="h6">How much is 1 @sym in XMR?</h3>
+            <p>
+                At the latest spot price, 1 @sym = @Amt(priceInXmr) XMR, and 1 XMR = @Amt(coinsPerXmr) @sym
+                (updated @coin.PriceAsOfUtc.ToString("d MMM yyyy HH:mm", usd) UTC). Exchanges quote their own rate, which
+                includes their fee and spread, so you receive a little less than the spot conversion.
+            </p>
+
+            @if (Model.PairTotal > 0)
+            {
+                <h3 class="h6">Can I swap @sym to XMR without KYC?</h3>
+                <p>
+                    @if (Model.PairNoKycCount > 0)
+                    {
+                        <text>@Model.PairNoKycCount of the @Model.PairTotal exchanges listed here are rated "never" or "rarely" for KYC.</text>
+                    }
+                    else
+                    {
+                        <text>None of the @Model.PairTotal exchanges listed here is rated "never" or "rarely" for KYC.</text>
+                    }
+                    Others may ask for ID if a trade is flagged by their risk checks. Read the KYC and AML columns and each
+                    exchange's profile before you send.
+                </p>
+
+                <h3 class="h6">How long does a @sym to XMR swap take?</h3>
+                <p>
+                    Most instant exchanges finish within minutes once your @sym deposit is confirmed.
+                    @if (Model.PairMedianMinutes is int med)
+                    {
+                        <text>The median listed processing time for these exchanges is about @med minutes.</text>
+                    }
+                    Received XMR becomes spendable after 10 confirmations, about 20 minutes.
+                </p>
+            }
+
+            <h3 class="h6">Where does this data come from?</h3>
+            <p class="mb-0">
+                Prices and market caps come from CoinGecko and refresh every few minutes. The exchange list, grades and
+                KYC ratings come from <a href="https://swapraven.com/" target="_blank" rel="noopener">SwapRaven</a>.
+                See <a href="/vs-monero">how every coin performs against Monero</a> or browse <a href="/exchanges">all exchanges</a>.
+            </p>
+        </div>
+    </section>
+}
+
+@if (Model.RelatedPairs.Count > 0)
+{
+    <section id="pairs" class="card mb-4">
+        <div class="card-header"><h2 class="h5 mb-0">More Monero pairs</h2></div>
+        <div class="card-body">
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var rp in Model.RelatedPairs)
+                {
+                    <a class="badge bg-secondary text-decoration-none" href="/coins/@CoinRoute.Key(rp)" title="@rp.Name to Monero">@rp.Symbol to XMR</a>
+                }
+            </div>
+        </div>
+    </section>
 }
 
 @if (isXmr)

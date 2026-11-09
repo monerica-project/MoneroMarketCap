@@ -2,9 +2,31 @@
 @model MoneroMarketCap.Pages.Exchanges.DetailModel
 @{
     var ex = Model.Exchange;
-    ViewData["Title"] = $"{ex.Name} — exchange profile";
-    ViewData["Description"] = $"{ex.Name}: the coins it supports, grade, KYC/AML posture and fees, with links to the exchange and its Monerica profile. {Model.CoinTotal} coins.";
     string Humanize(string? s) => MoneroMarketCap.Pages.Coins.DetailModel.Humanize(s);
+    // Brand searches look like "changenow monero" / "flashift": lead the title with the
+    // name + Monero. The layout appends " - MoneroMarketCap" (18 chars) -> keep <= 52.
+    var exTitle = Model.SupportsXmr
+        ? $"{ex.Name} Monero (XMR) Swaps: KYC, Fees & {Model.CoinTotal} Coins"
+        : $"{ex.Name}: KYC, Fees & {Model.CoinTotal} Supported Coins";
+    if (exTitle.Length > 52) exTitle = Model.SupportsXmr ? $"{ex.Name} Monero (XMR) Swaps: KYC & Fees" : $"{ex.Name}: KYC, Fees & Coins";
+    ViewData["Title"] = exTitle;
+    // NOTE: the layout reads ViewData["MetaDescription"]; this page used to set
+    // ViewData["Description"], so every exchange page shipped the generic site description.
+    var exFees = MoneroMarketCap.Pages.Coins.DetailModel.FormatFees(ex);
+    var exFacts = new List<string>();
+    if (!string.IsNullOrEmpty(ex.Grade)) exFacts.Add($"grade {ex.Grade}");
+    var kycPhrase = ex.Kyc switch
+    {
+        "Never" => "no KYC",
+        "Rare" => "KYC rare",
+        null or "" or "NotStated" => null,
+        _ => $"KYC {Humanize(ex.Kyc).ToLowerInvariant()}"
+    };
+    if (kycPhrase != null) exFacts.Add(kycPhrase);
+    if (exFees != "—") exFacts.Add($"fees {exFees.ToLowerInvariant()}");
+    var exDesc = $"{ex.Name}{(Model.SupportsXmr ? " Monero (XMR) swaps" : "")}: {string.Join(", ", exFacts)}. See all {Model.CoinTotal} supported coins{(string.IsNullOrEmpty(ex.MonericaSlug) ? "" : " and its Monerica reviews")}.";
+    if (exFacts.Count == 0) exDesc = $"{ex.Name}: the {Model.CoinTotal} coins it supports, KYC/AML policy and fees{(Model.SupportsXmr ? ", including Monero (XMR) swaps" : "")}.";
+    ViewData["MetaDescription"] = exDesc.Length <= 160 ? exDesc : exDesc.Substring(0, 157).TrimEnd() + "...";
     Func<int, string> coinUrl = p => (p <= 1 ? $"/exchanges/{ex.Slug}" : $"/exchanges/{ex.Slug}?cp={p}") + "#coins";
     ViewBag.SponsorRotateIntervalSeconds = 30;
 }
@@ -32,6 +54,16 @@
 @if (!string.IsNullOrWhiteSpace(ex.Description))
 {
     <p class="mb-3">@ex.Description</p>
+}
+@if (Model.SupportsXmr)
+{
+    @* Plain-language summary for "{exchange} monero" searches; facts only from the row. *@
+    <p class="mb-3 text-muted small">
+        @ex.Name supports Monero (XMR) and @(Model.CoinTotal - 1) other coin@(Model.CoinTotal - 1 == 1 ? "" : "s"), so you can swap XMR to or from any of them.
+        KYC: @Humanize(ex.Kyc).ToLowerInvariant(). AML policy: @Humanize(ex.Aml).ToLowerInvariant().
+        @if (MoneroMarketCap.Pages.Coins.DetailModel.FormatFees(ex) is var lf && lf != "—") { <text>Fees: @lf.</text> }
+        Grade and policy data come from SwapRaven.
+    </p>
 }
 
 <div class="card mb-4">

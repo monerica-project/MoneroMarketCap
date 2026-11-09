@@ -30,6 +30,9 @@ public class DetailModel : PageModel
     public int CoinTotalPages => (int)Math.Ceiling(CoinTotal / (double)CoinPageSize);
     public List<CoinRow> Coins { get; set; } = new();
 
+    /// <summary>True when this exchange lists Monero (drives the "Monero (XMR)" title/lede).</summary>
+    public bool SupportsXmr { get; set; }
+
     /// <param name="HasPage">
     /// True when /coins/{key} would resolve for this coin (active, or inside the
     /// CoinGecko:TrackingGraceDays window — the same rule as the coin page). Retired
@@ -51,6 +54,8 @@ public class DetailModel : PageModel
         GoUrl = GoIsAffiliate ? ex.AffiliateUrl! : ex.WebsiteUrl;
 
         CoinTotal = await _db.ExchangeCoins.CountAsync(ec => ec.ExchangeId == ex.Id, HttpContext.RequestAborted);
+        SupportsXmr = await _db.ExchangeCoins.AnyAsync(
+            ec => ec.ExchangeId == ex.Id && ec.Coin!.Symbol.ToUpper() == "XMR", HttpContext.RequestAborted);
         CoinPage = Math.Clamp(cp, 1, Math.Max(1, CoinTotalPages));
         var graceCutoff = CoinRules.GraceCutoff(
             _config.GetValue<int>("CoinGecko:TrackingGraceDays", CoinRules.DefaultGraceDays), DateTime.UtcNow);
