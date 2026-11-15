@@ -1048,7 +1048,9 @@ a.xmr-stat-link:focus-visible {
         gap: 1rem;
         flex-wrap: wrap;
     }
-    .conv-field { flex: 1 1 200px; min-width: 0; }
+    /* Sized for an amount (about 16 digits), not stretched across the card; the phone rule
+       below still makes the fields full width. */
+    .conv-field { flex: 0 1 260px; min-width: 0; }
     .conv-label {
         display: block;
         font-size: .72rem;
