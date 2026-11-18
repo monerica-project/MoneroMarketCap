@@ -1,0 +1,51 @@
+@page "/explorer/block/{id}"
+@model MoneroMarketCap.Web.Pages.Explorer.BlockModel
+@{
+    var h = Model.Block!.Header;
+    ViewData["Title"] = $"Monero Block {h.Height:N0}";
+    ViewData["MetaDescription"] = $"Monero block {h.Height:N0}: {h.TxCount} transactions, mined {h.TimestampUtc:yyyy-MM-dd HH:mm} UTC.";
+    ViewData["MetaRobots"] = "noindex, follow";
+    ViewData["Canonical"] = $"https://moneromarketcap.com/explorer/block/{h.Height}";
+}
+
+<p><a href="/explorer">&larr; Explorer</a></p>
+<h2>Block @h.Height.ToString("N0")</h2>
+
+<div class="table-responsive">
+    <table class="table table-sm">
+        <tbody>
+            <tr><th scope="row">Hash</th><td class="font-monospace" style="word-break:break-all">@h.Hash</td></tr>
+            <tr><th scope="row">Time</th><td>@h.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</td></tr>
+            <tr><th scope="row">Confirmations</th><td>@((h.Depth + 1).ToString("N0"))</td></tr>
+            <tr><th scope="row">Transactions</th><td>@h.TxCount (plus the miner reward)</td></tr>
+            <tr><th scope="row">Size</th><td>@h.SizeBytes.ToString("N0") bytes</td></tr>
+            <tr><th scope="row">Miner reward</th><td>@h.RewardXmr.ToString("0.000000000000") XMR</td></tr>
+            <tr><th scope="row">Difficulty</th><td>@h.Difficulty</td></tr>
+            <tr><th scope="row">Nonce</th><td>@h.Nonce</td></tr>
+            <tr><th scope="row">Version</th><td>@h.MajorVersion.@h.MinorVersion</td></tr>
+            <tr><th scope="row">Previous block</th><td class="font-monospace" style="word-break:break-all">@if (h.Height > 0) { <a href="/explorer/block/@(h.Height - 1)">@h.PrevHash</a> } else { <span>none (first block)</span> }</td></tr>
+            @if (h.Depth > 0)
+            {
+                <tr><th scope="row">Next block</th><td><a href="/explorer/block/@(h.Height + 1)">@((h.Height + 1).ToString("N0"))</a></td></tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<h3>Miner reward transaction</h3>
+<ul class="hash-grid"><li><a class="hash-chip" href="/explorer/tx/@h.MinerTxHash" rel="nofollow" title="@h.MinerTxHash">@h.MinerTxHash[..8]&hellip;@h.MinerTxHash[^8..]</a></li></ul>
+
+<h3>Transactions (@Model.Block.TxHashes.Count)</h3>
+@if (Model.Block.TxHashes.Count == 0)
+{
+    <p style="color:var(--xmr-text-muted)">This block holds only the miner reward.</p>
+}
+else
+{
+    <ul class="hash-grid">
+        @foreach (var tx in Model.Block.TxHashes)
+        {
+            <li><a class="hash-chip" href="/explorer/tx/@tx" rel="nofollow" title="@tx">@tx[..8]&hellip;@tx[^8..]</a></li>
+        }
+    </ul>
+}

@@ -58,7 +58,7 @@
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-light border-bottom mb-3">
+        <nav class="navbar navbar-expand-xl navbar-light border-bottom mb-3">
             <div class="container">
                 <a class="navbar-brand d-inline-flex align-items-center" asp-page="/Index">
                     <img class="brand-mark" src="/img/logo-mark.svg?v=5" width="30" height="30" alt="" />
@@ -67,7 +67,7 @@
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-label="Toggle navigation" aria-controls="navbarCollapse" aria-expanded="false">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                <div class="navbar-collapse collapse d-xl-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1">
                             <li class="nav-item">
                                 <a class="nav-link" href="/vs-monero">vs Monero</a>
@@ -76,11 +76,14 @@
                                 <a class="nav-link" href="/exchanges">Exchanges</a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link" href="/explorer">Explorer</a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link" asp-page="/Portfolios/Index">My Portfolios</a>
                             </li>
                     </ul>
 
-                    <div class="coin-search mx-lg-3 my-2 my-sm-0">
+                    <div class="coin-search mx-xl-2 my-2 my-xl-0">
                         <input id="coinSearch" type="text" class="form-control form-control-sm"
                                placeholder="Search coins…" autocomplete="off" spellcheck="false"
                                role="combobox" aria-autocomplete="list" aria-expanded="false" aria-label="Search coins" />
@@ -100,12 +103,7 @@
                                 </li>
                             }
                             <li class="nav-item">
-                                <span class="nav-link fw-bold" style="color:var(--xmr-orange)">
-                                    &#x1F464; @User.Identity.Name
-                                </span>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-page="/Settings">&#x2699; Settings</a>
+                                <a class="nav-link fw-bold nav-user" asp-page="/Settings" title="Account settings">&#x1F464; @User.Identity.Name</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-page="/Logout">Logout</a>

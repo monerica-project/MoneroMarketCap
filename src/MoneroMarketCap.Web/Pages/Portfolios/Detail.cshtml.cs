@@ -162,7 +162,7 @@ public class DetailModel : PageModel
         if (!await LoadPortfolio(id))
             return NotFound();
 
-        var name = (newName ?? string.Empty).Trim();
+        var name = MoneroMarketCap.Web.Services.SafetyLimits.CleanName(newName, MaxPortfolioNameLength);
         if (name.Length == 0)
         {
             TempData["ImportMessage"] = "Portfolio name can't be empty.";
@@ -208,6 +208,12 @@ public class DetailModel : PageModel
             _db.PortfolioCoins.Add(portfolioCoin);
             await _db.SaveChangesAsync();
         }
+        else if (await _db.CoinTransactions.CountAsync(t => t.PortfolioCoinId == portfolioCoin.Id) >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.SafetyLimits.TransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { id });
+        }
 
         var tx = new CoinTransaction
         {
@@ -215,11 +221,11 @@ public class DetailModel : PageModel
             Type = TransactionType,
             Amount = Amount,
             PriceUsdAtTime = PriceUsdAtTime,
-            Notes = Notes,
-            ExternalTransactionId = string.IsNullOrWhiteSpace(ExternalTransactionId) ? null : ExternalTransactionId.Trim(),
+            Notes = MoneroMarketCap.Web.Services.SafetyLimits.Clip(Notes, MoneroMarketCap.Web.Services.SafetyLimits.MaxNotesLength),
+            ExternalTransactionId = string.IsNullOrWhiteSpace(ExternalTransactionId) ? null : MoneroMarketCap.Web.Services.SafetyLimits.Clip(ExternalTransactionId.Trim(), MoneroMarketCap.Web.Services.SafetyLimits.MaxExternalTransactionIdLength),
             TransactedAt = TransactedAt == default
                 ? DateTime.UtcNow
-                : DateTime.SpecifyKind(TransactedAt, DateTimeKind.Utc)
+                : MoneroMarketCap.Web.Services.SafetyLimits.ClampTransactionDate(TransactedAt)
         };
 
         _db.CoinTransactions.Add(tx);
@@ -286,6 +292,15 @@ public class DetailModel : PageModel
             .ToListAsync();
         var existingSet = new HashSet<string>(existingTxIds, StringComparer.OrdinalIgnoreCase);
 
+        var existingTotal = await _db.CoinTransactions.CountAsync(t => t.PortfolioCoinId == portfolioCoin.Id);
+        if (existingTotal >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.SafetyLimits.TransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { id });
+        }
+        var hitLimit = false;
+
         var inv = CultureInfo.InvariantCulture;
         using var reader = new StreamReader(ImportFile.OpenReadStream(), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
 
@@ -321,6 +336,11 @@ public class DetailModel : PageModel
         {
             lineNum++;
             if (string.IsNullOrWhiteSpace(line)) continue;
+            if (existingTotal + imported >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
+            {
+                hitLimit = true;
+                break;
+            }
 
             try
             {
@@ -400,9 +420,9 @@ public class DetailModel : PageModel
                     Type = type,
                     Amount = amount,
                     PriceUsdAtTime = priceUsd,
-                    Notes = notes,
-                    ExternalTransactionId = txid,
-                    TransactedAt = DateTime.SpecifyKind(transactedAt, DateTimeKind.Utc)
+                    Notes = MoneroMarketCap.Web.Services.SafetyLimits.Clip(notes, MoneroMarketCap.Web.Services.SafetyLimits.MaxNotesLength),
+                    ExternalTransactionId = MoneroMarketCap.Web.Services.SafetyLimits.Clip(txid, MoneroMarketCap.Web.Services.SafetyLimits.MaxExternalTransactionIdLength),
+                    TransactedAt = MoneroMarketCap.Web.Services.SafetyLimits.ClampTransactionDate(transactedAt)
                 };
 
                 _db.CoinTransactions.Add(tx);
@@ -425,6 +445,8 @@ public class DetailModel : PageModel
         var summary = $"Imported {imported} XMR transaction(s), skipped {skipped} duplicate(s), {errors} error(s).";
         if (errorSamples.Any())
             summary += " First errors: " + string.Join("; ", errorSamples);
+        if (hitLimit)
+            summary += " Stopped at the limit of " + MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin.ToString("N0") + " transactions for this coin.";
 
         TempData["ImportMessage"] = summary;
         TempData["ImportSuccess"] = imported > 0;
@@ -539,7 +561,7 @@ public class DetailModel : PageModel
 
         if (!allTxs.Any()) return new List<PnlPoint>();
 
-        var startDate = allTxs.First().TransactedAt.Date;
+        var startDate = MoneroMarketCap.Web.Services.SafetyLimits.ClampTransactionDate(allTxs.First().TransactedAt).Date;
         var endDate = DateTime.UtcNow.Date;
 
         var coinGeckoIds = Portfolio.PortfolioCoins

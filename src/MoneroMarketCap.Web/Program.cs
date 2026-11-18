@@ -50,6 +50,26 @@ builder.Services.AddControllersWithViews();
 
 builder.Services.AddMemoryCache();
 
+// Monero block explorer: talks to our own node (restricted RPC behind digest login). Without a
+// configured node the explorer pages simply say the node is unavailable.
+builder.Services.AddHttpClient<MoneroMarketCap.Web.Services.MoneroExplorer>(client =>
+    {
+        var url = builder.Configuration["MoneroNode:Url"];
+        if (Uri.TryCreate(url, UriKind.Absolute, out var nodeUri))
+        {
+            client.BaseAddress = nodeUri;
+        }
+
+        client.Timeout = TimeSpan.FromSeconds(15);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        Credentials = new System.Net.NetworkCredential(
+            builder.Configuration["MoneroNode:Username"] ?? string.Empty,
+            builder.Configuration["MoneroNode:Password"] ?? string.Empty),
+        AllowAutoRedirect = false,
+    });
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", p => p.RequireRole(RoleNames.Admin));
@@ -137,10 +157,15 @@ using (var scope = app.Services.CreateScope())
     await roles.EnsureRolesSeededAsync();
 
     var adminUsername = config["Admin:Username"] ?? "admin";
-    var adminPassword = config["Admin:Password"] ?? "changeme123";
 
     if (!await db.Users.AnyAsync(u => u.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin)))
     {
+        // No default password: the first admin is only created from a configured, decent one.
+        var adminPassword = config["Admin:Password"];
+        if (string.IsNullOrWhiteSpace(adminPassword) || adminPassword.Length < 12)
+            throw new InvalidOperationException(
+                "No admin user exists and Admin:Password is missing or shorter than 12 characters. " +
+                "Set Admin:Password (12+ characters) in configuration before first start.");
         var admin = new MoneroMarketCap.Data.Models.AppUser
         {
             Username = adminUsername,
@@ -151,6 +176,12 @@ using (var scope = app.Services.CreateScope())
         await roles.AssignRoleAsync(admin.Id, RoleNames.Admin);
     }
 }
+
+// nginx terminates TLS; take the real scheme from it so sign-in redirects stay on https.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto,
+});
 
 // ── Never cache error responses ────────────────────────────────────────────────
 // Brave (and other browsers) on Windows were serving stale cached 404/500 pages:
@@ -164,6 +195,18 @@ app.Use(async (context, next) =>
 {
     context.Response.OnStarting(() =>
     {
+        // Private pages (portfolio, settings, admin) are never stored by a browser or any cache
+        // in between, so holdings can't be read back from a shared computer or a proxy.
+        var privatePath = context.Request.Path.StartsWithSegments("/Portfolios", StringComparison.OrdinalIgnoreCase)
+            || context.Request.Path.StartsWithSegments("/Settings", StringComparison.OrdinalIgnoreCase)
+            || context.Request.Path.StartsWithSegments("/DeleteAccount", StringComparison.OrdinalIgnoreCase)
+            || context.Request.Path.StartsWithSegments("/Admin", StringComparison.OrdinalIgnoreCase);
+        if (privatePath)
+        {
+            context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+            context.Response.Headers["Pragma"] = "no-cache";
+        }
+
         if (context.Response.StatusCode >= 400)
         {
             context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
@@ -653,6 +696,7 @@ app.MapGet("/sitemap-pages.xml", () =>
         ("/coins", "hourly", "0.8"),
         ("/exchanges", "daily", "0.9"),
         ("/vs-monero", "daily", "0.9"),
+        ("/explorer", "hourly", "0.8"),
         ("/network", "daily", "0.7"),
         ("/sponsors", "weekly", "0.5"),
         ("/about", "monthly", "0.4"),

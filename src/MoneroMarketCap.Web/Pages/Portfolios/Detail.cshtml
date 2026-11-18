@@ -141,6 +141,16 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Time period" id="pnl-range-group">
+                                <button type="button" class="btn btn-outline-secondary" data-range="w" title="Last 7 days">Week</button>
+                                <button type="button" class="btn btn-outline-secondary" data-range="m" title="Last 30 days">Month</button>
+                                <button type="button" class="btn btn-outline-secondary" data-range="q" title="Last 3 months">Quarter</button>
+                                <button type="button" class="btn btn-outline-secondary" data-range="y" title="Last 12 months">Year</button>
+                                <button type="button" class="btn btn-outline-secondary active" data-range="all" title="Since the first transaction">All</button>
+                            </div>
+                            <div id="pnl-range-summary" style="font-size:.9rem;text-align:right"></div>
+                        </div>
                         <div style="position:relative;height:280px">
                             <canvas id="pnlChart"></canvas>
                         </div>
@@ -237,6 +247,12 @@ else
                             <a asp-page="/Portfolios/Transactions"
                                asp-route-portfolioCoinId="@pc.Id"
                                class="btn btn-outline-secondary btn-sm">History</a>
+                            <a asp-page="/Portfolios/Transactions"
+                               asp-route-portfolioCoinId="@pc.Id"
+                               asp-route-walletdiff="1"
+                               asp-fragment="wallet-difference"
+                               class="btn btn-outline-warning btn-sm"
+                               title="Enter your current wallet balance and the needed buy or sell is added for you">Wallet difference</a>
                         </td>
                     </tr>
                 }
@@ -425,7 +441,19 @@ else
         // stored in USD and multiplied by the FX rate for the display currency.
         let view = 'value'; // default: total value over time
         let mode = 'fiat';
-        const labels = pnlSeries.map(p => new Date(p.timestampMs).toISOString().slice(0, 10));
+        // Time period shown: last week / month / quarter / year, or everything. The series is one
+        // point per day, so a period is simply the last N days (plus the day it starts from).
+        const RANGE_DAYS = { w: 7, m: 30, q: 91, y: 365 };
+        const RANGE_NAMES = { w: 'Past week', m: 'Past month', q: 'Past quarter', y: 'Past year', all: 'All time' };
+        let range = 'all';
+        try { const saved = localStorage.getItem('mmc-portfolio-range'); if (saved && RANGE_NAMES[saved]) range = saved; } catch (e) { }
+        let pts = pnlSeries;
+        function applyRange() {
+            const n = RANGE_DAYS[range];
+            pts = n ? pnlSeries.slice(-(n + 1)) : pnlSeries;
+        }
+        applyRange();
+        const labelsFor = () => pts.map(p => new Date(p.timestampMs).toISOString().slice(0, 10));
         const titles = { pnl: 'P&L Over Time', value: 'Total Value Over Time', held: 'XMR Held Over Time' };
         const inFiat = v => v * C.rate;
 
@@ -444,22 +472,22 @@ else
             });
             const unit = mode === 'fiat' ? C.code : 'XMR';
             if (view === 'held') {
-                const d = line('XMR held', pnlSeries.map(p => p.xmrHeld), 'rgba(255, 102, 0, 1)', true, false);
+                const d = line('XMR held', pts.map(p => p.xmrHeld), 'rgba(255, 102, 0, 1)', true, false);
                 d.stepped = 'before'; d.tension = 0;
                 return [d];
             }
             if (view === 'value') {
                 return [
-                    line('Total value (' + unit + ')', pnlSeries.map(p => mode === 'fiat' ? inFiat(p.valueUsd) : p.valueXmr), 'rgba(255, 102, 0, 1)', true, false),
-                    line('Amount put in (' + unit + ')', pnlSeries.map(p => mode === 'fiat' ? inFiat(p.basisUsd) : p.basisXmr), 'rgba(160, 160, 160, 1)', false, true)
+                    line('Total value (' + unit + ')', pts.map(p => mode === 'fiat' ? inFiat(p.valueUsd) : p.valueXmr), 'rgba(255, 102, 0, 1)', true, false),
+                    line('Amount put in (' + unit + ')', pts.map(p => mode === 'fiat' ? inFiat(p.basisUsd) : p.basisXmr), 'rgba(160, 160, 160, 1)', false, true)
                 ];
             }
-            return [line('P&L (' + unit + ')', pnlSeries.map(p => mode === 'fiat' ? inFiat(p.pnlUsd) : p.pnlXmr), 'rgba(255, 102, 0, 1)', true, false)];
+            return [line('P&L (' + unit + ')', pts.map(p => mode === 'fiat' ? inFiat(p.pnlUsd) : p.pnlXmr), 'rgba(255, 102, 0, 1)', true, false)];
         }
 
         const chart = new Chart(canvas.getContext('2d'), {
         type: 'line',
-        data: { labels: labels, datasets: datasetsFor() },
+        data: { labels: labelsFor(), datasets: datasetsFor() },
         options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -494,7 +522,33 @@ else
         }
         });
 
+        // "Past month: $1,200.00 → $1,450.00  ▲ +$250.00 (+20.8%)" for whatever is being charted.
+        function renderSummary() {
+            const el = document.getElementById('pnl-range-summary');
+            if (!el || pts.length === 0) return;
+            const pick = p => view === 'held' ? p.xmrHeld
+                : view === 'value' ? (mode === 'fiat' ? inFiat(p.valueUsd) : p.valueXmr)
+                : (mode === 'fiat' ? inFiat(p.pnlUsd) : p.pnlXmr);
+            const first = pick(pts[0]), last = pick(pts[pts.length - 1]);
+            const diff = last - first;
+            const up = diff >= 0;
+            const pct = (view !== 'pnl' && first > 0) ? ' (' + (up ? '+' : '') + (diff / first * 100).toFixed(1) + '%)' : '';
+            const days = pts.length - 1;
+            const wanted = RANGE_DAYS[range];
+            const name = (wanted && days < wanted) ? 'Since start (' + days + ' day' + (days === 1 ? '' : 's') + ')' : RANGE_NAMES[range];
+            el.innerHTML = '';
+            const a = document.createElement('span');
+            a.style.color = 'var(--xmr-text-muted)';
+            a.textContent = name + ': ' + fmtVal(first, C.decimals) + ' → ' + fmtVal(last, C.decimals) + '  ';
+            const b = document.createElement('strong');
+            b.className = up ? 'text-success' : 'text-danger';
+            b.textContent = (up ? '▲ +' : '▼ −') + fmtVal(Math.abs(diff), C.decimals) + pct;
+            el.appendChild(a); el.appendChild(b);
+        }
+
         function render() {
+        applyRange();
+        chart.data.labels = labelsFor();
         chart.data.datasets = datasetsFor();
         chart.options.plugins.legend.display = view === 'value';
         chart.update();
@@ -503,7 +557,14 @@ else
         document.getElementById('pnl-toggle-xmr').classList.toggle('active', mode === 'xmr');
         document.getElementById('pnl-unit-group').style.visibility = view === 'held' ? 'hidden' : 'visible';
         ['pnl', 'value', 'held'].forEach(v => document.getElementById('pnl-view-' + v).classList.toggle('active', view === v));
+        document.querySelectorAll('#pnl-range-group [data-range]').forEach(b => b.classList.toggle('active', b.getAttribute('data-range') === range));
+        renderSummary();
         }
+        document.querySelectorAll('#pnl-range-group [data-range]').forEach(b => b.addEventListener('click', () => {
+            range = b.getAttribute('data-range');
+            try { localStorage.setItem('mmc-portfolio-range', range); } catch (e) { }
+            render();
+        }));
         document.getElementById('pnl-toggle-usd').addEventListener('click', () => { mode = 'fiat'; render(); });
         document.getElementById('pnl-toggle-xmr').addEventListener('click', () => { mode = 'xmr'; render(); });
         ['pnl', 'value', 'held'].forEach(v => document.getElementById('pnl-view-' + v).addEventListener('click', () => { view = v; render(); }));

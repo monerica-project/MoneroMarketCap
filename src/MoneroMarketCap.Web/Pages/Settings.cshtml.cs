@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -51,6 +53,24 @@ public class SettingsModel : PageModel
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        // Every other signed-in session is now refused (its cookie carries the old password
+        // stamp); this one is re-issued with the new stamp so the user stays signed in here.
+        var cache = HttpContext.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+        MoneroMarketCap.Web.Services.CookiePrincipalValidator.Invalidate(cache, user.Id);
+        var roles = await _db.Users.Where(u => u.Id == user.Id)
+            .SelectMany(u => u.UserRoles.Select(ur => ur.Role.Name))
+            .ToListAsync();
+        await HttpContext.SignInAsync(
+            "CookieAuth",
+            MoneroMarketCap.Web.Services.CookiePrincipalValidator.BuildPrincipal(
+                new MoneroMarketCap.Web.Services.CookiePrincipalValidator.UserSnapshot(
+                    user.Id,
+                    user.Username,
+                    roles,
+                    MoneroMarketCap.Web.Services.CookiePrincipalValidator.PasswordStamp(user.PasswordHash)),
+                "CookieAuth"),
+            new Microsoft.AspNetCore.Authentication.AuthenticationProperties { IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30) });
 
         Success = true;
         return Page();

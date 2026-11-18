@@ -55,11 +55,12 @@ public static class CookiePrincipalValidator
                     .Select(u => new
                     {
                         u.Username,
+                        u.PasswordHash,
                         Roles = u.UserRoles.Select(ur => ur.Role.Name).ToList(),
                     })
                     .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
 
-                return row == null ? null : new UserSnapshot(userId, row.Username, row.Roles);
+                return row == null ? null : new UserSnapshot(userId, row.Username, row.Roles, PasswordStamp(row.PasswordHash));
             });
         }
 
@@ -89,6 +90,22 @@ public static class CookiePrincipalValidator
             return Outcome.Reject;
         }
 
+        // A password change signs out every other session: the cookie carries a stamp of the
+        // password it was issued under. Cookies from before the stamp existed are re-issued once.
+        var cookieStamp = principal.FindFirstValue(PasswordStampClaim);
+        if (!string.IsNullOrEmpty(current.PasswordStamp))
+        {
+            if (string.IsNullOrEmpty(cookieStamp))
+            {
+                return Outcome.Replace;
+            }
+
+            if (!string.Equals(cookieStamp, current.PasswordStamp, StringComparison.Ordinal))
+            {
+                return Outcome.Reject;
+            }
+        }
+
         var cookieName = principal.FindFirstValue(ClaimTypes.Name);
         var cookieRoles = principal.FindAll(ClaimTypes.Role)
             .Select(c => c.Value)
@@ -109,10 +126,23 @@ public static class CookiePrincipalValidator
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
         };
         claims.AddRange(user.Roles.Select(r => new Claim(ClaimTypes.Role, r)));
+        if (!string.IsNullOrEmpty(user.PasswordStamp))
+        {
+            claims.Add(new Claim(PasswordStampClaim, user.PasswordStamp));
+        }
+
         return new ClaimsPrincipal(new ClaimsIdentity(claims, scheme));
     }
 
+    public const string PasswordStampClaim = "pwd";
+
+    /// <summary>Short one-way stamp of the stored password hash; changes whenever the password does.</summary>
+    public static string PasswordStamp(string? passwordHash) =>
+        string.IsNullOrEmpty(passwordHash)
+            ? string.Empty
+            : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(passwordHash)))[..16];
+
     private static string CacheKey(int userId) => $"auth-user:{userId}";
 
-    public sealed record UserSnapshot(int Id, string Username, IReadOnlyCollection<string> Roles);
+    public sealed record UserSnapshot(int Id, string Username, IReadOnlyCollection<string> Roles, string PasswordStamp = "");
 }

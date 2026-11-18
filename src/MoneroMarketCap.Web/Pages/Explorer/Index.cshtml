@@ -1,0 +1,82 @@
+@page "/explorer"
+@model MoneroMarketCap.Web.Pages.Explorer.IndexModel
+@using MoneroMarketCap.Web.Services
+@{
+    ViewData["Title"] = "Monero Block Explorer";
+    ViewData["MetaDescription"] = "Monero (XMR) block explorer: latest blocks, pending transactions, and lookup by block height or transaction hash. No JavaScript, no tracking, served from our own node.";
+    ViewData["Canonical"] = "https://moneromarketcap.com/explorer";
+    var now = DateTime.UtcNow;
+    string Ago(DateTime t)
+    {
+        var d = now - t;
+        return d.TotalMinutes < 1 ? "just now" : d.TotalHours < 1 ? $"{(int)d.TotalMinutes} min ago" : d.TotalDays < 1 ? $"{(int)d.TotalHours} h ago" : $"{(int)d.TotalDays} d ago";
+    }
+}
+
+<h2>Monero Block Explorer</h2>
+<p style="color:var(--xmr-text-muted)">Look up any Monero block or transaction. Data comes straight from our own node. The page works without JavaScript and over Tor.</p>
+
+<form method="get" action="/explorer" class="mb-3" role="search">
+    <label for="q" class="form-label">Block height, block hash or transaction hash</label>
+    <div class="input-group">
+        <input id="q" name="q" class="form-control" maxlength="64" autocomplete="off" spellcheck="false" value="@Model.Q" placeholder="e.g. 3808083 or a 64-character hash" />
+        <button class="btn btn-primary" type="submit">Search</button>
+    </div>
+    @if (Model.SearchError is not null)
+    {
+        <div class="text-danger mt-2">@Model.SearchError</div>
+    }
+</form>
+
+@if (Model.Summary is null)
+{
+    <div class="alert alert-warning">The node is not answering right now. Please try again in a minute.</div>
+}
+else
+{
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3"><div class="border rounded p-2"><small style="color:var(--xmr-text-muted)">Block height</small><div class="fw-bold">@((Model.Summary.Height - 1).ToString("N0"))</div></div></div>
+        <div class="col-6 col-md-3"><div class="border rounded p-2"><small style="color:var(--xmr-text-muted)">Pending transactions</small><div class="fw-bold">@Model.Summary.PoolSize.ToString("N0")</div></div></div>
+        <div class="col-6 col-md-3"><div class="border rounded p-2"><small style="color:var(--xmr-text-muted)">Network hashrate</small><div class="fw-bold">@((Model.Summary.HashrateMh / 1000d).ToString("0.00")) GH/s</div></div></div>
+        <div class="col-6 col-md-3"><div class="border rounded p-2"><small style="color:var(--xmr-text-muted)">Difficulty</small><div class="fw-bold">@Model.Summary.Difficulty</div></div></div>
+    </div>
+
+    <h3>Latest blocks</h3>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped">
+            <thead><tr><th>Height</th><th>Age</th><th class="text-end">Transactions</th><th class="text-end">Size</th><th class="text-end">Reward</th><th>Hash</th></tr></thead>
+            <tbody>
+                @foreach (var b in Model.Blocks)
+                {
+                    <tr>
+                        <td><a href="/explorer/block/@b.Height">@b.Height.ToString("N0")</a></td>
+                        <td title="@b.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC">@Ago(b.TimestampUtc)</td>
+                        <td class="text-end">@b.TxCount</td>
+                        <td class="text-end">@((b.SizeBytes / 1024d).ToString("0.0")) kB</td>
+                        <td class="text-end">@b.RewardXmr.ToString("0.0000") XMR</td>
+                        <td class="font-monospace"><a href="/explorer/block/@b.Hash">@b.Hash[..16]&hellip;</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <h3>Pending transactions</h3>
+    @if (Model.Pool.Count == 0)
+    {
+        <p style="color:var(--xmr-text-muted)">No transactions are waiting right now.</p>
+    }
+    else
+    {
+        <p style="color:var(--xmr-text-muted)">@Model.Pool.Count.ToString("N0") waiting for the next block@(Model.Pool.Count > MoneroExplorer.MaxPoolListed ? $" (showing {MoneroExplorer.MaxPoolListed})" : string.Empty).</p>
+        <ul class="hash-grid">
+            @foreach (var h in Model.Pool.Take(MoneroExplorer.MaxPoolListed))
+            {
+                <li><a class="hash-chip" href="/explorer/tx/@h" rel="nofollow" title="@h">@h[..8]&hellip;@h[^8..]</a></li>
+            }
+        </ul>
+    }
+}
+
+<h3>What you can and cannot see</h3>
+<p>Monero hides the sender, the receiver and the amount of every transaction. An explorer can show that a transaction exists, when it was confirmed, its fee and its size. It cannot show who paid whom, or how much. Only the two parties can prove a payment, using a key from their own wallet.</p>

@@ -11,8 +11,11 @@ public class CoinsController : ControllerBase
     private readonly ICoinGeckoService _gecko;
     private readonly IMemoryCache _cache;
 
-    public CoinsController(ICoinGeckoService gecko, IMemoryCache cache)
+    private readonly IServiceScopeFactory _scopes;
+
+    public CoinsController(ICoinGeckoService gecko, IMemoryCache cache, IServiceScopeFactory scopes)
     {
+        _scopes = scopes;
         _gecko = gecko;
         _cache = cache;
     }
@@ -20,6 +23,10 @@ public class CoinsController : ControllerBase
     [HttpGet("{cgId}/history")]
     public async Task<IActionResult> History(string cgId)
     {
+        // Only coins the site lists: an unknown id used to trigger a live price-provider call per request.
+        if (!await MoneroMarketCap.Web.Services.KnownCoinIds.IsKnownAsync(cgId, _scopes, _cache))
+            return NotFound();
+
         var cacheKey = $"history_{cgId}";
 
         if (_cache.TryGetValue(cacheKey, out string? cached))

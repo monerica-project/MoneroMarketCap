@@ -18,10 +18,23 @@ public class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
+        var nameKey = "signin|" + (Username ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(Username) || string.IsNullOrEmpty(Password)
+            || MoneroMarketCap.Web.Services.SafetyLimits.Reached("signin", MoneroMarketCap.Web.Services.SafetyLimits.FailedSignInsPer10Min, TimeSpan.FromMinutes(10))
+            || MoneroMarketCap.Web.Services.SafetyLimits.Reached(nameKey, MoneroMarketCap.Web.Services.SafetyLimits.FailedSignInsPerNamePer10Min, TimeSpan.FromMinutes(10)))
+        {
+            Error = string.IsNullOrEmpty(Username) || string.IsNullOrEmpty(Password)
+                ? "Invalid credentials."
+                : "Too many failed sign-in attempts. Please wait 10 minutes and try again.";
+            return Page();
+        }
+
         var user = await _users.GetByUsernameAsync(Username);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(Password, user.PasswordHash))
         {
+            MoneroMarketCap.Web.Services.SafetyLimits.Mark("signin");
+            MoneroMarketCap.Web.Services.SafetyLimits.Mark(nameKey);
             Error = "Invalid credentials.";
             return Page();
         }
@@ -39,6 +52,10 @@ public class LoginModel : PageModel
 
         foreach (var ur in user.UserRoles)
             claims.Add(new Claim(ClaimTypes.Role, ur.Role.Name));
+
+        claims.Add(new Claim(
+            MoneroMarketCap.Web.Services.CookiePrincipalValidator.PasswordStampClaim,
+            MoneroMarketCap.Web.Services.CookiePrincipalValidator.PasswordStamp(user.PasswordHash)));
 
  
 

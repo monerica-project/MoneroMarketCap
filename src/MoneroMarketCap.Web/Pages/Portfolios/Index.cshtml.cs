@@ -284,7 +284,9 @@ public class IndexModel : PageModel
         await _portfolios.AddAsync(new Portfolio
         {
             UserId = userId,
-            Name = string.IsNullOrWhiteSpace(PortfolioName) ? "My Portfolio" : PortfolioName
+            Name = MoneroMarketCap.Web.Services.SafetyLimits.CleanName(PortfolioName, MoneroMarketCap.Web.Services.SafetyLimits.MaxPortfolioNameLength) is { Length: > 0 } cleanName
+                ? cleanName
+                : "My Portfolio"
         });
         await _portfolios.SaveChangesAsync();
 

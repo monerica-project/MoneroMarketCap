@@ -1,0 +1,89 @@
+@page "/explorer/tx/{hash}"
+@model MoneroMarketCap.Web.Pages.Explorer.TxModel
+@{
+    var t = Model.Tx!;
+    ViewData["Title"] = $"Monero Transaction {t.Hash[..12]}…";
+    ViewData["MetaDescription"] = "Monero transaction details: confirmations, fee, size, inputs and outputs. Amounts and addresses are hidden by Monero.";
+    ViewData["MetaRobots"] = "noindex, nofollow";
+}
+
+<p><a href="/explorer">&larr; Explorer</a></p>
+<h2>Transaction</h2>
+<p class="font-monospace" style="word-break:break-all">@t.Hash</p>
+
+@if (t.DoubleSpendSeen)
+{
+    <div class="alert alert-danger">The node has seen a conflicting transaction that spends the same funds.</div>
+}
+
+<div class="table-responsive">
+    <table class="table table-sm">
+        <tbody>
+            <tr>
+                <th scope="row">Status</th>
+                <td>
+                    @if (t.InPool)
+                    {
+                        <span>Pending: waiting for a block</span>
+                    }
+                    else
+                    {
+                        <span>Confirmed, @((t.Confirmations ?? 0).ToString("N0")) confirmations</span>
+                    }
+                </td>
+            </tr>
+            @if (t.BlockHeight is long bh)
+            {
+                <tr><th scope="row">Block</th><td><a href="/explorer/block/@bh">@bh.ToString("N0")</a></td></tr>
+            }
+            @if (t.TimestampUtc is DateTime ts)
+            {
+                <tr><th scope="row">Time</th><td>@ts.ToString("yyyy-MM-dd HH:mm:ss") UTC</td></tr>
+            }
+            @if (t.IsCoinbase)
+            {
+                <tr><th scope="row">Type</th><td>Miner reward (newly created coins)</td></tr>
+                <tr><th scope="row">Amount</th><td>@((t.CoinbaseAmountXmr ?? 0m).ToString("0.000000000000")) XMR</td></tr>
+            }
+            else
+            {
+                <tr><th scope="row">Fee</th><td>@(t.FeeXmr is decimal fee ? fee.ToString("0.000000000000") + " XMR" : "not available")</td></tr>
+                <tr><th scope="row">Amount</th><td>Hidden. Monero does not publish amounts.</td></tr>
+                <tr><th scope="row">Ring size</th><td>@t.RingSize <small style="color:var(--xmr-text-muted)">(each input is hidden among this many possible sources)</small></td></tr>
+            }
+            <tr><th scope="row">Size</th><td>@(t.SizeBytes > 0 ? t.SizeBytes.ToString("N0") + " bytes" : "not available")</td></tr>
+            <tr><th scope="row">Version</th><td>@t.Version@(t.RctType > 0 ? $" (RingCT type {t.RctType})" : string.Empty)</td></tr>
+            @if (t.UnlockTime > 0)
+            {
+                <tr><th scope="row">Unlock time</th><td>@t.UnlockTime.ToString("N0")</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (!t.IsCoinbase)
+{
+    <h3>Inputs (@t.KeyImages.Count)</h3>
+    <p style="color:var(--xmr-text-muted)">Each input shows a key image. It proves the funds are spent only once, without showing which earlier output was spent.</p>
+    <ul class="list-unstyled font-monospace" style="word-break:break-all">
+        @foreach (var k in t.KeyImages)
+        {
+            <li>@k</li>
+        }
+    </ul>
+}
+
+<h3>Outputs (@t.OutputKeys.Count)</h3>
+<p style="color:var(--xmr-text-muted)">Each output goes to a one-time address. It cannot be linked to the receiver's wallet address.</p>
+<ul class="list-unstyled font-monospace" style="word-break:break-all">
+    @foreach (var o in t.OutputKeys)
+    {
+        <li>@o</li>
+    }
+</ul>
+
+@if (t.ExtraHex.Length > 0)
+{
+    <h3>Extra data</h3>
+    <p class="font-monospace" style="word-break:break-all;color:var(--xmr-text-muted)">@t.ExtraHex</p>
+}

@@ -100,3 +100,6 @@ rcf/
 CI/deploy-config.sh
 CI/backup-config.sh
 .backup-fiat-history-*/
+
+# local sign-in cookie keys: never commit
+dataprotection-keys/

@@ -100,4 +100,39 @@ public class WebTests
         Assert.False(await KnownCoinIds.IsKnownAsync(new string('a', 500), scopes, cache));
         Assert.False(await KnownCoinIds.IsKnownAsync(null, scopes, cache));
     }
+
+    [Fact]
+    public void PasswordChange_RejectsCookiesIssuedUnderTheOldPassword()
+    {
+        var oldStamp = CookiePrincipalValidator.PasswordStamp("hash-old");
+        var newStamp = CookiePrincipalValidator.PasswordStamp("hash-new");
+        Assert.NotEqual(oldStamp, newStamp);
+
+        var user = new CookiePrincipalValidator.UserSnapshot(5, "alice", Array.Empty<string>(), newStamp);
+        var oldCookie = CookiePrincipalValidator.BuildPrincipal(user with { PasswordStamp = oldStamp }, "CookieAuth");
+        var currentCookie = CookiePrincipalValidator.BuildPrincipal(user, "CookieAuth");
+        var legacyCookie = CookiePrincipalValidator.BuildPrincipal(user with { PasswordStamp = string.Empty }, "CookieAuth");
+
+        Assert.Equal(CookiePrincipalValidator.Outcome.Reject, CookiePrincipalValidator.Decide(oldCookie, user));
+        Assert.Equal(CookiePrincipalValidator.Outcome.Valid, CookiePrincipalValidator.Decide(currentCookie, user));
+        Assert.Equal(CookiePrincipalValidator.Outcome.Replace, CookiePrincipalValidator.Decide(legacyCookie, user));
+    }
+
+    [Theory]
+    [InlineData("3808083", true)]
+    [InlineData("0", true)]
+    [InlineData("-1", false)]
+    [InlineData("12 OR 1=1", false)]
+    [InlineData("99999999999999999999", false)]
+    public void Explorer_AcceptsOnlyPlainBlockHeights(string value, bool ok) =>
+        Assert.Equal(ok, MoneroMarketCap.Web.Services.MoneroExplorer.IsHeight(value, out _));
+
+    [Theory]
+    [InlineData("db0ceae168825d667cf4fe6805e3c7ff7066f474215a096d1325fdb90dbe561f", true)]
+    [InlineData("db0ceae168825d667cf4fe6805e3c7ff7066f474215a096d1325fdb90dbe561", false)]
+    [InlineData("zz0ceae168825d667cf4fe6805e3c7ff7066f474215a096d1325fdb90dbe561f", false)]
+    [InlineData("../../../../etc/passwd", false)]
+    [InlineData(null, false)]
+    public void Explorer_AcceptsOnly64CharacterHashes(string? value, bool ok) =>
+        Assert.Equal(ok, MoneroMarketCap.Web.Services.MoneroExplorer.IsHash(value));
 }

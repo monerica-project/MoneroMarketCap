@@ -1,0 +1,68 @@
+@using MoneroMarketCap.Web.Services
+@inject ISponsorFeed SponsorFeed
+@functions {
+    // Sponsor data comes from an external feed: only ever link to http(s) URLs.
+    static string SafeLink(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps)
+            ? url! : "#";
+
+    static string Trunc(string? t, int max)
+    {
+        if (string.IsNullOrEmpty(t) || t.Length <= max) { return t ?? string.Empty; }
+        var cut = t.Substring(0, max);
+        var sp = cut.LastIndexOf(' ');
+        return (sp > 0 ? cut.Substring(0, sp) : cut) + "…";
+    }
+
+    static (string Css, string Label) Badge(string type) => type switch
+    {
+        "MainSponsor" => ("sp-main", "Main"),
+        "CategorySponsor" => ("sp-cat", "Category"),
+        "SubcategorySponsor" => ("sp-sub", "Subcategory"),
+        _ => (string.Empty, string.Empty),
+    };
+}
+@{
+    // Explorer pages: content on the left, the Monerica main sponsors in a column on the right
+    // (below the content on narrow screens). Rendered on the server, so it works without JavaScript.
+    Layout = "_Layout";
+    var sponsors = (await SponsorFeed.GetSponsorsAsync(Context.RequestAborted))
+        .Where(s => s.SponsorshipType == "MainSponsor" && !string.IsNullOrWhiteSpace(s.Name))
+        .OrderByDescending(s => s.ExpirationDate)
+        .ToList();
+}
+@if (sponsors.Count == 0)
+{
+    @RenderBody()
+}
+else
+{
+    <div class="explorer-layout">
+        <div class="explorer-main">
+            @RenderBody()
+        </div>
+        <aside class="explorer-side" aria-label="Sponsors">
+            <div class="explorer-side-title">Sponsors</div>
+            @foreach (var s in sponsors)
+            {
+                var badge = Badge(s.SponsorshipType);
+                var main = s.SponsorshipType == "MainSponsor";
+                <a class="explorer-sponsor" href="@SafeLink(s.Link)" target="_blank" rel="noopener sponsored">
+                    @if (badge.Label.Length > 0)
+                    {
+                        <span class="sp-badge @badge.Css">@badge.Label</span>
+                    }
+                    <span class="sp-name">@s.Name</span>
+                    @if (main)
+                    {
+                        <span class="sp-desc">@Trunc(s.Description, 110)</span>
+                    }
+                </a>
+            }
+            <a class="explorer-side-more" href="/sponsors">About sponsors</a>
+        </aside>
+    </div>
+}
+@section Scripts {
+    @await RenderSectionAsync("Scripts", required: false)
+}

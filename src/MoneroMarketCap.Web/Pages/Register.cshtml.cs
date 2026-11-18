@@ -42,6 +42,18 @@ public class RegisterModel : PageModel
             return Page();
         }
 
+        // Site-wide ceiling on new accounts per hour.
+        if (MoneroMarketCap.Web.Services.SafetyLimits.Reached("signup", MoneroMarketCap.Web.Services.SafetyLimits.SignupsPerHour, TimeSpan.FromHours(1))
+            || MoneroMarketCap.Web.Services.SafetyLimits.Reached("signup-day", MoneroMarketCap.Web.Services.SafetyLimits.SignupsPerDay, TimeSpan.FromDays(1)))
+        {
+            CaptchaError = "A lot of accounts are being created right now. Please try again later.";
+            GenerateCaptcha();
+            return Page();
+        }
+
+        MoneroMarketCap.Web.Services.SafetyLimits.Mark("signup");
+        MoneroMarketCap.Web.Services.SafetyLimits.Mark("signup-day");
+
         GeneratedUsername = "user_" + Guid.NewGuid().ToString("N")[..10];
         GeneratedPassword = Guid.NewGuid().ToString("N")[..16];
 

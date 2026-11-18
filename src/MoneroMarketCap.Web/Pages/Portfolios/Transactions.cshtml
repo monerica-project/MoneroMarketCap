@@ -89,6 +89,12 @@
         </a>
     }
 
+    <button type="button"
+            class="btn btn-outline-warning btn-sm"
+            onclick="const p=document.getElementById('wallet-difference');p.style.display=p.style.display==='none'?'':'none';if(p.style.display==='')document.getElementById('WalletBalance').focus();">
+        ⚖ Wallet difference
+    </button>
+
     @if (Model.IsXmrCoin)
     {
         <button type="button"
@@ -126,6 +132,54 @@
         </div>
     </div>
 }
+
+<!-- Wallet difference: type the real wallet balance, the needed buy or sell is added -->
+<div id="wallet-difference" class="card mb-4" style="@(Model.ShowWalletDifference ? "" : "display:none;")background:var(--xmr-surface);border-color:var(--xmr-border)">
+    <div class="card-header">Wallet difference</div>
+    <div class="card-body">
+        <p style="color:var(--xmr-text-muted);font-size:0.85rem">
+            Enter how much <strong>@pc.Coin.Symbol</strong> your wallet holds right now. If that is more than the balance tracked here,
+            a <strong>buy</strong> for the difference is added; if it is less, a <strong>sell</strong> for the difference is added.
+            It is recorded at today's price (@("$" + Model.CoinCurrentPrice.ToString("#,##0.########", usd))) and today's date, and you can edit it afterwards.
+        </p>
+        <form method="post"
+              asp-page-handler="WalletDifference"
+              asp-route-portfolioCoinId="@pc.Id"
+              class="row g-2 align-items-end">
+            @Html.AntiForgeryToken()
+            <div class="col-md-5">
+                <label class="form-label" for="WalletBalance">Current wallet balance (@pc.Coin.Symbol)</label>
+                <input type="text" inputmode="decimal" autocomplete="off" id="WalletBalance" name="WalletBalance"
+                       class="form-control" placeholder="e.g. 12.5" required
+                       @(Model.PrivacyMode ? "" : $"data-tracked={pc.TotalAmount.ToString(System.Globalization.CultureInfo.InvariantCulture)}")
+                       data-symbol="@pc.Coin.Symbol" />
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary">Add the difference</button>
+            </div>
+            <div class="col-12">
+                <div id="wallet-difference-preview" style="color:var(--xmr-text-muted);font-size:0.9rem;min-height:1.4em"></div>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+    (function () {
+        var input = document.getElementById('WalletBalance');
+        var out = document.getElementById('wallet-difference-preview');
+        if (!input || !out || !input.hasAttribute('data-tracked')) { return; }
+        var tracked = parseFloat(input.getAttribute('data-tracked'));
+        var symbol = input.getAttribute('data-symbol');
+        input.addEventListener('input', function () {
+            var v = parseFloat(input.value.replace(/[, ]/g, ''));
+            if (isNaN(v) || v < 0) { out.textContent = ''; return; }
+            var gap = v - tracked;
+            if (Math.abs(gap) < 1e-12) { out.textContent = 'Already matches. Nothing will be added.'; return; }
+            var amount = Math.abs(gap).toLocaleString('en-US', { maximumFractionDigits: 12 });
+            out.textContent = 'This will add a ' + (gap > 0 ? 'buy' : 'sell') + ' of ' + amount + ' ' + symbol + '.';
+        });
+    })();
+</script>
 
 <!-- Add transaction -->
 <div class="card mb-4" style="background:var(--xmr-surface);border-color:var(--xmr-border)">

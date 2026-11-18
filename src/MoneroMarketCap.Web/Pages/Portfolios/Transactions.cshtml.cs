@@ -51,6 +51,12 @@ public class TransactionsModel : PageModel
     [BindProperty] public string? EditExternalTransactionId { get; set; }
     [BindProperty] public DateTime EditTransactedAt { get; set; }
 
+    // Wallet difference form: what the wallet really holds, as typed.
+    [BindProperty] public string? WalletBalance { get; set; }
+
+    // True when the page should open with the wallet difference panel showing (?walletdiff=1).
+    public bool ShowWalletDifference { get; set; }
+
     // Import form
     [BindProperty] public IFormFile? ImportFile { get; set; }
 
@@ -131,10 +137,12 @@ public class TransactionsModel : PageModel
         PortfolioTotalsCalculator.Apply(portfolioCoin, persisted.Concat(pending));
     }
 
-    public async Task<IActionResult> OnGetAsync(int portfolioCoinId, int pageNumber = 1)
+    public async Task<IActionResult> OnGetAsync(int portfolioCoinId, int pageNumber = 1, int walletdiff = 0)
     {
         if (!await LoadPortfolioCoin(portfolioCoinId))
             return Forbid();
+
+        ShowWalletDifference = walletdiff == 1;
 
         await LoadPrivacyModeAsync();
         await LoadTransactionsPageAsync(portfolioCoinId, pageNumber);
@@ -181,8 +189,10 @@ public class TransactionsModel : PageModel
             sb.AppendLine();
         }
 
-        var filename = $"transactions-{portfolioName}-{symbol}-{DateTime.UtcNow:yyyyMMdd}.csv"
-            .Replace(' ', '_');
+        // Letters, digits, dash and underscore only: the name goes into a response header.
+        var safeName = new string(portfolioName.Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' ? c : '_').ToArray());
+        var safeSymbol = new string(symbol.Where(char.IsAsciiLetterOrDigit).ToArray());
+        var filename = $"transactions-{safeName}-{safeSymbol}-{DateTime.UtcNow:yyyyMMdd}.csv";
 
         var bytes = new byte[] { 0xEF, 0xBB, 0xBF }
             .Concat(Encoding.UTF8.GetBytes(sb.ToString()))
@@ -238,6 +248,15 @@ public class TransactionsModel : PageModel
             .ToListAsync();
         var existingSet = new HashSet<string>(existingTxIds, StringComparer.OrdinalIgnoreCase);
 
+        var existingTotal = await _db.CoinTransactions.CountAsync(t => t.PortfolioCoinId == portfolioCoinId);
+        if (existingTotal >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.SafetyLimits.TransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId });
+        }
+        var hitLimit = false;
+
         var inv = CultureInfo.InvariantCulture;
         using var reader = new StreamReader(ImportFile.OpenReadStream(), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
 
@@ -273,6 +292,11 @@ public class TransactionsModel : PageModel
         {
             lineNum++;
             if (string.IsNullOrWhiteSpace(line)) continue;
+            if (existingTotal + imported >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
+            {
+                hitLimit = true;
+                break;
+            }
 
             try
             {
@@ -354,9 +378,9 @@ public class TransactionsModel : PageModel
                     Type = type,
                     Amount = amount,
                     PriceUsdAtTime = priceUsd,
-                    Notes = notes,
-                    ExternalTransactionId = txid,
-                    TransactedAt = DateTime.SpecifyKind(transactedAt, DateTimeKind.Utc)
+                    Notes = MoneroMarketCap.Web.Services.SafetyLimits.Clip(notes, MoneroMarketCap.Web.Services.SafetyLimits.MaxNotesLength),
+                    ExternalTransactionId = MoneroMarketCap.Web.Services.SafetyLimits.Clip(txid, MoneroMarketCap.Web.Services.SafetyLimits.MaxExternalTransactionIdLength),
+                    TransactedAt = MoneroMarketCap.Web.Services.SafetyLimits.ClampTransactionDate(transactedAt)
                 };
 
                 _db.CoinTransactions.Add(tx);
@@ -379,6 +403,8 @@ public class TransactionsModel : PageModel
         var summary = $"Imported {imported}, skipped {skipped} duplicate(s), {errors} error(s).";
         if (errorSamples.Any())
             summary += " First errors: " + string.Join("; ", errorSamples);
+        if (hitLimit)
+            summary += " Stopped at the limit of " + MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin.ToString("N0") + " transactions for this coin.";
 
         TempData["ImportMessage"] = summary;
         TempData["ImportSuccess"] = imported > 0;
@@ -397,21 +423,88 @@ public class TransactionsModel : PageModel
             return RedirectToPage(new { portfolioCoinId });
         }
 
+        if (await _db.CoinTransactions.CountAsync(t => t.PortfolioCoinId == portfolioCoinId) >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.SafetyLimits.TransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId });
+        }
+
         var tx = new CoinTransaction
         {
             PortfolioCoinId = PortfolioCoin!.Id,
             Type = TransactionType,
             Amount = Amount,
             PriceUsdAtTime = PriceUsdAtTime,
-            Notes = Notes,
-            ExternalTransactionId = string.IsNullOrWhiteSpace(ExternalTransactionId) ? null : ExternalTransactionId.Trim(),
-            TransactedAt = TransactedAt == default ? DateTime.UtcNow : DateTime.SpecifyKind(TransactedAt, DateTimeKind.Utc)
+            Notes = MoneroMarketCap.Web.Services.SafetyLimits.Clip(Notes, MoneroMarketCap.Web.Services.SafetyLimits.MaxNotesLength),
+            ExternalTransactionId = string.IsNullOrWhiteSpace(ExternalTransactionId) ? null : MoneroMarketCap.Web.Services.SafetyLimits.Clip(ExternalTransactionId.Trim(), MoneroMarketCap.Web.Services.SafetyLimits.MaxExternalTransactionIdLength),
+            TransactedAt = TransactedAt == default ? DateTime.UtcNow : MoneroMarketCap.Web.Services.SafetyLimits.ClampTransactionDate(TransactedAt)
         };
 
         _db.CoinTransactions.Add(tx);
         await RecalculateTotalsAsync(PortfolioCoin);
         await _db.SaveChangesAsync();
 
+        return RedirectToPage(new { portfolioCoinId });
+    }
+
+    /// <summary>
+    /// Wallet difference: the user enters what their wallet holds now, and the one buy or sell
+    /// that brings this asset's tracked balance to that figure is added at the current price.
+    /// </summary>
+    public async Task<IActionResult> OnPostWalletDifferenceAsync(int portfolioCoinId)
+    {
+        if (!await LoadPortfolioCoin(portfolioCoinId))
+            return Forbid();
+
+        var symbol = PortfolioCoin!.Coin.Symbol.ToUpperInvariant();
+
+        if (!WalletDifference.TryParseBalance(WalletBalance, out var walletBalance))
+        {
+            TempData["ImportMessage"] = "Enter your current wallet balance as a number (0 or more), for example 12.5.";
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId, walletdiff = 1 });
+        }
+
+        // The tracked balance is recomputed from the transactions, not trusted from the stored total.
+        var existing = await _db.CoinTransactions
+            .Where(t => t.PortfolioCoinId == portfolioCoinId)
+            .ToListAsync();
+        var tracked = PortfolioTotalsCalculator.Compute(existing).TotalAmount;
+
+        var needed = WalletDifference.Compute(tracked, walletBalance);
+        if (needed == null)
+        {
+            TempData["ImportMessage"] = $"Nothing to add: the tracked balance already matches your wallet ({walletBalance.ToString("#,##0.############", CultureInfo.InvariantCulture)} {symbol}).";
+            TempData["ImportSuccess"] = true;
+            return RedirectToPage(new { portfolioCoinId });
+        }
+
+        var (type, amount) = needed.Value;
+        var amountText = amount.ToString("#,##0.############", CultureInfo.InvariantCulture);
+        var balanceText = walletBalance.ToString("#,##0.############", CultureInfo.InvariantCulture);
+
+        if (await _db.CoinTransactions.CountAsync(t => t.PortfolioCoinId == portfolioCoinId) >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.SafetyLimits.TransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId });
+        }
+
+        _db.CoinTransactions.Add(new CoinTransaction
+        {
+            PortfolioCoinId = PortfolioCoin.Id,
+            Type = type,
+            Amount = amount,
+            PriceUsdAtTime = CoinCurrentPrice,
+            Notes = $"Wallet difference: balance set to {balanceText} {symbol}",
+            TransactedAt = DateTime.UtcNow,
+        });
+        await RecalculateTotalsAsync(PortfolioCoin);
+        await _db.SaveChangesAsync();
+
+        TempData["ImportMessage"] = $"Added a {(type == Data.Models.TransactionType.Buy ? "buy" : "sell")} of {amountText} {symbol} at today's price. Your tracked balance now matches your wallet ({balanceText} {symbol}). You can edit the price or date below.";
+        TempData["ImportSuccess"] = true;
         return RedirectToPage(new { portfolioCoinId });
     }
 
@@ -436,13 +529,13 @@ public class TransactionsModel : PageModel
         tx.Type = EditType;
         tx.Amount = EditAmount;
         tx.PriceUsdAtTime = EditPriceUsdAtTime;
-        tx.Notes = EditNotes;
+        tx.Notes = MoneroMarketCap.Web.Services.SafetyLimits.Clip(EditNotes, MoneroMarketCap.Web.Services.SafetyLimits.MaxNotesLength);
         tx.ExternalTransactionId = string.IsNullOrWhiteSpace(EditExternalTransactionId)
             ? null
-            : EditExternalTransactionId.Trim();
+            : MoneroMarketCap.Web.Services.SafetyLimits.Clip(EditExternalTransactionId.Trim(), MoneroMarketCap.Web.Services.SafetyLimits.MaxExternalTransactionIdLength);
         tx.TransactedAt = EditTransactedAt == default
             ? tx.TransactedAt
-            : DateTime.SpecifyKind(EditTransactedAt, DateTimeKind.Utc);
+            : MoneroMarketCap.Web.Services.SafetyLimits.ClampTransactionDate(EditTransactedAt);
 
         await RecalculateTotalsAsync(PortfolioCoin!);
         await _db.SaveChangesAsync();
@@ -487,6 +580,12 @@ public class TransactionsModel : PageModel
     private static string Csv(string value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
+
+        // A cell starting with = + - @ (or tab/CR) is run as a formula by spreadsheet apps.
+        // Prefix an apostrophe so the exported note is always opened as plain text.
+        if (value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+            value = "'" + value;
+
         var needsQuoting = value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r');
         if (!needsQuoting) return value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
