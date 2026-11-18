@@ -272,15 +272,26 @@ else
                 document.querySelector('[data-summary-down-count]').textContent = down.length;
 
                 const fill = (sel, list, cls, arrow) => {
+                    // textContent only: the symbol comes from coin data, so it must never be parsed as markup.
                     const ol = document.querySelector(sel);
-                    ol.innerHTML = '';
+                    ol.replaceChildren();
                     list.slice(0, 3).forEach(x => {
                         const li = document.createElement('li');
-                        li.innerHTML = '<span class="vsm-mini-sym">' + x.sym + '</span>' +
-                            '<span class="' + cls + ' mono">' + arrow + ' ' + Math.abs(x.v).toFixed(2) + '%</span>';
+                        const sym = document.createElement('span');
+                        sym.className = 'vsm-mini-sym';
+                        sym.textContent = x.sym;
+                        const pct = document.createElement('span');
+                        pct.className = cls + ' mono';
+                        pct.textContent = arrow + ' ' + Math.abs(x.v).toFixed(2) + '%';
+                        li.append(sym, pct);
                         ol.appendChild(li);
                     });
-                    if (!list.length) ol.innerHTML = '<li class="text-muted">none</li>';
+                    if (!list.length) {
+                        const li = document.createElement('li');
+                        li.className = 'text-muted';
+                        li.textContent = 'none';
+                        ol.appendChild(li);
+                    }
                 };
                 fill('[data-summary-up-list]', up, 'text-success', '▲');
                 fill('[data-summary-down-list]', down, 'text-danger', '▼');

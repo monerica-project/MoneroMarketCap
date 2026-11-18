@@ -106,7 +106,9 @@
                                 <a class="nav-link fw-bold nav-user" asp-page="/Settings" title="Account settings">&#x1F464; @User.Identity.Name</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" asp-page="/Logout">Logout</a>
+                                <form method="post" asp-page="/Logout" class="d-inline">
+                                    <button type="submit" class="nav-link btn btn-link">Logout</button>
+                                </form>
                             </li>
                         }
                         else

@@ -18,7 +18,14 @@ public class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
-        var nameKey = "signin|" + (Username ?? string.Empty).Trim();
+        // A sign-in name longer than any real one is refused outright (it was also stored as a key).
+        if ((Username ?? string.Empty).Length > 200 || (Password ?? string.Empty).Length > 500)
+        {
+            Error = "Invalid credentials.";
+            return Page();
+        }
+
+        var nameKey = MoneroMarketCap.Web.Services.SafetyLimits.SignInKey(Username);
         if (string.IsNullOrEmpty(Username) || string.IsNullOrEmpty(Password)
             || MoneroMarketCap.Web.Services.SafetyLimits.Reached("signin", MoneroMarketCap.Web.Services.SafetyLimits.FailedSignInsPer10Min, TimeSpan.FromMinutes(10))
             || MoneroMarketCap.Web.Services.SafetyLimits.Reached(nameKey, MoneroMarketCap.Web.Services.SafetyLimits.FailedSignInsPerNamePer10Min, TimeSpan.FromMinutes(10)))

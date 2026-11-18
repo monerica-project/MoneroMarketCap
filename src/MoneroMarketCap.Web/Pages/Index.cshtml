@@ -587,19 +587,33 @@ else
 
                         const bestCard = document.getElementById('vs-xmr-best');
                         const worstCard = document.getElementById('vs-xmr-worst');
+                        // Built with DOM nodes and textContent, never innerHTML: coin symbols and
+                        // image links come from an outside price feed and must not become markup.
+                        const fillVsCard = (card, coin, pctClass, text) => {
+                            card.replaceChildren();
+                            if (typeof coin.imageUrl === 'string' && /^https?:\/\//i.test(coin.imageUrl)) {
+                                const img = document.createElement('img');
+                                img.src = coin.imageUrl.replace('/large/', '/thumb/');
+                                img.width = 18;
+                                img.height = 18;
+                                img.className = 'coin-icon';
+                                img.alt = '';
+                                card.appendChild(img);
+                            }
+                            const sym = document.createElement('span');
+                            sym.className = 'vs-xmr-symbol';
+                            sym.textContent = coin.symbol;
+                            const pct = document.createElement('span');
+                            pct.className = pctClass + ' mono vs-xmr-pct';
+                            pct.textContent = text;
+                            card.append(sym, pct);
+                            card.parentElement.parentElement.href = '/coins/' + encodeURIComponent(String(coin.symbol).toLowerCase());
+                        };
                         if (bestCard) {
-                            bestCard.innerHTML =
-                                (best.imageUrl ? `<img src="${best.imageUrl.replace('/large/','/thumb/')}" width="18" height="18" class="coin-icon" alt="" />` : '') +
-                                `<span class="vs-xmr-symbol">${best.symbol}</span>` +
-                                `<span class="text-success mono vs-xmr-pct">▲ ${best.vsXmr.toFixed(2)}%</span>`;
-                            bestCard.parentElement.parentElement.href = '/coins/' + best.symbol.toLowerCase();
+                            fillVsCard(bestCard, best, 'text-success', `▲ ${best.vsXmr.toFixed(2)}%`);
                         }
                         if (worstCard) {
-                            worstCard.innerHTML =
-                                (worst.imageUrl ? `<img src="${worst.imageUrl.replace('/large/','/thumb/')}" width="18" height="18" class="coin-icon" alt="" />` : '') +
-                                `<span class="vs-xmr-symbol">${worst.symbol}</span>` +
-                                `<span class="text-danger mono vs-xmr-pct">▼ ${Math.abs(worst.vsXmr).toFixed(2)}%</span>`;
-                            worstCard.parentElement.parentElement.href = '/coins/' + worst.symbol.toLowerCase();
+                            fillVsCard(worstCard, worst, 'text-danger', `▼ ${Math.abs(worst.vsXmr).toFixed(2)}%`);
                         }
                     }
                 }

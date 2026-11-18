@@ -24,6 +24,9 @@ public class DetailModel : PageModel
     public string GoUrl { get; set; } = string.Empty;
     public bool GoIsAffiliate { get; set; }
 
+    /// <summary>The exchange's own site when it is a safe http(s) link, else empty.</summary>
+    public string SiteUrl { get; set; } = string.Empty;
+
     public const int CoinPageSize = 48;
     public int CoinPage { get; set; } = 1;
     public int CoinTotal { get; set; }
@@ -40,6 +43,11 @@ public class DetailModel : PageModel
     /// </param>
     public record CoinRow(string Symbol, string Name, string? CoinGeckoId, bool HasPage);
 
+    /// <summary>Other listed exchanges of the same kind, best grade first, for the "similar" links.</summary>
+    public List<SimilarRow> Similar { get; set; } = new();
+
+    public record SimilarRow(string Slug, string Name, string? Grade, string? Kyc);
+
     public async Task<IActionResult> OnGetAsync(string slug, int cp = 1)
     {
         var ex = await _db.Exchanges.AsNoTracking()
@@ -50,8 +58,12 @@ public class DetailModel : PageModel
         }
 
         Exchange = ex;
-        GoIsAffiliate = !string.IsNullOrWhiteSpace(ex.AffiliateUrl);
-        GoUrl = GoIsAffiliate ? ex.AffiliateUrl! : ex.WebsiteUrl;
+        // Rows written before links were checked on sync may still hold anything, so the
+        // page checks again: only absolute http(s) links are ever put in an href.
+        var affiliate = SafeUrl.HttpOrNull(ex.AffiliateUrl);
+        SiteUrl = SafeUrl.HttpOrEmpty(ex.WebsiteUrl);
+        GoIsAffiliate = affiliate is not null;
+        GoUrl = affiliate ?? SiteUrl;
 
         CoinTotal = await _db.ExchangeCoins.CountAsync(ec => ec.ExchangeId == ex.Id, HttpContext.RequestAborted);
         SupportsXmr = await _db.ExchangeCoins.AnyAsync(
@@ -72,6 +84,16 @@ public class DetailModel : PageModel
                 c.Name,
                 c.CoinGeckoId,
                 CoinRules.IsResolvable(c.IsActive, c.LastInTopNUtc, graceCutoff)))
+            .ToList();
+
+        Similar = (await _db.Exchanges.AsNoTracking()
+            .Where(e => e.Kind == ex.Kind && e.Id != ex.Id && e.Grade != null)
+            .Select(e => new { e.Slug, e.Name, e.Grade, e.Kyc })
+            .ToListAsync(HttpContext.RequestAborted))
+            .Where(e => Data.Models.Exchange.IsListedGrade(e.Grade))
+            .OrderBy(e => e.Grade, StringComparer.Ordinal).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .Select(e => new SimilarRow(e.Slug, e.Name, e.Grade, e.Kyc))
             .ToList();
 
         return Page();

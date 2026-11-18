@@ -515,6 +515,28 @@
                 compare each one's grade, KYC and AML policy and fees.
                 Click an exchange name for its full profile.
             </p>
+            @{
+                var pairSym = (coin.Symbol ?? "").ToLowerInvariant();
+                var pairOk = pairSym.Length is > 0 and <= 16 && pairSym.All(ch => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.') && pairSym.Any(ch => ch >= 'a' && ch <= 'z');
+            }
+            @if (pairOk)
+            {
+                <p class="small mb-3">
+                    Compare live swap rates on SwapRaven:
+                    @if (isXmr)
+                    {
+                        <a href="https://swapraven.com/swap/btc-to-xmr" rel="noopener">BTC to XMR</a><text> · </text>
+                        <a href="https://swapraven.com/swap/xmr-to-btc" rel="noopener">XMR to BTC</a><text> · </text>
+                        <a href="https://swapraven.com/swap/usdt-to-xmr" rel="noopener">USDT to XMR</a><text> · </text>
+                        <a href="https://swapraven.com/swap/xmr-to-usdt" rel="noopener">XMR to USDT</a>
+                    }
+                    else
+                    {
+                        <a href="https://swapraven.com/swap/@(pairSym)-to-xmr" rel="noopener">@coin.Symbol to XMR</a><text> · </text>
+                        <a href="https://swapraven.com/swap/xmr-to-@(pairSym)" rel="noopener">XMR to @coin.Symbol</a>
+                    }
+                </p>
+            }
             <div class="table-responsive">
                 <table class="table table-sm mb-0 stats-table">
                     <thead>

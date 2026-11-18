@@ -255,7 +255,17 @@ public class TransactionsModel : PageModel
             TempData["ImportSuccess"] = false;
             return RedirectToPage(new { portfolioCoinId });
         }
+
+        // Room left under the account-wide cap (all portfolios and coins together).
+        var userRoomLeft = await MoneroMarketCap.Web.Services.PortfolioLimits.UserRoomLeftAsync(_db, PortfolioCoin.Portfolio.UserId);
+        if (userRoomLeft <= 0)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.PortfolioLimits.UserTransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId });
+        }
         var hitLimit = false;
+        var hitUserLimit = false;
 
         var inv = CultureInfo.InvariantCulture;
         using var reader = new StreamReader(ImportFile.OpenReadStream(), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
@@ -295,6 +305,11 @@ public class TransactionsModel : PageModel
             if (existingTotal + imported >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
             {
                 hitLimit = true;
+                break;
+            }
+            if (imported >= userRoomLeft)
+            {
+                hitUserLimit = true;
                 break;
             }
 
@@ -405,6 +420,8 @@ public class TransactionsModel : PageModel
             summary += " First errors: " + string.Join("; ", errorSamples);
         if (hitLimit)
             summary += " Stopped at the limit of " + MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin.ToString("N0") + " transactions for this coin.";
+        else if (hitUserLimit)
+            summary += " Stopped at your account limit of " + MoneroMarketCap.Web.Services.PortfolioLimits.MaxTransactionsPerUser.ToString("N0") + " transactions.";
 
         TempData["ImportMessage"] = summary;
         TempData["ImportSuccess"] = imported > 0;
@@ -426,6 +443,13 @@ public class TransactionsModel : PageModel
         if (await _db.CoinTransactions.CountAsync(t => t.PortfolioCoinId == portfolioCoinId) >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
         {
             TempData["ImportMessage"] = MoneroMarketCap.Web.Services.SafetyLimits.TransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId });
+        }
+
+        if (await MoneroMarketCap.Web.Services.PortfolioLimits.UserRoomLeftAsync(_db, PortfolioCoin!.Portfolio.UserId) <= 0)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.PortfolioLimits.UserTransactionLimitMessage;
             TempData["ImportSuccess"] = false;
             return RedirectToPage(new { portfolioCoinId });
         }
@@ -487,6 +511,13 @@ public class TransactionsModel : PageModel
         if (await _db.CoinTransactions.CountAsync(t => t.PortfolioCoinId == portfolioCoinId) >= MoneroMarketCap.Web.Services.SafetyLimits.MaxTransactionsPerPortfolioCoin)
         {
             TempData["ImportMessage"] = MoneroMarketCap.Web.Services.SafetyLimits.TransactionLimitMessage;
+            TempData["ImportSuccess"] = false;
+            return RedirectToPage(new { portfolioCoinId });
+        }
+
+        if (await MoneroMarketCap.Web.Services.PortfolioLimits.UserRoomLeftAsync(_db, PortfolioCoin.Portfolio.UserId) <= 0)
+        {
+            TempData["ImportMessage"] = MoneroMarketCap.Web.Services.PortfolioLimits.UserTransactionLimitMessage;
             TempData["ImportSuccess"] = false;
             return RedirectToPage(new { portfolioCoinId });
         }

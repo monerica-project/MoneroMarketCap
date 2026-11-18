@@ -147,8 +147,9 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
             ex.Name = dto.Name;
             ex.Kind = dto.Kind;
             ex.Description = dto.Description;
-            ex.WebsiteUrl = dto.WebsiteUrl ?? string.Empty;
-            ex.AffiliateUrl = dto.AffiliateUrl;
+            // Only absolute http(s) links are stored: these become clickable links on our pages.
+            ex.WebsiteUrl = MoneroMarketCap.Data.Helpers.SafeUrl.HttpOrEmpty(dto.WebsiteUrl);
+            ex.AffiliateUrl = MoneroMarketCap.Data.Helpers.SafeUrl.HttpOrNull(dto.AffiliateUrl);
             ex.TorUrl = dto.TorUrl;
             ex.I2pUrl = dto.I2pUrl;
             ex.CountryCode = dto.CountryCode;

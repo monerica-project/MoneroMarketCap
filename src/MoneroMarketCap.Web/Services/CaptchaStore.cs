@@ -26,16 +26,49 @@ public sealed class CaptchaStore : ICaptchaStore
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// Most tokens kept at once. Every visit to the sign-up page makes one, so a script loading
+    /// that page in a loop could otherwise fill memory; when full, the oldest token is dropped
+    /// (a person who left the form open that long just gets a new captcha).
+    /// </summary>
+    public const int DefaultMaxTokens = 10_000;
+
     private const string KeyPrefix = "captcha:";
 
     private readonly IMemoryCache cache;
+    private readonly int maxTokens;
+    private readonly object sync = new();
 
-    public CaptchaStore(IMemoryCache cache) => this.cache = cache;
+    // Keys in the order they were made. Used and expired ones stay here until pushed out,
+    // which keeps this simple and still never holds more than maxTokens keys.
+    private readonly Queue<string> order = new();
+
+    public CaptchaStore(IMemoryCache cache)
+        : this(cache, DefaultMaxTokens)
+    {
+    }
+
+    public CaptchaStore(IMemoryCache cache, int maxTokens)
+    {
+        this.cache = cache;
+        this.maxTokens = Math.Max(1, maxTokens);
+    }
 
     public string Create(int answer)
     {
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-        this.cache.Set(KeyPrefix + token, new Entry(answer), Lifetime);
+        var key = KeyPrefix + token;
+        lock (this.sync)
+        {
+            while (this.order.Count >= this.maxTokens)
+            {
+                this.cache.Remove(this.order.Dequeue());
+            }
+
+            this.order.Enqueue(key);
+            this.cache.Set(key, new Entry(answer), Lifetime);
+        }
+
         return token;
     }
 

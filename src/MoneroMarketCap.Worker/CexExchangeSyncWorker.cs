@@ -32,19 +32,21 @@ public class CexExchangeSyncWorker : BackgroundService
         _config = config;
     }
 
-    private sealed record CexDef(string Slug, string Name, string Website, string Affiliate, string Description, int SortOrder);
+    // Grade is set by the site owner (2026-11-18): these two are not graded by SwapRaven, and an exchange
+    // with no grade is hidden, so without it their pages returned "not found".
+    private sealed record CexDef(string Slug, string Name, string Website, string Affiliate, string Description, int SortOrder, string Grade);
 
     private static readonly CexDef Kraken = new(
         "kraken", "Kraken", "https://www.kraken.com",
         "https://kraken.pxf.io/c/1197953/741638/10583",
         "Kraken is a large, long-established centralized exchange offering spot and futures trading and staking. Creating an account and completing identity verification (KYC) is required.",
-        900);
+        900, "B");
 
     private static readonly CexDef Coinbase = new(
         "coinbase", "Coinbase", "https://www.coinbase.com",
         "https://coinbase.com/join/FUCF9E4?src=referral-link",
         "Coinbase is one of the largest centralized exchanges, widely used for buying crypto with cards and bank transfers. Creating an account and completing identity verification (KYC) is required.",
-        901);
+        901, "C");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -136,11 +138,12 @@ public class CexExchangeSyncWorker : BackgroundService
         ex.Name = def.Name;
         ex.Kind = "CEX";
         ex.Description = def.Description;
-        ex.WebsiteUrl = def.Website;
-        ex.AffiliateUrl = def.Affiliate;
+        // Only absolute http(s) links are stored: these become clickable links on our pages.
+        ex.WebsiteUrl = MoneroMarketCap.Data.Helpers.SafeUrl.HttpOrEmpty(def.Website);
+        ex.AffiliateUrl = MoneroMarketCap.Data.Helpers.SafeUrl.HttpOrNull(def.Affiliate);
         ex.Kyc = "Required";
         ex.Aml = "Enforced";
-        ex.Grade = null;
+        ex.Grade = def.Grade;
         ex.FeeVariesByProvider = false;
         ex.SortOrder = def.SortOrder;
         ex.UpdatedAt = DateTime.UtcNow;

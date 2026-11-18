@@ -29,16 +29,27 @@ public sealed record ExplorerSummary(long Height, int PoolSize, string Difficult
 /// talk to the node: the site asks it and caches the answers (a confirmed block or transaction never
 /// changes, so those are kept for hours; the tip and the pool for seconds). A site-wide ceiling on
 /// uncached node calls keeps a crawler or a script from using this site to flood the node.
+/// Headline calls (summary, latest blocks, pool) and visitor lookups (a block or transaction by
+/// height or hash) have separate ceilings, so someone typing endless made-up hashes can only use
+/// up the lookup ceiling and the explorer home page keeps working for everyone else.
 /// </summary>
 public sealed partial class MoneroExplorer
 {
     public const int LatestBlocksCount = 25;
     public const int MaxPoolListed = 25;
-    private const int NodeCallsPerMinute = 240;
+    // The old single ceiling was 240 a minute for everything; it is now split in two.
+    public const int HeadlineCallsPerMinute = 60;
+    public const int LookupCallsPerMinute = 180;
     private const decimal AtomicPerXmr = 1_000_000_000_000m;
 
-    private static readonly object BudgetSync = new();
-    private static readonly Queue<DateTime> RecentCalls = new();
+    // Lookups the node answered with "no such block/transaction" are remembered for a minute,
+    // so asking for the same made-up hash again costs no node call.
+    public static readonly TimeSpan NotFoundTtl = TimeSpan.FromSeconds(60);
+    public const int MaxRememberedNotFound = 5000;
+
+    private static readonly ExplorerCallBudget HeadlineBudget = new(HeadlineCallsPerMinute);
+    private static readonly ExplorerCallBudget LookupBudget = new(LookupCallsPerMinute);
+    private static readonly ExplorerNotFoundCache NotFound = new(MaxRememberedNotFound, NotFoundTtl);
 
     private readonly HttpClient _http;
     private readonly IMemoryCache _cache;
@@ -65,7 +76,7 @@ public sealed partial class MoneroExplorer
     public Task<ExplorerSummary?> GetSummaryAsync(CancellationToken ct) =>
         CachedAsync("xp:summary", TimeSpan.FromSeconds(20), async () =>
         {
-            using var doc = await GetAsync("/get_info", ct);
+            using var doc = await GetAsync("/get_info", HeadlineBudget, ct);
             if (doc is null)
             {
                 return null;
@@ -92,7 +103,7 @@ public sealed partial class MoneroExplorer
         var top = summary.Height - 1;
         return await CachedAsync($"xp:latest:{top}", TimeSpan.FromMinutes(5), async () =>
         {
-            using var doc = await RpcAsync("get_block_headers_range", new { start_height = Math.Max(0, top - LatestBlocksCount + 1), end_height = top }, ct);
+            using var doc = await RpcAsync("get_block_headers_range", new { start_height = Math.Max(0, top - LatestBlocksCount + 1), end_height = top }, HeadlineBudget, ct);
             if (doc is null || !doc.RootElement.TryGetProperty("result", out var result) || !result.TryGetProperty("headers", out var headers))
             {
                 return (IReadOnlyList<ExplorerBlockHeader>)[];
@@ -121,12 +132,25 @@ public sealed partial class MoneroExplorer
             return Task.FromResult<ExplorerBlock?>(null);
         }
 
-        // Kept briefly: "depth" (confirmations) changes with every new block.
-        return CachedAsync($"xp:block:{key}", TimeSpan.FromMinutes(2), async () =>
+        var cacheKey = $"xp:block:{key}";
+        if (NotFound.Contains(cacheKey, DateTime.UtcNow))
         {
-            using var doc = await RpcAsync("get_block", prm, ct);
-            if (doc is null || !doc.RootElement.TryGetProperty("result", out var result) || !result.TryGetProperty("block_header", out var header))
+            return Task.FromResult<ExplorerBlock?>(null);
+        }
+
+        // Kept briefly: "depth" (confirmations) changes with every new block.
+        return CachedAsync(cacheKey, TimeSpan.FromMinutes(2), async () =>
+        {
+            using var doc = await RpcAsync("get_block", prm, LookupBudget, ct);
+            if (doc is null)
             {
+                // Node unreachable or the ceiling was reached: not a real "not found", so not remembered.
+                return null;
+            }
+
+            if (!doc.RootElement.TryGetProperty("result", out var result) || !result.TryGetProperty("block_header", out var header))
+            {
+                NotFound.Add(cacheKey, DateTime.UtcNow);
                 return null;
             }
 
@@ -145,11 +169,24 @@ public sealed partial class MoneroExplorer
         }
 
         var key = hash.ToLowerInvariant();
-        return CachedAsync($"xp:tx:{key}", TimeSpan.FromSeconds(45), async () =>
+        var cacheKey = $"xp:tx:{key}";
+        if (NotFound.Contains(cacheKey, DateTime.UtcNow))
         {
-            using var doc = await PostAsync("/get_transactions", new { txs_hashes = new[] { key }, decode_as_json = true }, ct);
-            if (doc is null || !doc.RootElement.TryGetProperty("txs", out var txs) || txs.ValueKind != JsonValueKind.Array || txs.GetArrayLength() == 0)
+            return Task.FromResult<ExplorerTx?>(null);
+        }
+
+        return CachedAsync(cacheKey, TimeSpan.FromSeconds(45), async () =>
+        {
+            using var doc = await PostAsync("/get_transactions", new { txs_hashes = new[] { key }, decode_as_json = true }, LookupBudget, ct);
+            if (doc is null)
             {
+                // Node unreachable or the ceiling was reached: not a real "not found", so not remembered.
+                return null;
+            }
+
+            if (!doc.RootElement.TryGetProperty("txs", out var txs) || txs.ValueKind != JsonValueKind.Array || txs.GetArrayLength() == 0)
+            {
+                NotFound.Add(cacheKey, DateTime.UtcNow);
                 return null;
             }
 
@@ -161,7 +198,7 @@ public sealed partial class MoneroExplorer
     public Task<IReadOnlyList<string>?> GetPoolHashesAsync(CancellationToken ct) =>
         CachedAsync("xp:pool", TimeSpan.FromSeconds(20), async () =>
         {
-            using var doc = await GetAsync("/get_transaction_pool_hashes", ct);
+            using var doc = await GetAsync("/get_transaction_pool_hashes", HeadlineBudget, ct);
             if (doc is null || !doc.RootElement.TryGetProperty("tx_hashes", out var hashes) || hashes.ValueKind != JsonValueKind.Array)
             {
                 return (IReadOnlyList<string>)[];
@@ -306,17 +343,18 @@ public sealed partial class MoneroExplorer
         return value;
     }
 
-    private Task<JsonDocument?> RpcAsync(string method, object prm, CancellationToken ct) =>
-        PostAsync("/json_rpc", new { jsonrpc = "2.0", id = "0", method, @params = prm }, ct);
+    private Task<JsonDocument?> RpcAsync(string method, object prm, ExplorerCallBudget budget, CancellationToken ct) =>
+        PostAsync("/json_rpc", new { jsonrpc = "2.0", id = "0", method, @params = prm }, budget, ct);
 
-    private Task<JsonDocument?> GetAsync(string path, CancellationToken ct) => SendAsync(() => _http.GetAsync(path, ct), ct);
+    private Task<JsonDocument?> GetAsync(string path, ExplorerCallBudget budget, CancellationToken ct) =>
+        SendAsync(() => _http.GetAsync(path, ct), budget, ct);
 
-    private Task<JsonDocument?> PostAsync(string path, object body, CancellationToken ct) =>
-        SendAsync(() => _http.PostAsync(path, new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"), ct), ct);
+    private Task<JsonDocument?> PostAsync(string path, object body, ExplorerCallBudget budget, CancellationToken ct) =>
+        SendAsync(() => _http.PostAsync(path, new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"), ct), budget, ct);
 
-    private async Task<JsonDocument?> SendAsync(Func<Task<HttpResponseMessage>> send, CancellationToken ct)
+    private async Task<JsonDocument?> SendAsync(Func<Task<HttpResponseMessage>> send, ExplorerCallBudget budget, CancellationToken ct)
     {
-        if (!IsConfigured || !TakeBudget())
+        if (!IsConfigured || !budget.TryTake(DateTime.UtcNow))
         {
             return null;
         }
@@ -339,25 +377,118 @@ public sealed partial class MoneroExplorer
             return null;
         }
     }
+}
 
-    // At most NodeCallsPerMinute uncached calls a minute, whoever asks.
-    private static bool TakeBudget()
+/// <summary>At most a set number of uncached node calls a minute, whoever asks.</summary>
+public sealed class ExplorerCallBudget
+{
+    private readonly object _sync = new();
+    private readonly Queue<DateTime> _recent = new();
+    private readonly int _perMinute;
+
+    public ExplorerCallBudget(int perMinute) => _perMinute = perMinute;
+
+    public bool TryTake(DateTime now)
     {
-        var now = DateTime.UtcNow;
-        lock (BudgetSync)
+        lock (_sync)
         {
-            while (RecentCalls.Count > 0 && now - RecentCalls.Peek() > TimeSpan.FromMinutes(1))
+            while (_recent.Count > 0 && now - _recent.Peek() > TimeSpan.FromMinutes(1))
             {
-                RecentCalls.Dequeue();
+                _recent.Dequeue();
             }
 
-            if (RecentCalls.Count >= NodeCallsPerMinute)
+            if (_recent.Count >= _perMinute)
             {
                 return false;
             }
 
-            RecentCalls.Enqueue(now);
+            _recent.Enqueue(now);
             return true;
+        }
+    }
+}
+
+/// <summary>
+/// Keys the node recently answered "not found" for. Bounded on purpose: made-up hashes are
+/// endless, so when it is full the oldest entry is dropped instead of growing without limit.
+/// </summary>
+public sealed class ExplorerNotFoundCache
+{
+    private readonly object _sync = new();
+    private readonly Dictionary<string, DateTime> _until = new(StringComparer.Ordinal);
+    private readonly Queue<(string Key, DateTime Until)> _order = new();
+    private readonly int _capacity;
+    private readonly TimeSpan _ttl;
+
+    public ExplorerNotFoundCache(int capacity, TimeSpan ttl)
+    {
+        _capacity = Math.Max(1, capacity);
+        _ttl = ttl;
+    }
+
+    public int Count
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _until.Count;
+            }
+        }
+    }
+
+    public bool Contains(string key, DateTime now)
+    {
+        lock (_sync)
+        {
+            if (!_until.TryGetValue(key, out var until))
+            {
+                return false;
+            }
+
+            if (until > now)
+            {
+                return true;
+            }
+
+            _until.Remove(key);
+            return false;
+        }
+    }
+
+    public void Add(string key, DateTime now)
+    {
+        lock (_sync)
+        {
+            if (_until.TryGetValue(key, out var existing) && existing > now)
+            {
+                return;
+            }
+
+            // Entries go in with the same lifetime, so the oldest are always at the front:
+            // first drop the ones that have run out, then the oldest live ones if still full.
+            while (_order.Count > 0 && _order.Peek().Until <= now)
+            {
+                Drop(_order.Dequeue());
+            }
+
+            while (_until.Count >= _capacity && _order.Count > 0)
+            {
+                Drop(_order.Dequeue());
+            }
+
+            var until = now + _ttl;
+            _until[key] = until;
+            _order.Enqueue((key, until));
+        }
+    }
+
+    // Removes the entry only if it is still the one this queue item was made for.
+    private void Drop((string Key, DateTime Until) item)
+    {
+        if (_until.TryGetValue(item.Key, out var until) && until == item.Until)
+        {
+            _until.Remove(item.Key);
         }
     }
 }

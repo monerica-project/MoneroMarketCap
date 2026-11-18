@@ -64,9 +64,10 @@ builder.Services.AddHttpClient<MoneroMarketCap.Web.Services.MoneroExplorer>(clie
     })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
-        Credentials = new System.Net.NetworkCredential(
-            builder.Configuration["MoneroNode:Username"] ?? string.Empty,
-            builder.Configuration["MoneroNode:Password"] ?? string.Empty),
+        Credentials = MoneroNodeCredentials.DigestOnly(
+            builder.Configuration["MoneroNode:Url"],
+            builder.Configuration["MoneroNode:Username"],
+            builder.Configuration["MoneroNode:Password"]),
         AllowAutoRedirect = false,
     });
 

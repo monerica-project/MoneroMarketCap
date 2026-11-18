@@ -82,10 +82,18 @@
                 {
                     <tr><th>Typical speed</th><td>@mins min</td></tr>
                 }
+                @* Only a checked http(s) link goes in the href (see DetailModel.GoUrl). *@
                 <tr>
                     <th>Website</th>
-                    <td><a href="@(Model.GoUrl.Length > 0 ? Model.GoUrl : ex.WebsiteUrl)" target="_blank"
-                           rel="@(Model.GoIsAffiliate ? "sponsored noopener" : "noopener")">@ex.WebsiteUrl</a></td>
+                    @if (Model.GoUrl.Length > 0)
+                    {
+                        <td><a href="@Model.GoUrl" target="_blank"
+                               rel="@(Model.GoIsAffiliate ? "sponsored noopener" : "noopener")">@(Model.SiteUrl.Length > 0 ? Model.SiteUrl : ex.WebsiteUrl)</a></td>
+                    }
+                    else
+                    {
+                        <td>@ex.WebsiteUrl</td>
+                    }
                 </tr>
                 @if (!string.IsNullOrWhiteSpace(ex.MonericaSlug))
                 {
@@ -151,3 +159,91 @@
         }
     </div>
 </div>
+
+@{
+    // Questions people search for, answered only from this exchange's own row (no invented facts).
+    var faq = new List<(string Q, string A)>();
+    faq.Add(($"Does {ex.Name} support Monero (XMR)?", Model.SupportsXmr
+        ? $"Yes. {ex.Name} supports Monero (XMR) and {Model.CoinTotal - 1} other coin{(Model.CoinTotal - 1 == 1 ? "" : "s")}."
+        : $"No. Monero (XMR) is not among the {Model.CoinTotal} coins listed for {ex.Name}."));
+    var kycAnswer = ex.Kyc switch
+    {
+        "Never" => $"No. {ex.Name} states that it does not ask for identity verification.",
+        "Rare" => $"Rarely. {ex.Name} states that identity checks are uncommon.",
+        "LikelyIfSuspicious" => $"It can. {ex.Name} may ask for identity verification when a transaction is flagged as suspicious.",
+        "Required" => $"Yes. {ex.Name} requires identity verification.",
+        "VariesByProvider" => $"It depends on which partner exchange handles the swap. {ex.Name} routes trades to other services, and each has its own policy.",
+        _ => $"{ex.Name} does not state a KYC policy.",
+    };
+    faq.Add(($"Does {ex.Name} require KYC?", kycAnswer));
+    if (exFees != "—") { faq.Add(($"What are {ex.Name}'s fees?", $"{ex.Name}'s fees are {exFees.ToLowerInvariant()}. Network fees can apply on top.")); }
+    faq.Add(($"How many coins does {ex.Name} support?", $"{ex.Name} supports {Model.CoinTotal} coin{(Model.CoinTotal == 1 ? "" : "s")}. The full list is on this page."));
+    if (!string.IsNullOrWhiteSpace(ex.MonericaSlug)) { faq.Add(($"Where can I read reviews of {ex.Name}?", $"{ex.Name} has a listing on Monerica, the Monero directory, with user reviews and more details.")); }
+    var faqLd = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+    {
+        ["@context"] = "https://schema.org",
+        ["@type"] = "FAQPage",
+        ["mainEntity"] = faq.Select(f => new Dictionary<string, object>
+        {
+            ["@type"] = "Question",
+            ["name"] = f.Q,
+            ["acceptedAnswer"] = new Dictionary<string, object> { ["@type"] = "Answer", ["text"] = f.A },
+        }).ToList(),
+    });
+    var crumbLd = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+    {
+        ["@context"] = "https://schema.org",
+        ["@type"] = "BreadcrumbList",
+        ["itemListElement"] = new List<object>
+        {
+            new Dictionary<string, object> { ["@type"] = "ListItem", ["position"] = 1, ["name"] = "Home", ["item"] = "https://moneromarketcap.com/" },
+            new Dictionary<string, object> { ["@type"] = "ListItem", ["position"] = 2, ["name"] = "Exchanges", ["item"] = "https://moneromarketcap.com/exchanges" },
+            new Dictionary<string, object> { ["@type"] = "ListItem", ["position"] = 3, ["name"] = ex.Name, ["item"] = $"https://moneromarketcap.com/exchanges/{ex.Slug}" },
+        },
+    });
+}
+
+@if (Model.SupportsXmr && ex.Source == "SwapRaven")
+{
+    <div class="card mb-4">
+        <div class="card-header"><h2 class="h6 mb-0">Compare @ex.Name's live rates</h2></div>
+        <div class="card-body">
+            <p class="small mb-0">
+                See how @ex.Name's quote compares with other exchanges right now on SwapRaven:
+                <a href="https://swapraven.com/swap/btc-to-xmr" rel="noopener">BTC to XMR</a> ·
+                <a href="https://swapraven.com/swap/xmr-to-btc" rel="noopener">XMR to BTC</a> ·
+                <a href="https://swapraven.com/swap/usdt-to-xmr" rel="noopener">USDT to XMR</a> ·
+                <a href="https://swapraven.com/swap/xmr-to-usdt" rel="noopener">XMR to USDT</a> ·
+                <a href="https://swapraven.com/swap/eth-to-xmr" rel="noopener">ETH to XMR</a>
+            </p>
+        </div>
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header"><h2 class="h6 mb-0">@ex.Name: questions and answers</h2></div>
+    <div class="card-body">
+        @foreach (var (q, a) in faq)
+        {
+            <h3 class="h6 mb-1">@q</h3>
+            <p class="small text-muted">@a</p>
+        }
+    </div>
+</div>
+
+@if (Model.Similar.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header"><h2 class="h6 mb-0">Similar @(ex.Kind == "Aggregator" ? "aggregators" : "exchanges")</h2></div>
+        <div class="card-body">
+            @foreach (var s in Model.Similar)
+            {
+                <a class="badge bg-secondary text-decoration-none me-1 mb-1" href="/exchanges/@s.Slug" title="Grade @s.Grade">@s.Name · @s.Grade</a>
+            }
+            <a class="small ms-1" href="/exchanges">All exchanges →</a>
+        </div>
+    </div>
+}
+
+<script type="application/ld+json">@Html.Raw(faqLd)</script>
+<script type="application/ld+json">@Html.Raw(crumbLd)</script>

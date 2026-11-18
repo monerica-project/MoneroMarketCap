@@ -23,7 +23,9 @@ public static class SafetyLimits
             .ToArray()).Trim();
         return cleaned.Length > max ? cleaned[..max] : cleaned;
     }
-    public const int FailedSignInsPer10Min = 40;
+    // Site-wide ceiling on failed sign-ins. It was 40, which let anyone lock every member out
+    // with a handful of bad attempts; the per-name limit below is what protects an account.
+    public const int FailedSignInsPer10Min = 300;
     public const int FailedSignInsPerNamePer10Min = 8;
     public const int MaxTransactionsPerPortfolioCoin = 5000;
     public const int MaxNotesLength = 500;
@@ -39,6 +41,15 @@ public static class SafetyLimits
 
     /// <summary>Bitcoin's first block: no transaction of any coin is older than this.</summary>
     public static readonly DateTime EarliestTransaction = new(2009, 1, 3, 0, 0, 0, DateTimeKind.Utc);
+
+    private static readonly TimeSpan LongestWindow = TimeSpan.FromDays(1);
+
+    /// <summary>The key a sign-in name is counted under: trimmed, lower-case, at most 64 characters.</summary>
+    public static string SignInKey(string? username)
+    {
+        var name = (username ?? string.Empty).Trim().ToLowerInvariant();
+        return "signin|" + (name.Length > 64 ? name[..64] : name);
+    }
 
     private static readonly object Sync = new();
     private static readonly Dictionary<string, Queue<DateTime>> Marks = new(StringComparer.OrdinalIgnoreCase);
@@ -66,15 +77,21 @@ public static class SafetyLimits
     {
         lock (Sync)
         {
-            if (Marks.Count > 5000)
+            // Forget keys nobody has touched for a day. Each wrong sign-in creates a key for
+            // the name that was typed; without this, a script trying endless made-up names
+            // would grow this table until the process ran out of memory.
+            if (Marks.Count > 2000)
             {
-                foreach (var k in Marks.Where(p => p.Value.Count == 0).Select(p => p.Key).ToList())
+                var cutoff = DateTime.UtcNow - LongestWindow;
+                foreach (var k in Marks.Where(p => p.Value.Count == 0 || p.Value.Last() < cutoff).Select(p => p.Key).ToList())
                 {
                     Marks.Remove(k);
                 }
             }
 
-            Window(key, TimeSpan.FromHours(1)).Enqueue(DateTime.UtcNow);
+            // Kept for the longest window any caller asks about (the daily sign-up limit);
+            // with a one-hour window here that daily limit never saw more than an hour.
+            Window(key, LongestWindow).Enqueue(DateTime.UtcNow);
         }
     }
 
