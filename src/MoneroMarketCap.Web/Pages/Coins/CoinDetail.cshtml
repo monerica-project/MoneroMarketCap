@@ -180,12 +180,16 @@
            class="btn btn-xmr-trade">
             Trade Monero (XMR)
         </a>
+        <p class="text-muted small mt-2 mb-0">
+            New to Monero? Pick a wallet you control first: see the
+            <a href="https://blog.monerica.com/articles/best-monero-wallet" target="_blank" rel="noopener">best Monero wallets</a>.
+        </p>
     </div>
 }
 
 
 @* Per-coin "Trade for Monero" button retired: the exchange table further down
-   (synced from SwapRaven) now lists every exchange that supports this coin. *@
+   now lists every exchange that supports this coin. *@
 
 @{
     // Readable amount: fewer decimals for big numbers, more for tiny ones.
@@ -515,28 +519,6 @@
                 compare each one's grade, KYC and AML policy and fees.
                 Click an exchange name for its full profile.
             </p>
-            @{
-                var pairSym = (coin.Symbol ?? "").ToLowerInvariant();
-                var pairOk = pairSym.Length is > 0 and <= 16 && pairSym.All(ch => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.') && pairSym.Any(ch => ch >= 'a' && ch <= 'z');
-            }
-            @if (pairOk)
-            {
-                <p class="small mb-3">
-                    Compare live swap rates on SwapRaven:
-                    @if (isXmr)
-                    {
-                        <a href="https://swapraven.com/swap/btc-to-xmr" rel="noopener">BTC to XMR</a><text> · </text>
-                        <a href="https://swapraven.com/swap/xmr-to-btc" rel="noopener">XMR to BTC</a><text> · </text>
-                        <a href="https://swapraven.com/swap/usdt-to-xmr" rel="noopener">USDT to XMR</a><text> · </text>
-                        <a href="https://swapraven.com/swap/xmr-to-usdt" rel="noopener">XMR to USDT</a>
-                    }
-                    else
-                    {
-                        <a href="https://swapraven.com/swap/@(pairSym)-to-xmr" rel="noopener">@coin.Symbol to XMR</a><text> · </text>
-                        <a href="https://swapraven.com/swap/xmr-to-@(pairSym)" rel="noopener">XMR to @coin.Symbol</a>
-                    }
-                </p>
-            }
             <div class="table-responsive">
                 <table class="table table-sm mb-0 stats-table">
                     <thead>
@@ -597,7 +579,7 @@
             <ol class="mb-3">
                 <li>Pick an exchange from the <a href="#exchanges">list above</a>. Check its grade, KYC and AML policy and fees first.</li>
                 <li>Choose @sym as the coin you send and XMR as the coin you receive. Pick a fixed rate if you want the quote locked, or a floating rate if you accept small moves.</li>
-                <li>Paste your own Monero wallet address. Standard addresses start with 4, subaddresses with 8. Using a fresh subaddress for each swap helps your privacy.</li>
+                <li>Paste your own Monero wallet address. Standard addresses start with 4, subaddresses with 8. Using a fresh subaddress for each swap helps your privacy. No wallet yet? See the <a href="https://blog.monerica.com/articles/best-monero-wallet" target="_blank" rel="noopener">best Monero wallets</a>.</li>
                 <li>Send the exact @sym amount to the deposit address the exchange gives you. If it also shows a memo, tag or network, include and match it.</li>
                 <li>Wait for the swap to finish. Monero can be spent after 10 confirmations, about 20 minutes.</li>
             </ol>
@@ -649,7 +631,7 @@
             <h3 class="h6">Where does this data come from?</h3>
             <p class="mb-0">
                 Prices and market caps come from CoinGecko and refresh every few minutes. The exchange list, grades and
-                KYC ratings come from <a href="https://swapraven.com/" target="_blank" rel="noopener">SwapRaven</a>.
+                KYC ratings are reviewed separately and refreshed weekly.
                 See <a href="/vs-monero">how every coin performs against Monero</a> or browse <a href="/exchanges">all exchanges</a>.
             </p>
         </div>

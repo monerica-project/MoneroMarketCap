@@ -62,7 +62,6 @@
         @ex.Name supports Monero (XMR) and @(Model.CoinTotal - 1) other coin@(Model.CoinTotal - 1 == 1 ? "" : "s"), so you can swap XMR to or from any of them.
         KYC: @Humanize(ex.Kyc).ToLowerInvariant(). AML policy: @Humanize(ex.Aml).ToLowerInvariant().
         @if (MoneroMarketCap.Pages.Coins.DetailModel.FormatFees(ex) is var lf && lf != "—") { <text>Fees: @lf.</text> }
-        Grade and policy data come from SwapRaven.
     </p>
 }
 
@@ -201,23 +200,6 @@
             new Dictionary<string, object> { ["@type"] = "ListItem", ["position"] = 3, ["name"] = ex.Name, ["item"] = $"https://moneromarketcap.com/exchanges/{ex.Slug}" },
         },
     });
-}
-
-@if (Model.SupportsXmr && ex.Source == "SwapRaven")
-{
-    <div class="card mb-4">
-        <div class="card-header"><h2 class="h6 mb-0">Compare @ex.Name's live rates</h2></div>
-        <div class="card-body">
-            <p class="small mb-0">
-                See how @ex.Name's quote compares with other exchanges right now on SwapRaven:
-                <a href="https://swapraven.com/swap/btc-to-xmr" rel="noopener">BTC to XMR</a> ·
-                <a href="https://swapraven.com/swap/xmr-to-btc" rel="noopener">XMR to BTC</a> ·
-                <a href="https://swapraven.com/swap/usdt-to-xmr" rel="noopener">USDT to XMR</a> ·
-                <a href="https://swapraven.com/swap/xmr-to-usdt" rel="noopener">XMR to USDT</a> ·
-                <a href="https://swapraven.com/swap/eth-to-xmr" rel="noopener">ETH to XMR</a>
-            </p>
-        </div>
-    </div>
 }
 
 <div class="card mb-4">
