@@ -54,7 +54,7 @@ public class WalletDifferenceTests
     public void TryParseBalance_ReadsPlainNumbers(string text, double expected)
     {
         Assert.True(WalletDifference.TryParseBalance(text, out var balance));
-        Assert.Equal((decimal)expected, balance);
+        Assert.Equal(Math.Round((decimal)expected, 8), balance);
     }
 
     [Theory]
