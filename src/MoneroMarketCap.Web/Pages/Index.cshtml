@@ -104,7 +104,7 @@
         @if (bestVsXmr != null && worstVsXmr != null)
         {
             <div class="xmr-stat xmr-stat--med">
-                <span class="stat-label">vs XMR (7d)</span>
+                <span class="stat-label">vs XMR (7d) <a href="/vs-monero" class="vs-xmr-inline">· full ranking →</a></span>
                 <div class="vs-xmr-row">
                     <a href="/coins/@CoinRoute.Key(bestVsXmr.Coin)" class="vs-xmr-link">
                         <div class="vs-xmr-body">
@@ -137,7 +137,38 @@
                         </div>
                     </a>
                 </div>
-                <a href="/vs-monero" class="vs-xmr-more">See full ranking vs Monero →</a>
+            </div>
+        }
+        @{
+            var fgMarket = Model.FearGreed.LastOrDefault(p => p.Market != null);
+            var fgMonero = Model.FearGreed.LastOrDefault(p => p.Monero != null);
+            string FgClass(int v) => v < 25 ? "fg-extreme-fear" : v < 46 ? "fg-fear" : v < 55 ? "fg-neutral" : v < 76 ? "fg-greed" : "fg-extreme-greed";
+        }
+        @if (fgMarket != null || fgMonero != null)
+        {
+            <div class="xmr-stat fg-card" title="Fear and greed, 0 (extreme fear) to 100 (extreme greed). Market: the Crypto Fear &amp; Greed Index by alternative.me, updated daily. Monero: this site's own reading from XMR's price history (momentum, distance from its 90-day high, volatility and XMR against BTC, each compared with the last year). Neither is a prediction.">
+                <span class="stat-label">Fear &amp; Greed <span class="fg-src">· market index: <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener nofollow">alternative.me</a></span></span>
+                <div class="fg-row">
+                    @if (fgMarket != null)
+                    {
+                        var v = fgMarket.Market!.Value;
+                        <div class="fg-num">
+                            <span class="fg-value @FgClass(v)">@v</span>
+                            <span class="fg-cap">Market<br /><span class="@FgClass(v)">@MoneroFearGreed.Label(v)</span></span>
+                        </div>
+                    }
+                    @if (fgMonero != null)
+                    {
+                        var v = fgMonero.Monero!.Value;
+                        <div class="fg-num">
+                            <span class="fg-value @FgClass(v)">@v</span>
+                            <span class="fg-cap">Monero<br /><span class="@FgClass(v)">@MoneroFearGreed.Label(v)</span></span>
+                        </div>
+                    }
+                    <div class="fg-chart-wrap">
+                        <canvas id="fgChart" role="img" aria-label="Fear and greed over the last 90 days: crypto market (grey) and Monero (orange)"></canvas>
+                    </div>
+                </div>
             </div>
         }
     </div>
@@ -331,6 +362,44 @@ else
 }
 
 @section Scripts {
+    @if (Model.FearGreed.Count > 1)
+    {
+        var fgPoints = Model.FearGreed.Where(p => p.Date >= DateTime.UtcNow.Date.AddDays(-90)).ToList();
+        <script src="~/js/chart.umd.min.js"></script>
+        <script>
+        (function () {
+            var el = document.getElementById('fgChart');
+            if (!el || typeof Chart === 'undefined') return;
+            var labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(fgPoints.Select(p => p.Date.ToString("MMM d"))));
+            var market = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(fgPoints.Select(p => p.Market)));
+            var monero = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(fgPoints.Select(p => p.Monero)));
+            function word(v) { return v < 25 ? 'Extreme Fear' : v < 46 ? 'Fear' : v < 55 ? 'Neutral' : v < 76 ? 'Greed' : 'Extreme Greed'; }
+            new Chart(el.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Crypto market', data: market, borderColor: '#9aa0a6', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, pointHitRadius: 8, tension: 0.25, spanGaps: true },
+                        { label: 'Monero', data: monero, borderColor: '#FF6600', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.25, spanGaps: true }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: function (c) { return c.parsed.y == null ? null : ' ' + c.dataset.label + ': ' + c.parsed.y + ' (' + word(c.parsed.y) + ')'; } } }
+                    },
+                    layout: { padding: 2 },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, min: 0, max: 100 }
+                    }
+                }
+            });
+        })();
+        </script>
+    }
     <script>
         // ─── Currency context: read from the table-responsive wrapper ───────────
         // Server-rendered with the current cookie/query selection. The /api/Prices

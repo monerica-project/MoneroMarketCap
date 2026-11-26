@@ -18,18 +18,18 @@ public class IndexModel : PageModel
     public int TotalPages => (int)Math.Ceiling(Total / (double)PageSize);
     public List<Row> Rows { get; set; } = new();
 
-    public record Row(string Slug, string Name, string? Grade, string? Kind, int CoinCount);
+    public record Row(string Slug, string Name, string? Grade, string? Kind, int CoinCount, string? MonericaSlug);
 
     public async Task<IActionResult> OnGetAsync(int p = 1)
     {
-        var listed = _db.Exchanges.Where(e => Exchange.ListedGrades.Contains(e.Grade!));
+        var listed = _db.Exchanges.Where(Exchange.Listed(DateTime.UtcNow));
         Total = await listed.CountAsync(HttpContext.RequestAborted);
         PageNum = Math.Clamp(p, 1, Math.Max(1, TotalPages));
         Rows = await listed.AsNoTracking()
             .OrderBy(e => e.Name)
             .Skip((PageNum - 1) * PageSize)
             .Take(PageSize)
-            .Select(e => new Row(e.Slug, e.Name, e.Grade, e.Kind, e.ExchangeCoins.Count))
+            .Select(e => new Row(e.Slug, e.Name, e.Grade, e.Kind, e.ExchangeCoins.Count, e.MonericaSlug))
             .ToListAsync(HttpContext.RequestAborted);
         return Page();
     }

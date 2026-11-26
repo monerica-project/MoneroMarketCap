@@ -528,6 +528,7 @@
                             <th>KYC</th>
                             <th>AML</th>
                             <th class="text-end">Fees</th>
+                            <th>Reviews</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -539,6 +540,7 @@
                                 <td>@MoneroMarketCap.Pages.Coins.DetailModel.Humanize(ex.Kyc)</td>
                                 <td>@MoneroMarketCap.Pages.Coins.DetailModel.Humanize(ex.Aml)</td>
                                 <td class="mono text-end">@MoneroMarketCap.Pages.Coins.DetailModel.FormatFees(ex)</td>
+                                <td><a href="https://monerica.com/site/@ex.MonericaSlug" target="_blank" rel="noopener">Monerica</a></td>
                             </tr>
                         }
                     </tbody>

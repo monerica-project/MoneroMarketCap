@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using MoneroMarketCap.Data;
 using MoneroMarketCap.Data.Models;
 using MoneroMarketCap.Data.Repositories;
 using MoneroMarketCap.Services.Display;
@@ -14,6 +16,18 @@ public class IndexModel : PageModel
     private readonly ICoinRepository _coins;
     private readonly IFiatRateService _fxRates;
     private readonly IConfiguration _config;
+    private readonly AppDbContext _db;
+
+    // Fear and greed readings change a few times a day at most, so one read serves every visitor for a while.
+    private static readonly object FearGreedLock = new();
+    private static List<FearGreedPoint> _fearGreedCache = new();
+    private static DateTime _fearGreedLoadedUtc = DateTime.MinValue;
+
+    /// <summary>One day on the fear and greed chart (either value can be missing).</summary>
+    public sealed record FearGreedPoint(DateTime Date, int? Market, int? Monero);
+
+    /// <summary>Daily fear and greed readings, oldest first (about the last six months).</summary>
+    public IReadOnlyList<FearGreedPoint> FearGreed { get; set; } = new List<FearGreedPoint>();
 
     /// <summary>Coins shown per page of the market table.</summary>
     public const int CoinsPerPage = 100;
@@ -45,8 +59,10 @@ public class IndexModel : PageModel
     public IndexModel(
         ICoinRepository coins,
         IFiatRateService fxRates,
-        IConfiguration config)
+        IConfiguration config,
+        AppDbContext db)
     {
+        _db = db;
         _coins = coins;
         _fxRates = fxRates;
         _config = config;
@@ -71,8 +87,43 @@ public class IndexModel : PageModel
             .ToList();
         SponsorRotateIntervalSeconds = _config.GetValue<int>("Sponsors:RotateIntervalSeconds", 30);
 
+        FearGreed = await LoadFearGreedAsync();
+
         Currency = CurrencyResolver.Resolve(HttpContext);
         var rates = await _fxRates.GetRatesAsync(HttpContext.RequestAborted);
         RatePerUsd = rates.TryGetValue(Currency.Code, out var r) && r > 0 ? r : 1m;
+    }
+
+    private async Task<IReadOnlyList<FearGreedPoint>> LoadFearGreedAsync()
+    {
+        lock (FearGreedLock)
+        {
+            if (DateTime.UtcNow - _fearGreedLoadedUtc < TimeSpan.FromMinutes(10))
+            {
+                return _fearGreedCache;
+            }
+        }
+
+        try
+        {
+            var from = DateTime.UtcNow.Date.AddDays(-180);
+            var rows = await _db.FearGreedDays.AsNoTracking()
+                .Where(r => r.Date >= from)
+                .OrderBy(r => r.Date)
+                .Select(r => new FearGreedPoint(r.Date, r.MarketValue, r.MoneroValue))
+                .ToListAsync(HttpContext.RequestAborted);
+            lock (FearGreedLock)
+            {
+                _fearGreedCache = rows;
+                _fearGreedLoadedUtc = DateTime.UtcNow;
+            }
+
+            return rows;
+        }
+        catch (Exception)
+        {
+            // The panel is optional: never let it take the home page down.
+            return _fearGreedCache;
+        }
     }
 }

@@ -28,6 +28,7 @@
                         <th>Type</th>
                         <th>Grade</th>
                         <th class="text-end">Coins</th>
+                        <th>Reviews</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -38,6 +39,7 @@
                             <td class="text-muted">@(string.IsNullOrEmpty(e.Kind) ? "—" : e.Kind)</td>
                             <td class="mono">@(string.IsNullOrEmpty(e.Grade) ? "—" : e.Grade)</td>
                             <td class="text-end">@e.CoinCount</td>
+                            <td><a href="https://monerica.com/site/@e.MonericaSlug" target="_blank" rel="noopener">Monerica</a></td>
                         </tr>
                     }
                 </tbody>

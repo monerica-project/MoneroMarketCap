@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<CoinPriceHistory> CoinPriceHistories { get; set; }
     public DbSet<FiatRate> FiatRates { get; set; }
     public DbSet<FiatRateHistory> FiatRateHistories { get; set; }
+    public DbSet<FearGreedDay> FearGreedDays { get; set; }
     public DbSet<Exchange> Exchanges { get; set; }
     public DbSet<ExchangeCoin> ExchangeCoins { get; set; }
     public DbSet<ExchangeContact> ExchangeContacts { get; set; }
@@ -63,6 +64,8 @@ public class AppDbContext : DbContext
             b.HasIndex(f => new { f.Code, f.Date }).IsUnique();
             b.HasIndex(f => f.Date);
         });
+
+        modelBuilder.Entity<FearGreedDay>(b => b.HasIndex(f => f.Date).IsUnique());
 
         modelBuilder.Entity<Exchange>(b =>
         {

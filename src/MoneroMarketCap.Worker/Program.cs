@@ -85,6 +85,22 @@ builder.Services.AddHttpClient<IFiatRateHistoryService, FiatRateHistoryService>(
     });
 builder.Services.AddHostedService<FiatRateHistoryWorker>();
 
+// ── Fear and greed (market index from alternative.me + this site's Monero reading) ──
+// One small request every few hours; same IPv4-only handler as the other outside calls.
+builder.Services.AddHttpClient<FearGreedService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        ConnectTimeout = TimeSpan.FromSeconds(15),
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            await socket.ConnectAsync(context.DnsEndPoint.Host, context.DnsEndPoint.Port, cancellationToken);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+    });
+builder.Services.AddHostedService<FearGreedWorker>();
+
 // ── Coin price + history workers ─────────────────────────────────────────
 // Backfill runs once on startup to fill any gap in daily history for active coins.
 builder.Services.AddSingleton<CoinHistoryBackfillService>();

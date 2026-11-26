@@ -180,7 +180,11 @@ public class DetailModel : PageModel
 
         // Exchanges that support this coin (synced weekly from SwapRaven), graded
         // best-first, 25 per page.
-        var listedLinks = _db.ExchangeCoins.Where(ec => ec.CoinId == Coin.Id && Exchange.ListedGrades.Contains(ec.Exchange!.Grade!));
+        var deadCutoff = DateTime.UtcNow - Exchange.DeadLinkAfter;
+        var listedLinks = _db.ExchangeCoins.Where(ec => ec.CoinId == Coin.Id
+            && Exchange.ListedGrades.Contains(ec.Exchange!.Grade!)
+            && ec.Exchange.MonericaSlug != null && ec.Exchange.MonericaSlug != ""
+            && (ec.Exchange.WebsiteDownSinceUtc == null || ec.Exchange.WebsiteDownSinceUtc > deadCutoff));
         ExTotal = await listedLinks.CountAsync(HttpContext.RequestAborted);
         ExPage = Math.Clamp(xp, 1, Math.Max(1, ExTotalPages));
         Exchanges = await listedLinks.AsNoTracking()

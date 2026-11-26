@@ -1479,3 +1479,55 @@ a.xmr-stat-link:focus-visible {
     .explorer-side { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
     .explorer-side-title, .explorer-side-more { grid-column: 1 / -1; }
 }
+
+/* ── Compact home page top (2026-11-25): one tight row of stat cards so the coin
+   table starts high on the page. Fear and greed is a card in that row. ───────── */
+.xmr-stat-bar { gap: 0.6rem; margin-bottom: 0.6rem !important; }
+.xmr-stat { padding: 0.45rem 0.7rem; min-width: 0; flex: 1 1 110px; }
+.xmr-stat--wide { flex: 2 1 210px; min-width: 0; }
+.xmr-stat--med { flex: 2 1 190px; min-width: 0; }
+.xmr-stat .stat-label { margin-bottom: 0.1rem; }
+.price-changes { gap: 0.1rem 0.8rem; margin-top: 0.1rem; font-size: 0.82rem; }
+.vs-xmr-row { gap: 0.6rem; margin-top: 0.1rem; }
+.vs-xmr-more { margin-top: 0.15rem; font-size: 0.72rem; }
+.sponsor-banner.mb-3 { margin-bottom: 0.6rem !important; }
+.table-meta { padding: 0.2rem 0; margin-bottom: 0.25rem; }
+
+.fg-card { flex: 3 1 300px; }
+.fg-src { text-transform: none; letter-spacing: 0; font-size: 0.65rem; }
+.fg-src a { color: var(--xmr-text-muted); text-decoration: underline; }
+.fg-row { display: flex; align-items: center; gap: 0.8rem; min-width: 0; }
+.fg-num { display: flex; align-items: center; gap: 0.4rem; flex: 0 0 auto; }
+.fg-value { font-size: 1.7rem; font-weight: 700; line-height: 1; font-family: monospace; }
+.fg-cap { font-size: 0.68rem; line-height: 1.2; color: var(--xmr-text-muted); font-weight: 600; }
+.fg-chart-wrap { position: relative; flex: 1 1 90px; min-width: 70px; height: 46px; }
+.fg-extreme-fear { color: #e5484d; }
+.fg-fear { color: #f0883e; }
+.fg-neutral { color: #b0b0b0; }
+.fg-greed { color: #7bc96f; }
+.fg-extreme-greed { color: #2ea043; }
+
+@media (min-width: 1200px) {
+    .xmr-stat-bar { flex-wrap: nowrap; }
+}
+
+/* vs XMR card: Best and Worst each on one line (label, coin, change) to keep the row short. */
+.xmr-stat-bar .vs-xmr-row { flex-direction: column; flex-wrap: nowrap; gap: 0.05rem; margin-top: 0; }
+.xmr-stat-bar .vs-xmr-link { flex: 0 0 auto; }
+.xmr-stat-bar .vs-xmr-body { display: flex; align-items: center; gap: 0.45rem; }
+.xmr-stat-bar .vs-xmr-label { margin: 0; min-width: 2.9rem; font-size: 0.65rem; }
+.xmr-stat-bar .vs-xmr-value { display: flex; align-items: center; flex-wrap: nowrap; gap: 0.35rem; font-size: 0.85rem; }
+.xmr-stat-bar .vs-xmr-symbol { max-width: 7rem; font-size: 0.85rem; }
+.xmr-stat-bar .vs-xmr-pct { flex: 0 0 auto; font-size: 0.8rem; }
+.xmr-stat-bar .vs-xmr-value .coin-icon { width: 16px; height: 16px; }
+.xmr-stat-bar .vs-xmr-more { margin-top: 0.1rem; }
+.fg-chart-wrap { height: 52px; }
+.xmr-stat-bar .vs-xmr-body { flex-direction: row; text-align: left; }
+.xmr-stat-bar .vs-xmr-link { display: block; padding: 0; }
+.vs-xmr-inline { text-transform: none; letter-spacing: 0; font-size: 0.68rem; font-weight: 600; color: var(--xmr-orange); text-decoration: none; white-space: nowrap; }
+.vs-xmr-inline:hover { text-decoration: underline; color: var(--xmr-orange); }
+.xmr-stat-bar .xmr-stat { padding: 0.35rem 0.65rem; }
+.xmr-stat-bar .stat-change { margin-top: 0; }
+.xmr-stat-bar .price-changes { font-size: 0.8rem; }
+.fg-chart-wrap { height: 38px; }
+.fg-value { font-size: 1.5rem; }

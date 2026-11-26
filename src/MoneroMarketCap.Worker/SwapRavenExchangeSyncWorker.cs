@@ -32,8 +32,9 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
     {
         _logger.LogInformation("SwapRavenExchangeSyncWorker starting");
 
-        var days = _config.GetValue<int>("SwapRaven:SyncIntervalDays", 1);
-        var interval = TimeSpan.FromDays(days < 1 ? 1 : days);
+        // Every few hours, so an exchange whose website has died drops off our pages the same day.
+        var hours = _config.GetValue<int>("SwapRaven:SyncIntervalHours", 6);
+        var interval = TimeSpan.FromHours(hours < 1 ? 1 : hours);
 
         // Let the coin list settle after boot before the first (preload) run.
         try
@@ -56,7 +57,7 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
                 _logger.LogError(ex, "SwapRaven exchange sync cycle failed");
             }
 
-            _logger.LogInformation("Next SwapRaven exchange sync in {Days} day(s)", days);
+            _logger.LogInformation("Next SwapRaven exchange sync in {Hours} hour(s)", hours);
             try
             {
                 await Task.Delay(interval, stoppingToken);
@@ -161,6 +162,7 @@ public class SwapRavenExchangeSyncWorker : BackgroundService
             ex.FeeVariesByProvider = dto.FeeVariesByProvider;
             ex.ProcessingTimeMinutes = dto.ProcessingTimeMinutes;
             ex.LaunchedAtUtc = dto.LaunchedAtUtc;
+            ex.WebsiteDownSinceUtc = dto.WebsiteDownSinceUtc is { } down ? DateTime.SpecifyKind(down, DateTimeKind.Utc) : null;
             ex.SortOrder = order++;
             ex.UpdatedAt = now;
 

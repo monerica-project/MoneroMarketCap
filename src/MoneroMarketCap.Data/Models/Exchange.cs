@@ -64,6 +64,36 @@ public class Exchange
 
     public static bool IsListedGrade(string? grade) => grade is not null && ListedGrades.Contains(grade);
 
+    /// <summary>
+    /// When the exchange's website started failing uptime checks (from SwapRaven's checker,
+    /// refreshed every few hours). Null while the site is reachable.
+    /// </summary>
+    public DateTime? WebsiteDownSinceUtc { get; set; }
+
+    /// <summary>A site that has been failing its checks for this long is not listed or linked.</summary>
+    public static readonly TimeSpan DeadLinkAfter = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Whether the exchange is shown anywhere on the site. Three conditions, all required:
+    ///   • a listed grade (A to C);
+    ///   • a live profile on Monerica (<see cref="MonericaSlug"/>): an exchange Monerica does
+    ///     not list, or has removed or flagged, does not belong here either;
+    ///   • its website is not dead (not failing uptime checks for <see cref="DeadLinkAfter"/>).
+    /// </summary>
+    public static System.Linq.Expressions.Expression<Func<Exchange, bool>> Listed(DateTime nowUtc)
+    {
+        var cutoff = nowUtc - DeadLinkAfter;
+        return e => ListedGrades.Contains(e.Grade!)
+            && e.MonericaSlug != null && e.MonericaSlug != ""
+            && (e.WebsiteDownSinceUtc == null || e.WebsiteDownSinceUtc > cutoff);
+    }
+
+    /// <summary>The same rule for an exchange already loaded.</summary>
+    public bool IsListed(DateTime nowUtc) =>
+        IsListedGrade(Grade)
+        && !string.IsNullOrEmpty(MonericaSlug)
+        && (WebsiteDownSinceUtc == null || WebsiteDownSinceUtc > nowUtc - DeadLinkAfter);
+
     public DateTime UpdatedAt { get; set; }
 
     public ICollection<ExchangeCoin> ExchangeCoins { get; set; } = new List<ExchangeCoin>();

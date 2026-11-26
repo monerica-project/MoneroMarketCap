@@ -52,7 +52,7 @@ public class DetailModel : PageModel
     {
         var ex = await _db.Exchanges.AsNoTracking()
             .FirstOrDefaultAsync(e => e.Slug == slug, HttpContext.RequestAborted);
-        if (ex is null || !Data.Models.Exchange.IsListedGrade(ex.Grade))
+        if (ex is null || !ex.IsListed(DateTime.UtcNow))
         {
             return NotFound();
         }
@@ -88,9 +88,9 @@ public class DetailModel : PageModel
 
         Similar = (await _db.Exchanges.AsNoTracking()
             .Where(e => e.Kind == ex.Kind && e.Id != ex.Id && e.Grade != null)
+            .Where(Data.Models.Exchange.Listed(DateTime.UtcNow))
             .Select(e => new { e.Slug, e.Name, e.Grade, e.Kyc })
             .ToListAsync(HttpContext.RequestAborted))
-            .Where(e => Data.Models.Exchange.IsListedGrade(e.Grade))
             .OrderBy(e => e.Grade, StringComparer.Ordinal).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
             .Take(8)
             .Select(e => new SimilarRow(e.Slug, e.Name, e.Grade, e.Kyc))

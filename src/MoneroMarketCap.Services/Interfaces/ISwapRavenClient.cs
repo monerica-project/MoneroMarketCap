@@ -21,6 +21,9 @@ public sealed class SwapRavenCatalogExchangeDto
     public bool FeeVariesByProvider { get; set; }
     public int? ProcessingTimeMinutes { get; set; }
     public DateTime? LaunchedAtUtc { get; set; }
+
+    /// <summary>When the website started failing SwapRaven's uptime checks (null while it is reachable).</summary>
+    public DateTime? WebsiteDownSinceUtc { get; set; }
     public List<SwapRavenContactDto> Contacts { get; set; } = new();
 
     /// <summary>Coin tickers (upper-case) the exchange supports.</summary>

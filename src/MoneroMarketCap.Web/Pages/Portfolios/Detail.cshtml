@@ -225,7 +225,14 @@ else
                                 }
                             </td>
                         }
-                        <td class="text-end mono">@Mask(MoneyFormatter.FormatPrice(pc.TotalCostBasis, cur, rate))</td>
+                        @{
+                            // Hover: the average price paid per coin for what is still held.
+                            var avgPaid = pc.TotalAmount > 0 ? pc.TotalCostBasis / pc.TotalAmount : 0m;
+                            var basisTip = Model.PrivacyMode || avgPaid <= 0
+                                ? null
+                                : $"Average price paid: {MoneyFormatter.FormatPrice(avgPaid, cur, rate)} per {pc.Coin.Symbol.ToUpper()}";
+                        }
+                        <td class="text-end mono" title="@basisTip" style="@(basisTip != null ? "cursor:help" : null)">@Mask(MoneyFormatter.FormatPrice(pc.TotalCostBasis, cur, rate))</td>
                         <td class="text-end mono @(pc.UnrealizedPnl >= 0 ? "text-success" : "text-danger")">
                             @Mask(MoneyFormatter.FormatPrice(pc.UnrealizedPnl, cur, rate))
                         </td>

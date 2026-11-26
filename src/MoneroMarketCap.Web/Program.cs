@@ -713,7 +713,8 @@ app.MapGet("/sitemap-pages.xml", () =>
 app.MapGet("/sitemap-exchanges.xml", async (AppDbContext db) =>
 {
     var exchanges = await db.Exchanges.AsNoTracking()
-        .Where(e => e.Slug != "" && Exchange.ListedGrades.Contains(e.Grade!))
+        .Where(e => e.Slug != "")
+        .Where(Exchange.Listed(DateTime.UtcNow))
         .OrderBy(e => e.SortOrder).ThenBy(e => e.Name)
         .Select(e => new { e.Slug, e.UpdatedAt })
         .ToListAsync();
